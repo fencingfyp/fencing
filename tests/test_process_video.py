@@ -77,6 +77,8 @@ def test_extract_rows() -> None:
     assert len(rows) == 1
     row = rows[0]
 
+    # length
+    assert len(row) == 58 # 7 + 17 * 3
     # frame index
     assert row[0] == 0
     # class id
@@ -89,3 +91,6 @@ def test_extract_rows() -> None:
     assert pytest.approx(row[7], rel=1e-4) == 0.0000  # first kp x
     assert pytest.approx(row[8], rel=1e-4) == 0.5592  # first kp y
     assert pytest.approx(row[9], rel=1e-4) == 0.0150  # first kp visibility
+    assert pytest.approx(row[55], rel=1e-4) == 0.0099  # last kp x
+    assert pytest.approx(row[56], rel=1e-4) == 0.7855  # last kp y
+    assert pytest.approx(row[57], rel=1e-4) == 0.1128  # last kp visibility
