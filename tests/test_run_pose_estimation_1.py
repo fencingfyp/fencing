@@ -4,12 +4,13 @@ from typing import Any, List
 import torch
 import pytest
 
-from src.process_video import extract_rows
+from src.run_pose_estimation_1 import extract_rows
 
 
 class DummyBox:
     def __init__(self):
         self.cls = torch.tensor(0)  # person
+        self.id = torch.tensor(1)
         self.conf = torch.tensor(0.4126)
         self.xyxy = torch.tensor([[0.0, 485.2184, 71.9604, 893.2097]])
 
@@ -81,16 +82,16 @@ def test_extract_rows() -> None:
     assert len(row) == 58 # 7 + 17 * 3
     # frame index
     assert row[0] == 0
-    # class id
-    assert row[1] == 0
+    # id
+    assert row[1] == 1
     # confidence float close
     assert pytest.approx(row[2], rel=1e-4) == 0.4126
     # bounding box coords
     assert pytest.approx(row[3:7], rel=1e-4) == [0.0, 485.2184, 71.9604, 893.2097]
     # check some keypoints normalised
     assert pytest.approx(row[7], rel=1e-4) == 0.0000  # first kp x
-    assert pytest.approx(row[8], rel=1e-4) == 0.5592  # first kp y
+    assert pytest.approx(row[8], rel=1e-4) == 603.9612  # first kp y
     assert pytest.approx(row[9], rel=1e-4) == 0.0150  # first kp visibility
-    assert pytest.approx(row[55], rel=1e-4) == 0.0099  # last kp x
-    assert pytest.approx(row[56], rel=1e-4) == 0.7855  # last kp y
+    assert pytest.approx(row[55], rel=1e-4) == 7.9856  # last kp x
+    assert pytest.approx(row[56], rel=1e-4) == 848.2888  # last kp y
     assert pytest.approx(row[57], rel=1e-4) == 0.1128  # last kp visibility
