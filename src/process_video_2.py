@@ -200,8 +200,8 @@ def get_fencer_id(frame: np.ndarray, centrepoints: list[tuple[int, int, int]], k
             return frame, candidate[0]  # if one candidate is already known, return them
     # print(known_ids, exclude_ids)
     fencer_dir = "Left" if left else "Right"
-    frame = draw_text_box(frame)
-    cv2.putText(frame, f"Click on the {fencer_dir} Fencer if their centrepoint is present and press enter to confirm. If not, press '1'.", (0, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, TEXT_COLOR, 2)
+    # frame = draw_text_box(frame)
+    # cv2.putText(frame, f"Click on the {fencer_dir} Fencer if their centrepoint is present and press enter to confirm. If not, press '1'.", (0, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, TEXT_COLOR, 2)
     selected_id = None
     def mouse_callback(event, x, y, flags, param):
         nonlocal selected_id
