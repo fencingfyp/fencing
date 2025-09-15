@@ -18,6 +18,7 @@ FULL_DELAY = int(1000 / TARGET_FPS)  # milliseconds per frame
 HALF_DELAY = FULL_DELAY // 2
 BOX_COLOR = (255, 255, 255)  # White
 TEXT_COLOR = (0, 0, 0)     # Black
+NUM_FRAMES_TO_SKIP = 10
 
 def read_csv_by_frame(path):
     with open(path, newline="") as f:
@@ -65,26 +66,21 @@ def read_csv_by_frame(path):
         if batch:
             yield current_frame, batch
 
-def draw_fencer_centrepoints(frame: np.ndarray, detections: list[dict], left_fencer_ids: set[int], right_fencer_ids: set[int]) -> tuple[np.ndarray, list[tuple[int, int, int]]]:
+def draw_candidates(frame: np.ndarray, detections: list[dict]) -> np.ndarray:
     for det in detections:
-            if det["id"] in left_fencer_ids:
-                color = (255, 0, 0)  # Blue
-            elif det["id"] in right_fencer_ids:
-                color = (0, 0, 255)
-            else: continue  # Not a person we care about
-            x1, y1, x2, y2 = map(int, det["box"])
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            # draw only the centerpoint of shoulder points (6 and 7) https://docs.ultralytics.com/tasks/pose/
-            left_shoulder = det["keypoints"][6]
-            right_shoulder = det["keypoints"][7]
-            if left_shoulder[2] > 0.1 and right_shoulder[2] > 0.1:
-                cx = int((left_shoulder[0] + right_shoulder[0]) / 2)
-                cy = int((left_shoulder[1] + right_shoulder[1]) / 2)
-                cv2.circle(frame, (cx, cy), 3, color, -1)
+        x1, y1, x2, y2 = map(int, det["box"])
+        # draw only the centerpoint of shoulder points (6 and 7) https://docs.ultralytics.com/tasks/pose/
+        left_shoulder = det["keypoints"][6]
+        right_shoulder = det["keypoints"][7]
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), 2)
+        # if left_shoulder[2] > 0.05 and right_shoulder[2] > 0.05:
+        cx = int((left_shoulder[0] + right_shoulder[0]) / 2)
+        cy = int((left_shoulder[1] + right_shoulder[1]) / 2)
+        cv2.circle(frame, (cx, cy), 3, (0, 0, 0), -1)
+        cv2.putText(frame, str(det["id"]), (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
     return frame
 
-def draw_centrepoints(frame: np.ndarray, detections: list[dict], current_left_fencer_id: int | None, current_right_fencer_id: int | None) -> tuple[np.ndarray, list[tuple[int, int, int]], int | None, int | None]:
-    centre_points = []
+def track_fencers(frame: np.ndarray, detections: list[dict], current_left_fencer_id: int | None, current_right_fencer_id: int | None) -> tuple[np.ndarray, int | None, int | None]:
     new_left_fencer_id = None
     new_right_fencer_id = None
     for det in detections:
@@ -92,19 +88,8 @@ def draw_centrepoints(frame: np.ndarray, detections: list[dict], current_left_fe
             new_left_fencer_id = det["id"]
         elif det["id"] == current_right_fencer_id:
             new_right_fencer_id = det["id"]
-        x1, y1, x2, y2 = map(int, det["box"])
-      
-        # draw only the centerpoint of shoulder points (6 and 7) https://docs.ultralytics.com/tasks/pose/
-        left_shoulder = det["keypoints"][6]
-        right_shoulder = det["keypoints"][7]
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(frame, str(det["id"]), (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-        cx = int((left_shoulder[0] + right_shoulder[0]) / 2)
-        cy = int((left_shoulder[1] + right_shoulder[1]) / 2)
-        cv2.circle(frame, (cx, cy), 3, (0, 0, 255), -1)
-        centre_points.append((det["id"], cx, cy))
 
-    return frame, centre_points, new_left_fencer_id, new_right_fencer_id
+    return frame, new_left_fencer_id, new_right_fencer_id
 
 def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
     cap: cv2.VideoCapture = cv2.VideoCapture(video_path)
@@ -130,44 +115,49 @@ def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
         ret, frame = cap.read()
         if not ret:
             break
+        original_frame = frame.copy()
         frame = draw_text_box(frame)
-        frame, centrepoints, current_left_fencer_id, current_right_fencer_id = draw_centrepoints(frame, detections, current_left_fencer_id, current_right_fencer_id)
+        frame = draw_candidates(frame, detections)
+        frame, current_left_fencer_id, current_right_fencer_id = track_fencers(frame, detections, current_left_fencer_id, current_right_fencer_id)
 
         # select left fencer if not selected and timer passed
         if current_left_fencer_id is None and left_fencer_selection_timer < internal_clock:
-            frame, current_left_fencer_id = get_fencer_id(frame, centrepoints, left_fencer_ids, not_left_fencer_ids, left=True)
+            frame, current_left_fencer_id = get_fencer_id(frame, detections, left_fencer_ids, not_left_fencer_ids, left=True)
             if current_left_fencer_id is None:
                 print("Left fencer not seen, continuing.")
-                left_fencer_selection_timer = internal_clock + 3 * delay 
-                continue
+                left_fencer_selection_timer = internal_clock + NUM_FRAMES_TO_SKIP * delay
             elif current_left_fencer_id == -1:
                 print("Quitting.")
                 early_exit = True
                 break
-            left_fencer_ids.add(current_left_fencer_id)
-            not_right_fencer_ids.add(current_left_fencer_id)
+            else:
+                left_fencer_ids.add(current_left_fencer_id)
+                not_right_fencer_ids.add(current_left_fencer_id)
 
         # select right fencer if not selected and timer passed
         if current_right_fencer_id is None and right_fencer_selection_timer < internal_clock:
-            frame, current_right_fencer_id = get_fencer_id(frame, centrepoints, right_fencer_ids, not_right_fencer_ids, left=False)
+            frame, current_right_fencer_id = get_fencer_id(original_frame, detections, right_fencer_ids, not_right_fencer_ids, left=False)
             if current_right_fencer_id is None:
                 print("Right fencer not seen, continuing.")
-                right_fencer_selection_timer = internal_clock + 3 * delay
-                continue
+                right_fencer_selection_timer = internal_clock + NUM_FRAMES_TO_SKIP * delay
             elif current_right_fencer_id == -1:
                 print("Quitting.")
                 early_exit = True
                 break
-            right_fencer_ids.add(current_right_fencer_id)
-            not_left_fencer_ids.add(current_right_fencer_id)
+            else:
+                right_fencer_ids.add(current_right_fencer_id)
+                not_left_fencer_ids.add(current_right_fencer_id)
 
         # add all detected ids not in left or right fencer ids to not left or right fencer ids
-        if current_left_fencer_id is not None and current_right_fencer_id is not None:
-            for det in detections:
-                if det["id"] not in left_fencer_ids:
-                    not_left_fencer_ids.add(det["id"])
-                if det["id"] not in right_fencer_ids:
-                    not_right_fencer_ids.add(det["id"])
+        # This is currently bugged where fencers have 2 ids in the same frame, so disable for now
+        # if current_left_fencer_id is not None and current_right_fencer_id is not None:
+        #     print(f"Left Fencer ID: {current_left_fencer_id}, Right Fencer ID: {current_right_fencer_id}")
+        #     for det in detections:
+        #         print(f"Detected non-fencer ID: {det['id']}")
+        #         if det["id"] not in left_fencer_ids:
+        #             not_left_fencer_ids.add(det["id"])
+        #         if det["id"] not in right_fencer_ids:
+        #             not_right_fencer_ids.add(det["id"])
 
         cv2.imshow("Obtain fencer IDs", frame)
 
@@ -187,34 +177,40 @@ def draw_text_box(frame: np.ndarray) -> np.ndarray:
     cv2.rectangle(frame, (0, 0), (int(frame.shape[1]), 100), BOX_COLOR, -1)
     return frame
 
-def get_fencer_id(frame: np.ndarray, centrepoints: list[tuple[int, int, int]], known_ids: set[int], exclude_ids: set[int], left: bool) -> tuple[np.ndarray, int | None]:
-    window_name = "Select Fencer ID"
+def get_fencer_id(frame: np.ndarray, detections: list[dict], known_ids: set[int], exclude_ids: set[int], left: bool) -> tuple[np.ndarray, int | None]:
+    window_name = f"Select Fencer ID - {'Left' if left else 'Right'}"
     # click on screen to select fencer, select centrepoint of shoulder points (6 and 7) closest to mouse click
-    if not centrepoints:
+    if not detections:
         return frame, None
-    candidates = [det for det in centrepoints if det[0] not in exclude_ids]
+    candidates = [det for det in detections if det["id"] not in exclude_ids]
     if not candidates:
         return frame, None
     for candidate in candidates:
-        if candidate[0] in known_ids:
-            return frame, candidate[0]  # if one candidate is already known, return them
-    # print(known_ids, exclude_ids)
+        if candidate["id"] in known_ids:
+            return frame, candidate["id"]  # if one candidate is already known, return them
+    # Note we can't just auto-select if there's only one candidate, as it might be the wrong fencer
+    # e.g. the correct fencer is undetected for that frame
+    print([candidate["id"] for candidate in candidates])
     fencer_dir = "Left" if left else "Right"
-    # frame = draw_text_box(frame)
-    # cv2.putText(frame, f"Click on the {fencer_dir} Fencer if their centrepoint is present and press enter to confirm. If not, press '1'.", (0, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, TEXT_COLOR, 2)
     selected_id = None
     def mouse_callback(event, x, y, flags, param):
         nonlocal selected_id
         if event == cv2.EVENT_LBUTTONDOWN:
             closest_det = None
             closest_dist = float('inf')
-            for id, cx, cy in candidates:
-                if id in exclude_ids:
-                    continue
+            for candidate in candidates:
+                # calculate centrepoint of shoulder points (6 and 7)
+                left_shoulder = candidate["keypoints"][6]
+                right_shoulder = candidate["keypoints"][7]
+                # if left_shoulder[2] < 0.05 or right_shoulder[2] < 0.05:
+                #     continue
+                midpt = ((left_shoulder[0] + right_shoulder[0]) / 2, (left_shoulder[1] + right_shoulder[1]) / 2)
+                cx, cy = midpt
+
                 dist = (cx - x) ** 2 + (cy - y) ** 2
                 if dist < closest_dist:
                     closest_dist = dist
-                    closest_det = {"id": id, "keypoints": [(cx, cy)]}
+                    closest_det = candidate
             if closest_det:
                 selected_id = closest_det["id"]
                 print(f"Selected ID: {selected_id}")
@@ -222,6 +218,7 @@ def get_fencer_id(frame: np.ndarray, centrepoints: list[tuple[int, int, int]], k
     cv2.setMouseCallback(window_name, mouse_callback)
     while True:
         frame = draw_text_box(frame)
+        frame = draw_candidates(frame, candidates)
         cv2.putText(frame, f"Click on the {fencer_dir} Fencer if their centrepoint is present and press enter to confirm. If not, press '1'.", (0, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, TEXT_COLOR, 2)
         cv2.putText(frame, f"Selected ID: {selected_id}" if selected_id is not None else "No Fencer Selected", (30, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, TEXT_COLOR, 2)
         cv2.imshow(window_name, frame)
@@ -266,7 +263,7 @@ def main():
     parser.add_argument("csv_path", help="Path to results.csv")
     parser.add_argument("video_path", help="Path to input.mp4")
     parser.add_argument("--output", type=str, default=None,
-                        help="Output csv folder (default: same as input csv folder)")
+                        help="Output csv file path (default: same as input csv folder, with _with_ids suffix)")
     args = parser.parse_args()
 
     csv_path = args.csv_path

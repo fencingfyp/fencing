@@ -146,11 +146,19 @@ def main():
     parser = argparse.ArgumentParser(description="Analyse video with csv data")
     parser.add_argument("input_video", help="Path to input video file")
     parser.add_argument("input_csv", help="Path to input CSV file")
+    parser.add_argument("--output_video", help="Path to output video file (optional)", default=None)
     args = parser.parse_args() 
 
+    writer = None
     cap = cv2.VideoCapture(args.input_video)
     slow = False
     piste_positions = []
+    if args.output_video:
+        print(f"Output video will be saved to: {args.output_video}")
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        writer = cv2.VideoWriter(args.output_video, fourcc, 30, (width, height))
     for frame_id, detections in read_csv_by_frame(args.input_csv):
         ret, frame = cap.read()
         if not ret:
@@ -167,6 +175,8 @@ def main():
         frame = draw_fencer_positions(frame, detections, centre_line)
         
         cv2.imshow("Detections", frame)
+        if writer:
+            writer.write(frame)
 
         delay: int = HALF_DELAY if slow else FULL_DELAY
         key: int = cv2.waitKey(delay) & 0xFF
@@ -175,7 +185,9 @@ def main():
         elif key in (ord("q"), ord("Q"), 27):  # q or Esc to quit
             break
 
-        
+    if writer:
+        writer.release()
+
     cap.release()
     cv2.destroyAllWindows()
 
