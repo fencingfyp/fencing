@@ -5,20 +5,18 @@ Output: A video showing all detected people's chest point (calculated as the cen
 #!/usr/bin/env python3
 import argparse
 import csv
-import sys
-from collections import defaultdict
 import cv2
-import numpy as np
+from model.Ui import Ui
+from util import UiCodes
 
 # --- CONFIG ---
 CSV_COLS = 58
 NUM_KEYPOINTS = 17
-TARGET_FPS = 30
-FULL_DELAY = int(1000 / TARGET_FPS)  # milliseconds per frame
-HALF_DELAY = FULL_DELAY // 2
 BOX_COLOR = (255, 255, 255)  # White
 TEXT_COLOR = (0, 0, 0)     # Black
 NUM_FRAMES_TO_SKIP = 10
+PLAYBACK_SPEEDUP = 64  # How much to speed up playback when not paused
+
 
 def read_csv_by_frame(path):
     with open(path, newline="") as f:
@@ -66,21 +64,7 @@ def read_csv_by_frame(path):
         if batch:
             yield current_frame, batch
 
-def draw_candidates(frame: np.ndarray, detections: list[dict]) -> np.ndarray:
-    for det in detections:
-        x1, y1, x2, y2 = map(int, det["box"])
-        # draw only the centerpoint of shoulder points (6 and 7) https://docs.ultralytics.com/tasks/pose/
-        left_shoulder = det["keypoints"][6]
-        right_shoulder = det["keypoints"][7]
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), 2)
-        # if left_shoulder[2] > 0.05 and right_shoulder[2] > 0.05:
-        cx = int((left_shoulder[0] + right_shoulder[0]) / 2)
-        cy = int((left_shoulder[1] + right_shoulder[1]) / 2)
-        cv2.circle(frame, (cx, cy), 3, (0, 0, 0), -1)
-        cv2.putText(frame, str(det["id"]), (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
-    return frame
-
-def track_fencers(frame: np.ndarray, detections: list[dict], current_left_fencer_id: int | None, current_right_fencer_id: int | None) -> tuple[np.ndarray, int | None, int | None]:
+def track_fencers(detections: list[dict], current_left_fencer_id: int | None, current_right_fencer_id: int | None) -> tuple[int | None, int | None]:
     new_left_fencer_id = None
     new_right_fencer_id = None
     for det in detections:
@@ -89,10 +73,11 @@ def track_fencers(frame: np.ndarray, detections: list[dict], current_left_fencer
         elif det["id"] == current_right_fencer_id:
             new_right_fencer_id = det["id"]
 
-    return frame, new_left_fencer_id, new_right_fencer_id
+    return new_left_fencer_id, new_right_fencer_id
 
 def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
     cap: cv2.VideoCapture = cv2.VideoCapture(video_path)
+    ui: Ui = Ui("Obtain Fencer IDs", width=int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), height=int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
     slow: bool = False
     early_exit = False
 
@@ -109,23 +94,26 @@ def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
     left_fencer_selection_timer = 0
     right_fencer_selection_timer = 0
 
-    delay: int = HALF_DELAY // 16
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    ms_per_frame = int(1000 / fps)
+    delay = max(ms_per_frame // PLAYBACK_SPEEDUP, 1)
 
     for _, detections in read_csv_by_frame(csv_path):
         ret, frame = cap.read()
         if not ret:
             break
         original_frame = frame.copy()
-        frame = draw_text_box(frame)
-        frame = draw_candidates(frame, detections)
-        frame, current_left_fencer_id, current_right_fencer_id = track_fencers(frame, detections, current_left_fencer_id, current_right_fencer_id)
+        ui.set_fresh_frame(original_frame)
+        ui.show_candidates(detections)
+
+        current_left_fencer_id, current_right_fencer_id = track_fencers(detections, current_left_fencer_id, current_right_fencer_id)
 
         # select left fencer if not selected and timer passed
         if current_left_fencer_id is None and left_fencer_selection_timer < internal_clock:
-            frame, current_left_fencer_id = get_fencer_id(frame, detections, left_fencer_ids, not_left_fencer_ids, left=True)
+            current_left_fencer_id = get_fencer_id(ui, detections, left_fencer_ids, not_left_fencer_ids, left=True)
             if current_left_fencer_id is None:
                 print("Left fencer not seen, continuing.")
-                left_fencer_selection_timer = internal_clock + NUM_FRAMES_TO_SKIP * delay
+                left_fencer_selection_timer = internal_clock + NUM_FRAMES_TO_SKIP * ms_per_frame
             elif current_left_fencer_id == -1:
                 print("Quitting.")
                 early_exit = True
@@ -136,10 +124,10 @@ def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
 
         # select right fencer if not selected and timer passed
         if current_right_fencer_id is None and right_fencer_selection_timer < internal_clock:
-            frame, current_right_fencer_id = get_fencer_id(original_frame, detections, right_fencer_ids, not_right_fencer_ids, left=False)
+            current_right_fencer_id = get_fencer_id(ui, detections, right_fencer_ids, not_right_fencer_ids, left=False)
             if current_right_fencer_id is None:
                 print("Right fencer not seen, continuing.")
-                right_fencer_selection_timer = internal_clock + NUM_FRAMES_TO_SKIP * delay
+                right_fencer_selection_timer = internal_clock + NUM_FRAMES_TO_SKIP * ms_per_frame
             elif current_right_fencer_id == -1:
                 print("Quitting.")
                 early_exit = True
@@ -148,92 +136,29 @@ def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
                 right_fencer_ids.add(current_right_fencer_id)
                 not_left_fencer_ids.add(current_right_fencer_id)
 
-        # add all detected ids not in left or right fencer ids to not left or right fencer ids
-        # This is currently bugged where fencers have 2 ids in the same frame, so disable for now
-        # if current_left_fencer_id is not None and current_right_fencer_id is not None:
-        #     print(f"Left Fencer ID: {current_left_fencer_id}, Right Fencer ID: {current_right_fencer_id}")
-        #     for det in detections:
-        #         print(f"Detected non-fencer ID: {det['id']}")
-        #         if det["id"] not in left_fencer_ids:
-        #             not_left_fencer_ids.add(det["id"])
-        #         if det["id"] not in right_fencer_ids:
-        #             not_right_fencer_ids.add(det["id"])
-
-        cv2.imshow("Obtain fencer IDs", frame)
-
-        internal_clock += delay
-        key: int = cv2.waitKey(delay) & 0xFF
-        if key == ord(' '):          # toggle on space
+        internal_clock += ms_per_frame
+        action = ui.take_user_input(delay, [UiCodes.QUIT, UiCodes.TOGGLE_SLOW])
+        if action == UiCodes.TOGGLE_SLOW:
             slow = not slow
-        elif key in (ord('q'), ord('Q'), 27):  # q or Esc to quit
+        elif action == UiCodes.QUIT:
             break
 
     cap.release()
-    cv2.destroyAllWindows()
+    ui.close()
     return left_fencer_ids, right_fencer_ids, early_exit
 
-def draw_text_box(frame: np.ndarray) -> np.ndarray:
-    # draw a white rectangle in the top for instructions
-    cv2.rectangle(frame, (0, 0), (int(frame.shape[1]), 100), BOX_COLOR, -1)
-    return frame
-
-def get_fencer_id(frame: np.ndarray, detections: list[dict], known_ids: set[int], exclude_ids: set[int], left: bool) -> tuple[np.ndarray, int | None]:
-    window_name = f"Select Fencer ID - {'Left' if left else 'Right'}"
-    # click on screen to select fencer, select centrepoint of shoulder points (6 and 7) closest to mouse click
+def get_fencer_id(ui: Ui, detections: list[dict], known_ids: set[int], exclude_ids: set[int], left: bool) -> int | None:
     if not detections:
-        return frame, None
+        return None
     candidates = [det for det in detections if det["id"] not in exclude_ids]
     if not candidates:
-        return frame, None
+        return None
     for candidate in candidates:
         if candidate["id"] in known_ids:
-            return frame, candidate["id"]  # if one candidate is already known, return them
-    # Note we can't just auto-select if there's only one candidate, as it might be the wrong fencer
-    # e.g. the correct fencer is undetected for that frame
-    print([candidate["id"] for candidate in candidates])
-    fencer_dir = "Left" if left else "Right"
-    selected_id = None
-    def mouse_callback(event, x, y, flags, param):
-        nonlocal selected_id
-        if event == cv2.EVENT_LBUTTONDOWN:
-            closest_det = None
-            closest_dist = float('inf')
-            for candidate in candidates:
-                # calculate centrepoint of shoulder points (6 and 7)
-                left_shoulder = candidate["keypoints"][6]
-                right_shoulder = candidate["keypoints"][7]
-                # if left_shoulder[2] < 0.05 or right_shoulder[2] < 0.05:
-                #     continue
-                midpt = ((left_shoulder[0] + right_shoulder[0]) / 2, (left_shoulder[1] + right_shoulder[1]) / 2)
-                cx, cy = midpt
-
-                dist = (cx - x) ** 2 + (cy - y) ** 2
-                if dist < closest_dist:
-                    closest_dist = dist
-                    closest_det = candidate
-            if closest_det:
-                selected_id = closest_det["id"]
-                print(f"Selected ID: {selected_id}")
-    cv2.namedWindow(window_name)
-    cv2.setMouseCallback(window_name, mouse_callback)
-    while True:
-        frame = draw_text_box(frame)
-        frame = draw_candidates(frame, candidates)
-        cv2.putText(frame, f"Click on the {fencer_dir} Fencer if their centrepoint is present and press enter to confirm. If not, press '1'.", (0, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, TEXT_COLOR, 2)
-        cv2.putText(frame, f"Selected ID: {selected_id}" if selected_id is not None else "No Fencer Selected", (30, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, TEXT_COLOR, 2)
-        cv2.imshow(window_name, frame)
-        key = cv2.waitKey(FULL_DELAY) & 0xFF
-        if key == 13 and selected_id is not None:  # Fencer selected and Enter pressed
-            break
-        # if enter pressed but no fencer selected, ignore. nice to have feedback but not essential
-        elif key in (27, ord('q'), ord('Q')):
-            selected_id = -1  # Signal to quit
-            break
-        elif key == ord('1'):  # Press '1' to skip
-            selected_id = None
-            break
-    cv2.destroyWindow(window_name)
-    return frame, selected_id
+            return candidate["id"]  # if one candidate is already known, return them
+        
+    fencer_id = ui.get_fencer_id(candidates, left)
+    return fencer_id
 
 def reprocess_csv(input_csv: str, left_fencer_ids: set[int], right_fencer_ids: set[int], output_csv_path: str) -> None:
     with open(output_csv_path, "w") as output_csv:
@@ -260,8 +185,8 @@ def reprocess_csv(input_csv: str, left_fencer_ids: set[int], right_fencer_ids: s
 
 def main():
     parser = argparse.ArgumentParser(description="Process CSV with video input")
-    parser.add_argument("csv_path", help="Path to results.csv")
     parser.add_argument("video_path", help="Path to input.mp4")
+    parser.add_argument("csv_path", help="Path to results.csv")
     parser.add_argument("--output", type=str, default=None,
                         help="Output csv file path (default: same as input csv folder, with _with_ids suffix)")
     args = parser.parse_args()

@@ -27,7 +27,6 @@ def main():
     parser = argparse.ArgumentParser(description="Process video/image with YOLO pose+tracking to CSV")
     parser.add_argument("input", help="Path to input video or image file")
     parser.add_argument("--model", default="yolov8n-pose.pt", help="Path to local YOLO model")
-    parser.add_argument("--fps", type=int, default=30, help="Output FPS (informational)")
     parser.add_argument("--output", default=".", help="Output folder for CSV")
     args = parser.parse_args()
 
