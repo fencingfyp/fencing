@@ -1,9 +1,9 @@
 import argparse
 import cv2
 import numpy as np
-from process_video_2 import read_csv_by_frame
 from model.Ui import Ui
 from util import UiCodes
+from model.FrameInfoManager import FrameInfoManager
 
 CSV_COLS = 58  # 7 + 17 * 3
 NUM_KEYPOINTS = 17
@@ -39,12 +39,12 @@ def main():
     piste_positions = []
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    ui = Ui("Fencing Analysis", width=int(width), height=int(height))
     if args.output_video:
         print(f"Output video will be saved to: {args.output_video}")
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        writer = cv2.VideoWriter(args.output_video, fourcc, DEFAULT_FPS, (width, height))
-    ui = Ui("Fencing Analysis", width=int(width), height=int(height))
-    for frame_id, detections in read_csv_by_frame(args.input_csv):
+        writer = cv2.VideoWriter(args.output_video, fourcc, DEFAULT_FPS, (width, height + ui.text_box_height))
+    for frame_id, detections in FrameInfoManager.read_csv_by_frame(args.input_csv):
         ret, frame = cap.read()
         if not ret:
             break
@@ -68,7 +68,7 @@ def main():
         ui.show_analysis(left_fencer_position, right_fencer_position, get_piste_centre_line(piste_positions))
 
         if writer:
-            writer.write(frame)
+            writer.write(ui.current_frame)
 
         delay: int = HALF_DELAY if slow else FULL_DELAY
         action = ui.take_user_input(delay, [UiCodes.QUIT, UiCodes.TOGGLE_SLOW])

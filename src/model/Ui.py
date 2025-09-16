@@ -1,15 +1,15 @@
 import cv2
 import numpy as np
 import textwrap
-from util import UiCodes, calculate_centrepoint, project_point_on_line
+from util import UiCodes, calculate_centrepoint, project_point_on_line, PISTE_LENGTH_M
 
 QUIT_KEYS = {ord('q'), ord('Q'), 27}  # q or Esc to quit
 
 ALLOWED_ACTIONS_TO_KEYBINDS = {
-    UiCodes.QUIT: QUIT_KEYS,
-    UiCodes.TOGGLE_SLOW: {ord(' ')},
-    UiCodes.SKIP_INPUT: {ord('1')},
-    UiCodes.CONFIRM_INPUT: {13}  # Enter
+  UiCodes.QUIT: QUIT_KEYS,
+  UiCodes.TOGGLE_SLOW: {ord(' ')},
+  UiCodes.SKIP_INPUT: {ord('1')},
+  UiCodes.CONFIRM_INPUT: {13}  # Enter
 }
 
 class Ui:
@@ -59,19 +59,18 @@ class Ui:
     return self.current_frame
 
   def draw_candidates(self, detections) -> np.ndarray:
-    for det in detections:
+    for det in detections.values():
       x1, y1, x2, y2 = map(int, det["box"])
       x1, y1, x2, y2 = self.apply_offset(x1, y1, x2, y2)
       # draw only the centerpoint of shoulder points (6 and 7) https://docs.ultralytics.com/tasks/pose/
       left_shoulder = det["keypoints"][6]
       right_shoulder = det["keypoints"][7]
-      cv2.rectangle(self.current_frame, (x1, y1), (x2, y2), (0, 0, 0), 2)
-      # if left_shoulder[2] > 0.05 and right_shoulder[2] > 0.05:
+      cv2.rectangle(self.current_frame, (x1, y1), (x2, y2), self.text_color, 2)
       cx = int((left_shoulder[0] + right_shoulder[0]) / 2)
       cy = int((left_shoulder[1] + right_shoulder[1]) / 2)
       cx, cy = self.apply_offset_point(cx, cy)
-      cv2.circle(self.current_frame, (cx, cy), 3, (0, 0, 0), -1)
-      cv2.putText(self.current_frame, str(det["id"]), (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
+      cv2.circle(self.current_frame, (cx, cy), 3, self.text_color, -1)
+      cv2.putText(self.current_frame, str(det["id"]), (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, self.text_color, 2)
     return self.current_frame
 
   def set_current_frame(self, frame) -> None:
@@ -91,13 +90,12 @@ class Ui:
   def unsetMouseCallback(self) -> None:
     cv2.setMouseCallback(self.window_name, lambda *_ : None)
 
-  def show_updated_fencer_selection_frame(self, candidates, fencer_dir, selected_id) -> None:
-    # print([candidate["id"] for candidate in candidates])
+  def show_updated_fencer_selection_frame(self, candidates: dict[int, dict], fencer_dir: str, selected_id: int | None) -> None:
     self.set_current_frame(self.fresh_frame)
     self.draw_candidates(candidates)
     self.write_to_ui(f"Click on the {fencer_dir} Fencer if their centrepoint is "
-                    f"present and press enter to confirm. If not, press '1'.\n"
-                    f"Selected ID: "+ (str(selected_id) if selected_id is not None else "No Fencer Selected"))
+                     f"present and press enter to confirm. If not, press '1'.\n"
+                     f"Selected ID: "+ (str(selected_id) if selected_id is not None else "No Fencer Selected"))
     self.show_frame()
 
   def write_to_ui(self, text, font=cv2.FONT_HERSHEY_SIMPLEX,
@@ -111,32 +109,32 @@ class Ui:
 
     scale = font_scale
     while scale > 0.1:
-        # Estimate max chars per line (rough, since proportional font)
-        char_w, char_h = cv2.getTextSize("M", font, scale, thickness)[0]
-        if char_w == 0:
-            break
-        max_chars = max(1, box_w // char_w)
+      # Estimate max chars per line (rough, since proportional font)
+      char_w, char_h = cv2.getTextSize("M", font, scale, thickness)[0]
+      if char_w == 0:
+          break
+      max_chars = max(1, box_w // char_w)
 
-        # Wrap text into lines
-        lines = textwrap.wrap(text, width=max_chars)
+      # Wrap text into lines
+      lines = textwrap.wrap(text, width=max_chars)
 
-        # Measure total height
-        line_h = char_h + thickness
-        total_h = int(len(lines) * line_h * line_spacing)
+      # Measure total height
+      line_h = char_h + thickness
+      total_h = int(len(lines) * line_h * line_spacing)
 
-        # Check fit
-        if total_h <= box_h:
-            # Draw centered
-            y_start = y1 + (box_h - total_h) // 2 + char_h
-            for i, line in enumerate(lines):
-                (text_w, _), _ = cv2.getTextSize(line, font, scale, thickness)
-                x_pos = x1 + (box_w - text_w) // 2
-                y_pos = int(y_start + i * line_h * line_spacing)
-                cv2.putText(self.current_frame, line, (x_pos, y_pos), font, scale, color, thickness, cv2.LINE_AA)
-            return self.current_frame
+      # Check fit
+      if total_h <= box_h:
+        # Draw centered
+        y_start = y1 + (box_h - total_h) // 2 + char_h
+        for i, line in enumerate(lines):
+          (text_w, _), _ = cv2.getTextSize(line, font, scale, thickness)
+          x_pos = x1 + (box_w - text_w) // 2
+          y_pos = int(y_start + i * line_h * line_spacing)
+          cv2.putText(self.current_frame, line, (x_pos, y_pos), font, scale, color, thickness, cv2.LINE_AA)
+        return self.current_frame
 
-        # If doesn’t fit, shrink
-        scale -= 0.1
+      # If doesn’t fit, shrink
+      scale -= 0.1
 
     # If still doesn’t fit, just put smallest text
     cv2.putText(self.current_frame, text, (x1, y1 + box_h//2), font, scale, color, thickness, cv2.LINE_AA)
@@ -148,9 +146,9 @@ class Ui:
   def show_analysis(self, left_fencer_position : dict | None, right_fencer_position: dict | None, piste_centre_line: tuple[tuple[int, int], tuple[int, int]]) -> None:
     self.refresh_frame()
     if left_fencer_position is not None:
-        self.draw_fencer_centrepoint(left_fencer_position, is_left=True)
+      self.draw_fencer_centrepoint(left_fencer_position, is_left=True)
     if right_fencer_position is not None:
-        self.draw_fencer_centrepoint(right_fencer_position, is_left=False)
+      self.draw_fencer_centrepoint(right_fencer_position, is_left=False)
     self.draw_piste_centre_line(piste_centre_line)
     self.draw_fencer_positions_on_piste(left_fencer_position, right_fencer_position, piste_centre_line)
     self.show_frame()
@@ -169,10 +167,10 @@ class Ui:
     left_shoulder = det["keypoints"][6]
     right_shoulder = det["keypoints"][7]
     if left_shoulder[2] > 0.1 and right_shoulder[2] > 0.1:
-        cx = int((left_shoulder[0] + right_shoulder[0]) / 2)
-        cy = int((left_shoulder[1] + right_shoulder[1]) / 2)
-        cx, cy = self.apply_offset_point(cx, cy)
-        cv2.circle(self.current_frame, (cx, cy), 3, color, -1)
+      cx = int((left_shoulder[0] + right_shoulder[0]) / 2)
+      cy = int((left_shoulder[1] + right_shoulder[1]) / 2)
+      cx, cy = self.apply_offset_point(cx, cy)
+      cv2.circle(self.current_frame, (cx, cy), 3, color, -1)
 
   def draw_fencer_positions_on_piste(self, left_fencer_position: dict, right_fencer_position: dict, piste_centre_line: tuple[tuple[int, int], tuple[int, int]]) -> None:
     left_proj = None
@@ -180,52 +178,55 @@ class Ui:
 
     # Calculate fencer projections on line
     if left_fencer_position is not None:
-        centrept = calculate_centrepoint(left_fencer_position)
-        left_proj = project_point_on_line(piste_centre_line, centrept)
-        left_proj_adjusted = self.apply_offset_point(left_proj[0], left_proj[1])
-        cv2.circle(self.current_frame, left_proj_adjusted, 3, self.left_fencer_colour, -1)
+      centrept = calculate_centrepoint(left_fencer_position)
+      left_proj = project_point_on_line(piste_centre_line, centrept)
+      left_proj_adjusted = self.apply_offset_point(left_proj[0], left_proj[1])
+      cv2.circle(self.current_frame, left_proj_adjusted, 3, self.left_fencer_colour, -1)
 
     if right_fencer_position is not None:
-        centrept = calculate_centrepoint(right_fencer_position)
-        right_proj = project_point_on_line(piste_centre_line, centrept)
-        right_proj_adjusted = self.apply_offset_point(right_proj[0], right_proj[1])
-        cv2.circle(self.current_frame, right_proj_adjusted, 3, self.right_fencer_colour, -1)
+      centrept = calculate_centrepoint(right_fencer_position)
+      right_proj = project_point_on_line(piste_centre_line, centrept)
+      right_proj_adjusted = self.apply_offset_point(right_proj[0], right_proj[1])
+      cv2.circle(self.current_frame, right_proj_adjusted, 3, self.right_fencer_colour, -1)
 
+    piste_x1, piste_y1, piste_x2, piste_y2 = self.apply_offset(piste_centre_line[0][0], piste_centre_line[0][1], piste_centre_line[1][0], piste_centre_line[1][1])
+    piste_pixel_distance = int(np.hypot(piste_x2 - piste_x1, piste_y2 - piste_y1))
     self.draw_text_box()
     if left_proj is not None and right_proj is not None:
-        self.write_to_ui(f"Distance: {int(np.hypot(right_proj_adjusted[0]-left_proj_adjusted[0], right_proj_adjusted[1]-left_proj_adjusted[1]))} px")
+      fencer_pixel_distance = int(np.hypot(right_proj_adjusted[0]-left_proj_adjusted[0], right_proj_adjusted[1]-left_proj_adjusted[1]))
+      fencer_real_distance = (fencer_pixel_distance / piste_pixel_distance) * PISTE_LENGTH_M
+      self.write_to_ui(f"Distance: {fencer_real_distance} m")
     else:
-        self.write_to_ui("Distance: N/A")
+      self.write_to_ui("Distance: N/A")
     
   def get_piste_positions(self) -> list[tuple[int, int]]:
     positions: list[tuple[int, int]] = []
     instructions = [
-        "Click TOP LEFT corner, press Enter to confirm",
-        "Click TOP RIGHT corner, press Enter to confirm",
-        "Click BOTTOM LEFT corner, press Enter to confirm",
-        "Click BOTTOM RIGHT corner, press Enter to confirm"
+      "Click TOP LEFT corner, press Enter to confirm",
+      "Click TOP RIGHT corner, press Enter to confirm",
+      "Click BOTTOM LEFT corner, press Enter to confirm",
+      "Click BOTTOM RIGHT corner, press Enter to confirm"
     ]
-
     current_idx = 0
     def mouse_callback(event, x, y, flags, param):
-        nonlocal positions
-        if event == cv2.EVENT_LBUTTONDOWN:
-            if len(positions) <= current_idx:
-                positions.append((x, y))
-            else:
-                positions[current_idx] = (x, y)
-            self.show_updated_piste_selection_frame(positions, instructions, current_idx)
+      nonlocal positions
+      if event == cv2.EVENT_LBUTTONDOWN:
+        if len(positions) <= current_idx:
+          positions.append((x, y))
+        else:
+          positions[current_idx] = (x, y)
+        self.show_updated_piste_selection_frame(positions, instructions, current_idx)
     self.setMouseCallback(mouse_callback)
 
     while current_idx < len(instructions):
-        self.show_updated_piste_selection_frame(positions, instructions, current_idx)
-        action = self.take_user_input(0, [UiCodes.QUIT, UiCodes.CONFIRM_INPUT])
-        if action == UiCodes.CONFIRM_INPUT: 
-            if len(positions) > current_idx:
-                current_idx += 1
-        elif action == UiCodes.QUIT: 
-            positions = []
-            break
+      self.show_updated_piste_selection_frame(positions, instructions, current_idx)
+      action = self.take_user_input(0, [UiCodes.QUIT, UiCodes.CONFIRM_INPUT])
+      if action == UiCodes.CONFIRM_INPUT: 
+        if len(positions) > current_idx:
+          current_idx += 1
+      elif action == UiCodes.QUIT: 
+          positions = []
+          break
 
     self.unsetMouseCallback()
     return positions
@@ -234,10 +235,10 @@ class Ui:
     self.refresh_frame()
     # Draw existing points
     for i, (px, py) in enumerate(positions):
-        px, py = self.apply_offset_point(px, py)
-        cv2.circle(self.current_frame, (px, py), 5, (0, 0, 255), -1)
-        cv2.putText(self.current_frame, str(i+1), (px+10 if i % 2 == 0 else px-30, py), # adjust text position for right side
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+      px, py = self.apply_offset_point(px, py)
+      cv2.circle(self.current_frame, (px, py), 5, (0, 0, 255), -1)
+      cv2.putText(self.current_frame, str(i+1), (px+10 if i % 2 == 0 else px-30, py), # adjust text position for right side
+                  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
     # Show instruction text
     self.write_to_ui(instructions[current_idx])
@@ -247,7 +248,7 @@ class Ui:
     self.set_current_frame(self.fresh_frame)
     self.draw_text_box()
 
-  def get_fencer_id(self, candidates: list[dict], left: bool) -> int | None:
+  def get_fencer_id(self, candidates: dict[int, dict], left: bool) -> int | None:
     if not candidates:
       return None
     fencer_dir = "Left" if left else "Right"
@@ -259,7 +260,7 @@ class Ui:
       if event == cv2.EVENT_LBUTTONDOWN:
         closest_det = None
         closest_dist = float('inf')
-        for candidate in candidates:
+        for candidate in candidates.values():
           left_shoulder = candidate["keypoints"][6]
           right_shoulder = candidate["keypoints"][7]
           midpt = ((left_shoulder[0] + right_shoulder[0]) / 2, (left_shoulder[1] + right_shoulder[1]) / 2)
@@ -292,8 +293,8 @@ class Ui:
   def take_user_input(self, delay: int, allowed_actions: list[UiCodes]) -> UiCodes | None:
     key = cv2.waitKey(delay) & 0xFF
     for action in allowed_actions:
-        if key in ALLOWED_ACTIONS_TO_KEYBINDS[action]:
-            return action
+      if key in ALLOWED_ACTIONS_TO_KEYBINDS[action]:
+        return action
     return None
 
   def close(self) -> None:

@@ -8,72 +8,13 @@ import csv
 import cv2
 from model.Ui import Ui
 from util import UiCodes
+from model.FrameInfoManager import FrameInfoManager
 
 # --- CONFIG ---
-CSV_COLS = 58
-NUM_KEYPOINTS = 17
 BOX_COLOR = (255, 255, 255)  # White
 TEXT_COLOR = (0, 0, 0)     # Black
 NUM_FRAMES_TO_SKIP = 10
 PLAYBACK_SPEEDUP = 64  # How much to speed up playback when not paused
-
-
-def read_csv_by_frame(path):
-    with open(path, newline="") as f:
-        reader = csv.reader(f)
-        header = next(reader)
-
-        # Ensure correct number of columns
-        if len(header) != CSV_COLS:
-            raise ValueError(f"CSV has {len(header)} columns, expected {CSV_COLS}")
-
-        current_frame = None
-        batch = []
-
-        for row in reader:
-            frame_id = int(row[0])  # frame_id
-
-            if current_frame is None:
-                current_frame = frame_id
-
-            if frame_id != current_frame:
-                yield current_frame, batch
-                batch = []
-                current_frame = frame_id
-
-            # Convert row to dict
-            id = int(row[1])
-            conf = float(row[2])
-            box = list(map(float, row[3:7]))
-            keypoints = []
-            kp_vals = row[7:]
-
-            for i in range(NUM_KEYPOINTS):
-                x = float(kp_vals[i*3 + 0])
-                y = float(kp_vals[i*3 + 1])
-                v = float(kp_vals[i*3 + 2])
-                keypoints.append((x, y, v))
-
-            batch.append({
-                "id": id,
-                "confidence": conf,
-                "box": box,  # [x1, y1, x2, y2]
-                "keypoints": keypoints
-            })
-
-        if batch:
-            yield current_frame, batch
-
-def track_fencers(detections: list[dict], current_left_fencer_id: int | None, current_right_fencer_id: int | None) -> tuple[int | None, int | None]:
-    new_left_fencer_id = None
-    new_right_fencer_id = None
-    for det in detections:
-        if det["id"] == current_left_fencer_id:
-            new_left_fencer_id = det["id"]
-        elif det["id"] == current_right_fencer_id:
-            new_right_fencer_id = det["id"]
-
-    return new_left_fencer_id, new_right_fencer_id
 
 def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
     cap: cv2.VideoCapture = cv2.VideoCapture(video_path)
@@ -97,91 +38,98 @@ def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
     fps = cap.get(cv2.CAP_PROP_FPS)
     ms_per_frame = int(1000 / fps)
     delay = max(ms_per_frame // PLAYBACK_SPEEDUP, 1)
+    frame_manager = FrameInfoManager(csv_path, fps)
 
-    for _, detections in read_csv_by_frame(csv_path):
-        ret, frame = cap.read()
-        if not ret:
-            break
-        original_frame = frame.copy()
-        ui.set_fresh_frame(original_frame)
-        ui.show_candidates(detections)
+    frame_idx = 0
+    while True:
+      ret, frame = cap.read()
+      if not ret:
+        break
+      detections = frame_manager.get_detections(frame_idx)
+      frame_idx += 1
+      ui.set_fresh_frame(frame)
+      ui.show_candidates(detections)
 
-        current_left_fencer_id, current_right_fencer_id = track_fencers(detections, current_left_fencer_id, current_right_fencer_id)
+      if current_left_fencer_id not in detections \
+        and not frame_manager.appears_in_future_detections(frame_idx, current_left_fencer_id):
+          current_left_fencer_id = None  # lost track of left fencer
+      if current_right_fencer_id not in detections \
+        and not frame_manager.appears_in_future_detections(frame_idx, current_right_fencer_id):
+          current_right_fencer_id = None  # lost track of right fencer
 
-        # select left fencer if not selected and timer passed
-        if current_left_fencer_id is None and left_fencer_selection_timer < internal_clock:
-            current_left_fencer_id = get_fencer_id(ui, detections, left_fencer_ids, not_left_fencer_ids, left=True)
-            if current_left_fencer_id is None:
-                print("Left fencer not seen, continuing.")
-                left_fencer_selection_timer = internal_clock + NUM_FRAMES_TO_SKIP * ms_per_frame
-            elif current_left_fencer_id == -1:
-                print("Quitting.")
-                early_exit = True
-                break
-            else:
-                left_fencer_ids.add(current_left_fencer_id)
-                not_right_fencer_ids.add(current_left_fencer_id)
+      # select left fencer if not selected and timer passed
+      if current_left_fencer_id is None and left_fencer_selection_timer < internal_clock:
+        current_left_fencer_id = get_fencer_id(ui, detections, left_fencer_ids, not_left_fencer_ids, left=True)
+        if current_left_fencer_id is None:
+          print("Left fencer not seen, continuing.")
+          left_fencer_selection_timer = internal_clock + NUM_FRAMES_TO_SKIP * ms_per_frame
+        elif current_left_fencer_id == -1:
+          print("Quitting.")
+          early_exit = True
+          break
+        else:
+          left_fencer_ids.add(current_left_fencer_id)
+          not_right_fencer_ids.add(current_left_fencer_id)
 
-        # select right fencer if not selected and timer passed
-        if current_right_fencer_id is None and right_fencer_selection_timer < internal_clock:
-            current_right_fencer_id = get_fencer_id(ui, detections, right_fencer_ids, not_right_fencer_ids, left=False)
-            if current_right_fencer_id is None:
-                print("Right fencer not seen, continuing.")
-                right_fencer_selection_timer = internal_clock + NUM_FRAMES_TO_SKIP * ms_per_frame
-            elif current_right_fencer_id == -1:
-                print("Quitting.")
-                early_exit = True
-                break
-            else:
-                right_fencer_ids.add(current_right_fencer_id)
-                not_left_fencer_ids.add(current_right_fencer_id)
+      # select right fencer if not selected and timer passed
+      if current_right_fencer_id is None and right_fencer_selection_timer < internal_clock:
+        current_right_fencer_id = get_fencer_id(ui, detections, right_fencer_ids, not_right_fencer_ids, left=False)
+        if current_right_fencer_id is None:
+          print("Right fencer not seen, continuing.")
+          right_fencer_selection_timer = internal_clock + NUM_FRAMES_TO_SKIP * ms_per_frame
+        elif current_right_fencer_id == -1:
+          print("Quitting.")
+          early_exit = True
+          break
+        else:
+          right_fencer_ids.add(current_right_fencer_id)
+          not_left_fencer_ids.add(current_right_fencer_id)
 
-        internal_clock += ms_per_frame
-        action = ui.take_user_input(delay, [UiCodes.QUIT, UiCodes.TOGGLE_SLOW])
-        if action == UiCodes.TOGGLE_SLOW:
-            slow = not slow
-        elif action == UiCodes.QUIT:
-            break
+      internal_clock += ms_per_frame
+      action = ui.take_user_input(delay, [UiCodes.QUIT, UiCodes.TOGGLE_SLOW])
+      if action == UiCodes.TOGGLE_SLOW:
+        slow = not slow
+      elif action == UiCodes.QUIT:
+        break
 
     cap.release()
     ui.close()
     return left_fencer_ids, right_fencer_ids, early_exit
 
-def get_fencer_id(ui: Ui, detections: list[dict], known_ids: set[int], exclude_ids: set[int], left: bool) -> int | None:
-    if not detections:
-        return None
-    candidates = [det for det in detections if det["id"] not in exclude_ids]
-    if not candidates:
-        return None
-    for candidate in candidates:
-        if candidate["id"] in known_ids:
-            return candidate["id"]  # if one candidate is already known, return them
-        
-    fencer_id = ui.get_fencer_id(candidates, left)
-    return fencer_id
+def get_fencer_id(ui: Ui, detections: dict[int, dict], known_ids: set[int], exclude_ids: set[int], left: bool) -> int | None:
+  if len(detections) == 0:
+    return None
+  candidates = {det_id: det for det_id, det in detections.items() if det_id not in exclude_ids}
+  if not candidates:
+    return None
+  for candidate in candidates.values():
+    if candidate["id"] in known_ids:
+      return candidate["id"]  # if one candidate is already known, return them
+      
+  return ui.get_fencer_id(candidates, left)
 
 def reprocess_csv(input_csv: str, left_fencer_ids: set[int], right_fencer_ids: set[int], output_csv_path: str) -> None:
-    with open(output_csv_path, "w") as output_csv:
-        with open(input_csv, "r") as input_csv:
-            # skip header
-            next(input_csv)
-            # Process each frame's detections and write to the output CSV
-            while input_csv:
-                line = input_csv.readline()
-                if not line:
-                    break
-                id = int(line.strip().split(',')[1]) # get id
-                if id in left_fencer_ids:
-                    fencer_dir = 0  # Left
-                elif id in right_fencer_ids:
-                    fencer_dir = 1  # Right
-                else:
-                    continue  # Skip if fencer ID is not recognized
-                parts = line.strip().split(',')
-                # Replace the fencer ID with 0 for left and 1 for right
-                parts[1] = str(fencer_dir)
-                line = ','.join(parts) + '\n'
-                output_csv.write(line)
+  with open(output_csv_path, "w") as output_csv:
+    with open(input_csv, "r") as input_csv:
+      # skip header
+      next(input_csv)
+      # Process each frame's detections and write to the output CSV
+      while input_csv:
+        line = input_csv.readline()
+        if not line:
+          break
+        id = int(line.strip().split(',')[1]) # get id
+        if id in left_fencer_ids:
+          fencer_dir = 0  # Left
+        elif id in right_fencer_ids:
+          fencer_dir = 1  # Right
+        else:
+          continue  # Skip if fencer ID is not recognized
+        parts = line.strip().split(',')
+        # Replace the fencer ID with 0 for left and 1 for right
+        parts[1] = str(fencer_dir)
+        line = ','.join(parts) + '\n'
+        output_csv.write(line)
 
 def main():
     parser = argparse.ArgumentParser(description="Process CSV with video input")
@@ -196,11 +144,11 @@ def main():
     output_path = args.output
     left_fencer_ids, right_fencer_ids, early_exit = obtain_fencer_ids(csv_path, video_path)
     if early_exit:
-        print("Exiting early, not outputting csv.")
-        return
+      print("Exiting early, not outputting csv.")
+      return
     
     if output_path is None:
-        output_path = csv_path.rsplit('.', 1)[0] + "_with_ids.csv"
+      output_path = csv_path.rsplit('.', 1)[0] + "_with_ids.csv"
     
     reprocess_csv(csv_path, left_fencer_ids, right_fencer_ids, output_path)
 

@@ -5,7 +5,8 @@ class UiCodes(enum.Enum):
     TOGGLE_SLOW = 1
     SKIP_INPUT = 2
     CONFIRM_INPUT = 3
-    
+
+PISTE_LENGTH_M = 14  # Standard piste length in meters
     
 
 def calculate_centrepoint(det):

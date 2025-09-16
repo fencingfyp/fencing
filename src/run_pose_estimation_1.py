@@ -6,6 +6,9 @@ import cv2
 from pathlib import Path
 from ultralytics import YOLO
 
+CSV_COLS = 58  # 7 + 17 * 3
+NUM_KEYPOINTS = 17
+
 """
 Input: A video (check accepted formats below) or an image, a yolo pose model
 Output: A csv marking the poses
@@ -39,7 +42,7 @@ def main():
     model = load_model(args.model)
 
     # Decide if input is video or image
-    is_video = cv2.VideoCapture(args.input).isOpened() and args.input.lower().endswith((".mp4", ".avi", ".mov", ".mkv"))
+    is_video = args.input.lower().endswith((".mp4", ".avi", ".mov", ".mkv")) and cv2.VideoCapture(args.input).isOpened()
 
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
