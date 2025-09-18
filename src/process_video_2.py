@@ -19,7 +19,6 @@ PLAYBACK_SPEEDUP = 64  # How much to speed up playback when not paused
 def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
     cap: cv2.VideoCapture = cv2.VideoCapture(video_path)
     ui: Ui = Ui("Obtain Fencer IDs", width=int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), height=int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
-    slow: bool = False
     early_exit = False
 
     # Variables to track fencer IDs
@@ -86,10 +85,8 @@ def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
           not_left_fencer_ids.add(current_right_fencer_id)
 
       internal_clock += ms_per_frame
-      action = ui.take_user_input(delay, [UiCodes.QUIT, UiCodes.TOGGLE_SLOW])
-      if action == UiCodes.TOGGLE_SLOW:
-        slow = not slow
-      elif action == UiCodes.QUIT:
+      action = ui.take_user_input(delay, [UiCodes.QUIT])
+      if action == UiCodes.QUIT:
         break
 
     cap.release()

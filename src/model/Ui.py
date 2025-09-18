@@ -46,10 +46,8 @@ class Ui:
     return self.current_frame
 
   def apply_offset(self, x1, y1, x2, y2) -> None:
-    y1 += self.text_box_height
-    y2 += self.text_box_height
-    return x1, y1, x2, y2
-  
+    return *self.apply_offset_point(x1, y1), *self.apply_offset_point(x2, y2)
+
   def apply_offset_point(self, x, y) -> None:
     y += self.text_box_height
     return x, y
@@ -62,13 +60,8 @@ class Ui:
     for det in detections.values():
       x1, y1, x2, y2 = map(int, det["box"])
       x1, y1, x2, y2 = self.apply_offset(x1, y1, x2, y2)
-      # draw only the centerpoint of shoulder points (6 and 7) https://docs.ultralytics.com/tasks/pose/
-      left_shoulder = det["keypoints"][6]
-      right_shoulder = det["keypoints"][7]
-      cv2.rectangle(self.current_frame, (x1, y1), (x2, y2), self.text_color, 2)
-      cx = int((left_shoulder[0] + right_shoulder[0]) / 2)
-      cy = int((left_shoulder[1] + right_shoulder[1]) / 2)
-      cx, cy = self.apply_offset_point(cx, cy)
+      cv2.rectangle(self.current_frame, (x1, y1), (x2, y2), self.text_color, 2) # draw bounding box
+      cx, cy = self.apply_offset_point(*calculate_centrepoint(det))
       cv2.circle(self.current_frame, (cx, cy), 3, self.text_color, -1)
       cv2.putText(self.current_frame, str(det["id"]), (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, self.text_color, 2)
     return self.current_frame
@@ -143,20 +136,22 @@ class Ui:
   def show_frame(self) -> None:
     cv2.imshow(self.window_name, self.current_frame)
 
-  def show_analysis(self, left_fencer_position : dict | None, right_fencer_position: dict | None, piste_centre_line: tuple[tuple[int, int], tuple[int, int]]) -> None:
-    self.refresh_frame()
-    if left_fencer_position is not None:
-      self.draw_fencer_centrepoint(left_fencer_position, is_left=True)
-    if right_fencer_position is not None:
-      self.draw_fencer_centrepoint(right_fencer_position, is_left=False)
-    self.draw_piste_centre_line(piste_centre_line)
-    self.draw_fencer_positions_on_piste(left_fencer_position, right_fencer_position, piste_centre_line)
-    self.show_frame()
+  # def show_analysis(self, left_fencer_position : dict | None, right_fencer_position: dict | None, piste_centre_line: tuple[tuple[int, int], tuple[int, int]]) -> None:
+  #   self.refresh_frame()
+  #   if left_fencer_position is not None:
+  #     self.draw_fencer_centrepoint(left_fencer_position, is_left=True)
+  #   if right_fencer_position is not None:
+  #     self.draw_fencer_centrepoint(right_fencer_position, is_left=False)
+  #   self.draw_piste_centre_line(piste_centre_line)
+  #   self.draw_fencer_positions_on_piste(left_fencer_position, right_fencer_position, piste_centre_line)
+  #   self.show_frame()
 
-  def draw_piste_centre_line(self, piste_centre_line: tuple[tuple[int, int], tuple[int, int]]) -> None:
+  def draw_piste_centre_line(self, piste_centre_line: tuple[tuple[int, int], tuple[int, int]], color: tuple[int, int, int] = None) -> None:
+    if color is None:
+      color = self.piste_centre_line_colour
     (x1, y1), (x2, y2) = piste_centre_line
     x1, y1, x2, y2 = self.apply_offset(x1, y1, x2, y2)
-    cv2.line(self.current_frame, (x1, y1), (x2, y2), self.piste_centre_line_colour, 2)
+    cv2.line(self.current_frame, (x1, y1), (x2, y2), color, 2)
 
   def draw_fencer_centrepoint(self, det: dict, is_left: bool) -> None:
     color = self.left_fencer_colour if is_left else self.right_fencer_colour
@@ -172,41 +167,32 @@ class Ui:
       cx, cy = self.apply_offset_point(cx, cy)
       cv2.circle(self.current_frame, (cx, cy), 3, color, -1)
 
+  def draw_fencer_projection(self, fencer_position: dict, piste_centre_line: tuple[tuple[int, int], tuple[int, int]], colour: tuple[int, int, int]) -> tuple[int, int] | None:
+    if fencer_position is None:
+        return None
+    centrept = calculate_centrepoint(fencer_position)
+    proj = project_point_on_line(piste_centre_line, centrept)
+    proj_adjusted = self.apply_offset_point(proj[0], proj[1])
+    cv2.circle(self.current_frame, proj_adjusted, 3, colour, -1)
+    return proj_adjusted
+
   def draw_fencer_positions_on_piste(self, left_fencer_position: dict, right_fencer_position: dict, piste_centre_line: tuple[tuple[int, int], tuple[int, int]]) -> None:
-    left_proj = None
-    right_proj = None
-
     # Calculate fencer projections on line
-    if left_fencer_position is not None:
-      centrept = calculate_centrepoint(left_fencer_position)
-      left_proj = project_point_on_line(piste_centre_line, centrept)
-      left_proj_adjusted = self.apply_offset_point(left_proj[0], left_proj[1])
-      cv2.circle(self.current_frame, left_proj_adjusted, 3, self.left_fencer_colour, -1)
+    left_proj_adjusted = self.draw_fencer_projection(left_fencer_position, piste_centre_line, self.left_fencer_colour)
+    right_proj_adjusted = self.draw_fencer_projection(right_fencer_position, piste_centre_line, self.right_fencer_colour)
 
-    if right_fencer_position is not None:
-      centrept = calculate_centrepoint(right_fencer_position)
-      right_proj = project_point_on_line(piste_centre_line, centrept)
-      right_proj_adjusted = self.apply_offset_point(right_proj[0], right_proj[1])
-      cv2.circle(self.current_frame, right_proj_adjusted, 3, self.right_fencer_colour, -1)
-
-    piste_x1, piste_y1, piste_x2, piste_y2 = self.apply_offset(piste_centre_line[0][0], piste_centre_line[0][1], piste_centre_line[1][0], piste_centre_line[1][1])
+    piste_x1, piste_y1, piste_x2, piste_y2 = self.apply_offset(*piste_centre_line[0], *piste_centre_line[1])
     piste_pixel_distance = int(np.hypot(piste_x2 - piste_x1, piste_y2 - piste_y1))
     self.draw_text_box()
-    if left_proj is not None and right_proj is not None:
+    if left_proj_adjusted is not None and right_proj_adjusted is not None:
       fencer_pixel_distance = int(np.hypot(right_proj_adjusted[0]-left_proj_adjusted[0], right_proj_adjusted[1]-left_proj_adjusted[1]))
       fencer_real_distance = (fencer_pixel_distance / piste_pixel_distance) * PISTE_LENGTH_M
       self.write_to_ui(f"Distance: {fencer_real_distance} m")
     else:
       self.write_to_ui("Distance: N/A")
     
-  def get_piste_positions(self) -> list[tuple[int, int]]:
+  def get_n_points(self, instructions: list[str]) -> list[tuple[int, int]]:
     positions: list[tuple[int, int]] = []
-    instructions = [
-      "Click TOP LEFT corner, press Enter to confirm",
-      "Click TOP RIGHT corner, press Enter to confirm",
-      "Click BOTTOM LEFT corner, press Enter to confirm",
-      "Click BOTTOM RIGHT corner, press Enter to confirm"
-    ]
     current_idx = 0
     def mouse_callback(event, x, y, flags, param):
       nonlocal positions
@@ -230,6 +216,15 @@ class Ui:
 
     self.unsetMouseCallback()
     return positions
+
+  def get_piste_positions(self) -> list[tuple[int, int]]:
+    instructions = [
+      "Click TOP LEFT corner, press Enter to confirm",
+      "Click TOP RIGHT corner, press Enter to confirm",
+      "Click BOTTOM RIGHT corner, press Enter to confirm",
+      "Click BOTTOM LEFT corner, press Enter to confirm",
+    ]
+    return self.get_n_points(instructions)
      
   def show_updated_piste_selection_frame(self, positions, instructions, current_idx) -> None:
     self.refresh_frame()
@@ -258,21 +253,14 @@ class Ui:
     def mouse_callback(event, x, y, flags, param):
       nonlocal selected_id
       if event == cv2.EVENT_LBUTTONDOWN:
-        closest_det = None
-        closest_dist = float('inf')
-        for candidate in candidates.values():
-          left_shoulder = candidate["keypoints"][6]
-          right_shoulder = candidate["keypoints"][7]
-          midpt = ((left_shoulder[0] + right_shoulder[0]) / 2, (left_shoulder[1] + right_shoulder[1]) / 2)
-          cx, cy = midpt
-
-          dist = (cx - x) ** 2 + (cy - y) ** 2
-          if dist < closest_dist:
-            closest_dist = dist
-            closest_det = candidate
+        closest_det = min(
+          candidates.values(),
+          key=lambda c: (calculate_centrepoint(c)[0] - x) ** 2 + (calculate_centrepoint(c)[1] - y) ** 2,
+          default=None
+        )
         if closest_det:
           selected_id = closest_det["id"]
-          # print(f"Selected ID: {selected_id}")
+
         self.show_updated_fencer_selection_frame(candidates, fencer_dir, selected_id)
     self.setMouseCallback(mouse_callback)
 

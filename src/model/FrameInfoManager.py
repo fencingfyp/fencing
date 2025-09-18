@@ -38,23 +38,25 @@ class FrameInfoManager:
         if current_frame is None:
           current_frame = frame_id
 
-        if frame_id != current_frame:
-          yield current_frame, batch
-          batch = []
-          current_frame = frame_id
+        # Fill in skipped frames
+        while frame_id > current_frame:
+            yield current_frame, batch
+            batch = []
+            current_frame += 1
 
         # Convert row to dict
         id = int(row[1])
         conf = float(row[2])
         box = list(map(float, row[3:7]))
-        keypoints = []
         kp_vals = row[7:]
 
-        for i in range(NUM_KEYPOINTS):
-          x = float(kp_vals[i*3 + 0])
-          y = float(kp_vals[i*3 + 1])
-          v = float(kp_vals[i*3 + 2])
-          keypoints.append((x, y, v))
+        keypoints = [
+            (float(kp_vals[i*3 + 0]),
+              float(kp_vals[i*3 + 1]),
+              float(kp_vals[i*3 + 2]))
+            for i in range(NUM_KEYPOINTS)
+        ]
+
 
         batch.append({
           "id": id,
@@ -63,7 +65,7 @@ class FrameInfoManager:
           "keypoints": keypoints
         })
 
-      if batch:
+      if current_frame is not None:
         yield current_frame, batch
 
   def preload_detections_at_frame(self, frame_index: int):
