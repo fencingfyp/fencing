@@ -2,8 +2,9 @@ import argparse
 import cv2
 import numpy as np
 from model.Ui import Ui
-from util import UiCodes, LEFT_FENCER_WHITE_LIGHT_INSTRUCTIONS, convert_to_opencv_format, convert_from_opencv_format
+from util import UiCodes, LEFT_FENCER_SCORE_LIGHT_INSTRUCTIONS, RIGHT_FENCER_SCORE_LIGHT_INSTRUCTIONS, convert_to_opencv_format, convert_from_opencv_format
 from model.FrameInfoManager import FrameInfoManager
+from model.PlanarTracker import PlanarTarget, TargetsTracker
 
 CSV_COLS = 58  # 7 + 17 * 3
 NUM_KEYPOINTS = 17
@@ -29,14 +30,6 @@ def get_piste_centre_line(positions: list[tuple[int, int]]) -> tuple[tuple[int, 
     right_y = (positions[1][1] + positions[2][1]) // 2
     return (left_x, left_y), (right_x, right_y)
 
-def initialise_planar_tracking(frame, initial_positions):
-    orb = cv2.ORB_create(1000)
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    kp_ref, des_ref = orb.detectAndCompute(gray, None)
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-    last_quad = initial_positions
-    return orb, kp_ref, des_ref, bf, last_quad
-
 def main():
     parser = argparse.ArgumentParser(description="Analyse video with csv data")
     parser.add_argument("input_video", help="Path to input video file")
@@ -46,8 +39,6 @@ def main():
 
     csv_path = args.input_csv
     video_path = args.input_video
-
-    piste_positions = None
 
     writer = None
     cap = cv2.VideoCapture(args.input_video)
@@ -93,47 +84,44 @@ def main():
     if len(piste_positions) != 4:
         print("Piste positions not fully selected, exiting.")
         return
+
+    left_fencer_score_light_positions = ui.get_n_points(LEFT_FENCER_SCORE_LIGHT_INSTRUCTIONS)
+    if len(left_fencer_score_light_positions) != 4:
+        print("Left fencer score light positions not fully selected, exiting.")
+        return
     
-    # planar tracking setup for piste
-    piste_positions = convert_to_opencv_format(piste_positions)
-    orb, kp_ref, des_ref, bf, last_quad = initialise_planar_tracking(frame, piste_positions)
+    right_fencer_score_light_positions = ui.get_n_points(RIGHT_FENCER_SCORE_LIGHT_INSTRUCTIONS)
+    if len(right_fencer_score_light_positions) != 4:
+        print("Right fencer score light positions not fully selected, exiting.")
+        return
+
+
+    planar_tracker = TargetsTracker()
+    planar_tracker.add_target("piste", frame, convert_to_opencv_format(piste_positions))
+    planar_tracker.add_target("left_fencer_score_light", frame, convert_to_opencv_format(left_fencer_score_light_positions))
+    planar_tracker.add_target("right_fencer_score_light", frame, convert_to_opencv_format(right_fencer_score_light_positions))
 
     frame_id = 0
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        detections = frame_manager.get_detections(frame_id)
+        detections = frame_manager.get_frame_info_at(frame_id)
         ui.set_fresh_frame(frame)
-    
-        ui.refresh_frame()
-
-        # Update planar tracking
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        kp_frame, des_frame = orb.detectAndCompute(gray, None)
-
-        if des_frame is not None and len(kp_frame) > 0:
-            matches = bf.match(des_ref, des_frame)
-            matches = sorted(matches, key=lambda x: x.distance)
-
-            # update homography if enough inliers
-            if len(matches) > MIN_INLIERS:
-                src_pts = np.float32([kp_ref[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
-                dst_pts = np.float32([kp_frame[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
-
-                H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-
-                if H is not None:
-                    inliers = mask.sum()
-                    if inliers > MIN_INLIERS:
-                        last_quad = cv2.perspectiveTransform(piste_positions, H)
 
         # track fencers
         left_fencer_position = detections.get(LEFT_FENCER_ID, None)
         right_fencer_position = detections.get(RIGHT_FENCER_ID, None)
 
-        adapted_positions = convert_from_opencv_format(last_quad)
+        tracked_positions = planar_tracker.update_all(frame)
+        piste_positions_tracked = tracked_positions.get("piste", piste_positions)
+        left_fencer_score_light_tracked = tracked_positions.get("left_fencer_score_light", None)
+        right_fencer_score_light_tracked = tracked_positions.get("right_fencer_score_light", None)
+        adapted_positions = convert_from_opencv_format(piste_positions_tracked)
         piste_centre_line = get_piste_centre_line(adapted_positions)
+
+        ui.draw_polygon(left_fencer_score_light_tracked, color=(255, 255, 255))
+        ui.draw_polygon(right_fencer_score_light_tracked, color=(255, 255, 255))
 
         ui.draw_piste_centre_line(piste_centre_line)
         if left_fencer_position is not None:
@@ -163,6 +151,7 @@ def main():
 
     cap.release()
     ui.close()
+
 
 if __name__ == "__main__":
     main()

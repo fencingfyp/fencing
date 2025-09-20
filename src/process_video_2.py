@@ -5,16 +5,48 @@ Output: A video showing all detected people's chest point (calculated as the cen
 #!/usr/bin/env python3
 import argparse
 import csv
+from typing import Any
 import cv2
 from model.Ui import Ui
 from util import UiCodes
 from model.FrameInfoManager import FrameInfoManager
+from run_pose_estimation_1 import get_header_row
 
 # --- CONFIG ---
 BOX_COLOR = (255, 255, 255)  # White
 TEXT_COLOR = (0, 0, 0)     # Black
 NUM_FRAMES_TO_SKIP = 10
 PLAYBACK_SPEEDUP = 64  # How much to speed up playback when not paused
+
+NUM_KEYPOINTS = 17
+
+def appears_in_future_detections(frame_manager: FrameInfoManager, current_frame_index: int, fencer_id: int) -> bool:
+    for fi in frame_manager.iter_from_frame(current_frame_index):
+        if fi and fencer_id in fi:
+            print(f"Fencer {fencer_id} reappears")
+            return True
+    return False
+
+def row_mapper(row: list[str]) -> dict[str, Any]:
+    # Convert row to dict
+    id = int(row[1])
+    conf = float(row[2])
+    box = list(map(float, row[3:7]))
+    keypoints = []
+    kp_vals = row[7:]
+
+    for i in range(NUM_KEYPOINTS):
+      x = float(kp_vals[i*3 + 0])
+      y = float(kp_vals[i*3 + 1])
+      v = float(kp_vals[i*3 + 2])
+      keypoints.append((x, y, v))
+
+    return {
+      "id": id,
+      "confidence": conf,
+      "box": box,  # [x1, y1, x2, y2]
+      "keypoints": keypoints
+    }
 
 def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
     cap: cv2.VideoCapture = cv2.VideoCapture(video_path)
@@ -37,23 +69,24 @@ def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
     fps = cap.get(cv2.CAP_PROP_FPS)
     ms_per_frame = int(1000 / fps)
     delay = max(ms_per_frame // PLAYBACK_SPEEDUP, 1)
-    frame_manager = FrameInfoManager(csv_path, fps)
+    header_format = get_header_row()
+    frame_manager = FrameInfoManager(csv_path, fps, header_format, row_mapper)
 
     frame_idx = 0
     while True:
       ret, frame = cap.read()
       if not ret:
         break
-      detections = frame_manager.get_detections(frame_idx)
+      detections = frame_manager.get_frame_info_at(frame_idx)
       frame_idx += 1
       ui.set_fresh_frame(frame)
       ui.show_candidates(detections)
 
       if current_left_fencer_id not in detections \
-        and not frame_manager.appears_in_future_detections(frame_idx, current_left_fencer_id):
+        and not appears_in_future_detections(frame_manager, frame_idx, current_left_fencer_id):
           current_left_fencer_id = None  # lost track of left fencer
       if current_right_fencer_id not in detections \
-        and not frame_manager.appears_in_future_detections(frame_idx, current_right_fencer_id):
+        and not appears_in_future_detections(frame_manager, frame_idx, current_right_fencer_id):
           current_right_fencer_id = None  # lost track of right fencer
 
       # select left fencer if not selected and timer passed

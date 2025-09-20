@@ -6,7 +6,7 @@ def convert_mts_to_mp4(input_file, output_file, reduce_quality=False, duration=6
     """
     Convert MTS to MP4.
     - If reduce_quality is True, re-encode to H.264/AAC and normalise FPS to 30.
-    - Otherwise, attempt a fast stream copy.
+    - Otherwise, copy video and re-encode audio to AAC (MP4-compatible).
     - duration is in seconds (default 60s).
     """
     if reduce_quality:
@@ -19,11 +19,12 @@ def convert_mts_to_mp4(input_file, output_file, reduce_quality=False, duration=6
             output_file
         ]
     else:
-        # For fast copy, we still need to trim duration
+        # Copy video, but re-encode audio to AAC for MP4 compatibility
         cmd = [
             "ffmpeg", "-y", "-i", input_file,
             "-t", str(duration),
-            "-c", "copy",
+            "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "192k",
             output_file
         ]
 
@@ -32,14 +33,14 @@ def convert_mts_to_mp4(input_file, output_file, reduce_quality=False, duration=6
 def main():
     parser = argparse.ArgumentParser(description="Convert MTS to MP4")
     parser.add_argument("input", help="Input MTS file")
-    parser.add_argument("output", nargs='?', help="Output MP4 file (optional)")
+    parser.add_argument("output", nargs="?", help="Output MP4 file (optional)")
     parser.add_argument("--reduce-quality", action="store_true",
                         help="Re-encode to standard high-quality MP4 and normalise FPS to 30")
     parser.add_argument("--duration", type=int, default=60,
                         help="Duration in seconds for trimming (default: 60)")
     args = parser.parse_args()
 
-    output_file = args.output or args.input.rsplit('.', 1)[0] + ".mp4"
+    output_file = args.output or args.input.rsplit(".", 1)[0] + ".mp4"
     convert_mts_to_mp4(args.input, output_file, args.reduce_quality, args.duration)
     print(f"Converted {args.input} → {output_file}")
 

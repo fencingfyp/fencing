@@ -9,15 +9,20 @@ class UiCodes(enum.Enum):
 
 PISTE_LENGTH_M = 14  # Standard piste length in meters
 
-LEFT_FENCER_WHITE_LIGHT_INSTRUCTIONS = [
-    "Select left fencer's white light top left corner (if none, press '1' to skip), then press Enter to confirm",
-    "Select left fencer's white light top right corner (if none, press '1' to skip), then press Enter to confirm",
-    "Select left fencer's white light bottom right corner (if none, press '1' to skip), then press Enter to confirm",
-    "Select left fencer's white light bottom left corner (if none, press '1' to skip), then press Enter to confirm",
-]
-LEFT_FENCER_SCORE_LIGHT_INSTRUCTIONS = []
-RIGHT_FENCER_WHITE_LIGHT_INSTRUCTIONS = []
-RIGHT_FENCER_SCORE_LIGHT_INSTRUCTIONS = []
+def generate_select_quadrilateral_instructions(target_name: str, confirm_key = 'w') -> list[str]:
+    return [
+        f"Select {target_name} top left corner, press '{confirm_key}' to confirm",
+        f"Select {target_name} top right corner, press '{confirm_key}' to confirm",
+        f"Select {target_name} bottom right corner, press '{confirm_key}' to confirm",
+        f"Select {target_name} bottom left corner, press '{confirm_key}' to confirm",
+    ]
+
+PISTE_INSTRUCTIONS = generate_select_quadrilateral_instructions("piste")
+LEFT_FENCER_WHITE_LIGHT_INSTRUCTIONS = generate_select_quadrilateral_instructions("left fencer's white light")
+LEFT_FENCER_SCORE_LIGHT_INSTRUCTIONS = generate_select_quadrilateral_instructions("left fencer's score light")
+RIGHT_FENCER_WHITE_LIGHT_INSTRUCTIONS = generate_select_quadrilateral_instructions("right fencer's white light")
+RIGHT_FENCER_SCORE_LIGHT_INSTRUCTIONS = generate_select_quadrilateral_instructions("right fencer's score light")
+
 
 def convert_to_opencv_format(list_of_points: list[tuple[int, int]]) -> np.ndarray:
     return np.array(list_of_points, dtype=np.float32).reshape((-1, 1, 2))

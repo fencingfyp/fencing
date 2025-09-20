@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import textwrap
-from util import UiCodes, calculate_centrepoint, project_point_on_line, PISTE_LENGTH_M
+from util import UiCodes, calculate_centrepoint, project_point_on_line, PISTE_LENGTH_M, PISTE_INSTRUCTIONS
 
 QUIT_KEYS = {ord('q'), ord('Q'), 27}  # q or Esc to quit
 
@@ -9,7 +9,7 @@ ALLOWED_ACTIONS_TO_KEYBINDS = {
   UiCodes.QUIT: QUIT_KEYS,
   UiCodes.TOGGLE_SLOW: {ord(' ')},
   UiCodes.SKIP_INPUT: {ord('1')},
-  UiCodes.CONFIRM_INPUT: {13}  # Enter
+  UiCodes.CONFIRM_INPUT: {ord('w')}
 }
 
 class Ui:
@@ -87,7 +87,7 @@ class Ui:
     self.set_current_frame(self.fresh_frame)
     self.draw_candidates(candidates)
     self.write_to_ui(f"Click on the {fencer_dir} Fencer if their centrepoint is "
-                     f"present and press enter to confirm. If not, press '1'.\n"
+                     f"present and press 'w' to confirm. If not, press '1'.\n"
                      f"Selected ID: "+ (str(selected_id) if selected_id is not None else "No Fencer Selected"))
     self.show_frame()
 
@@ -136,21 +136,23 @@ class Ui:
   def show_frame(self) -> None:
     cv2.imshow(self.window_name, self.current_frame)
 
-  # def show_analysis(self, left_fencer_position : dict | None, right_fencer_position: dict | None, piste_centre_line: tuple[tuple[int, int], tuple[int, int]]) -> None:
-  #   self.refresh_frame()
-  #   if left_fencer_position is not None:
-  #     self.draw_fencer_centrepoint(left_fencer_position, is_left=True)
-  #   if right_fencer_position is not None:
-  #     self.draw_fencer_centrepoint(right_fencer_position, is_left=False)
-  #   self.draw_piste_centre_line(piste_centre_line)
-  #   self.draw_fencer_positions_on_piste(left_fencer_position, right_fencer_position, piste_centre_line)
-  #   self.show_frame()
+  def draw_polygon(self, points: np.ndarray, color: tuple[int, int, int] = (0, 255, 0), thickness: int = 2) -> None:
+    if len(points) < 2:
+      return
+    # TODO: optimize by avoiding creating new list
+    pts = [self.apply_offset_point(int(pt[0][0]), int(pt[0][1])) for pt in points]
+    cv2.polylines(self.current_frame, [np.array(pts)], isClosed=True, color=color, thickness=thickness)
 
-  def draw_piste_centre_line(self, piste_centre_line: tuple[tuple[int, int], tuple[int, int]], color: tuple[int, int, int] = None) -> None:
+  def draw_piste_centre_line(self, positions: list[tuple[int, int]], color: tuple[int, int, int] = None) -> None:
+    if len(positions) < 4:
+      raise ValueError("piste centre line must have 4 points")
     if color is None:
       color = self.piste_centre_line_colour
-    (x1, y1), (x2, y2) = piste_centre_line
-    x1, y1, x2, y2 = self.apply_offset(x1, y1, x2, y2)
+    left_x = (positions[0][0] + positions[3][0]) // 2
+    left_y = (positions[0][1] + positions[3][1]) // 2
+    right_x = (positions[1][0] + positions[2][0]) // 2
+    right_y = (positions[1][1] + positions[2][1]) // 2
+    x1, y1, x2, y2 = self.apply_offset(left_x, left_y, right_x, right_y)
     cv2.line(self.current_frame, (x1, y1), (x2, y2), color, 2)
 
   def draw_fencer_centrepoint(self, det: dict, is_left: bool) -> None:
@@ -218,14 +220,8 @@ class Ui:
     return positions
 
   def get_piste_positions(self) -> list[tuple[int, int]]:
-    instructions = [
-      "Click TOP LEFT corner, press Enter to confirm",
-      "Click TOP RIGHT corner, press Enter to confirm",
-      "Click BOTTOM RIGHT corner, press Enter to confirm",
-      "Click BOTTOM LEFT corner, press Enter to confirm",
-    ]
-    return self.get_n_points(instructions)
-     
+    return self.get_n_points(PISTE_INSTRUCTIONS)
+
   def show_updated_piste_selection_frame(self, positions, instructions, current_idx) -> None:
     self.refresh_frame()
     # Draw existing points
