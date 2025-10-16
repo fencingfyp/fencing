@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from src.model.TargetTracker import TargetTracker
 
 MIN_INLIERS = 15  # tune as needed
 
@@ -42,7 +43,7 @@ class PlanarTarget:
         return self.last_quad
 
 
-class TargetsTracker:
+class PlanarTracker(TargetTracker):
     def __init__(self):
         # share one ORB + BFMatcher across all targets
         self.orb = cv2.ORB_create(1000)

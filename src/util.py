@@ -6,6 +6,9 @@ class UiCodes(enum.Enum):
     TOGGLE_SLOW = 1
     SKIP_INPUT = 2
     CONFIRM_INPUT = 3
+    PAUSE = 4
+    PICK_LEFT_FENCER = 5
+    PICK_RIGHT_FENCER = 6
 
 PISTE_LENGTH_M = 14  # Standard piste length in meters
 
@@ -22,6 +25,8 @@ LEFT_FENCER_WHITE_LIGHT_INSTRUCTIONS = generate_select_quadrilateral_instruction
 LEFT_FENCER_SCORE_LIGHT_INSTRUCTIONS = generate_select_quadrilateral_instructions("left fencer's score light")
 RIGHT_FENCER_WHITE_LIGHT_INSTRUCTIONS = generate_select_quadrilateral_instructions("right fencer's white light")
 RIGHT_FENCER_SCORE_LIGHT_INSTRUCTIONS = generate_select_quadrilateral_instructions("right fencer's score light")
+LEFT_FENCER_SCORE_INSTRUCTIONS = generate_select_quadrilateral_instructions("left fencer's score display")
+RIGHT_FENCER_SCORE_INSTRUCTIONS = generate_select_quadrilateral_instructions("right fencer's score display")
 
 
 def convert_to_opencv_format(list_of_points: list[tuple[int, int]]) -> np.ndarray:
@@ -52,3 +57,6 @@ def project_point_on_line(line: tuple[tuple[int, int], tuple[int, int]],
     x_out = x1 + t * dx
     y_out = y1 + t * dy
     return int(x_out), int(y_out)
+
+
+# I/O stuff

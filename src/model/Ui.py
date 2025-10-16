@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import textwrap
-from util import UiCodes, calculate_centrepoint, project_point_on_line, PISTE_LENGTH_M, PISTE_INSTRUCTIONS
+from src.util import UiCodes, calculate_centrepoint, project_point_on_line, PISTE_LENGTH_M, PISTE_INSTRUCTIONS
 
 QUIT_KEYS = {ord('q'), ord('Q'), 27}  # q or Esc to quit
 
@@ -9,7 +9,10 @@ ALLOWED_ACTIONS_TO_KEYBINDS = {
   UiCodes.QUIT: QUIT_KEYS,
   UiCodes.TOGGLE_SLOW: {ord(' ')},
   UiCodes.SKIP_INPUT: {ord('1')},
-  UiCodes.CONFIRM_INPUT: {ord('w')}
+  UiCodes.CONFIRM_INPUT: {ord('w')},
+  UiCodes.PAUSE: {ord('p'), ord('P')},
+  UiCodes.PICK_LEFT_FENCER: {ord('n'), ord('N')},
+  UiCodes.PICK_RIGHT_FENCER: {ord('m'), ord('M')},
 }
 
 class Ui:
@@ -28,18 +31,18 @@ class Ui:
     cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
 
   def show_candidates(self, detections) -> None:
-    self.set_current_frame(self.fresh_frame)
+    self._set_current_frame(self.fresh_frame)
     self.draw_text_box()
     self.draw_candidates(detections)
     self.show_frame()
 
   def set_fresh_frame(self, frame) -> None:
-    self.fresh_frame = frame.copy()
-    self.current_frame[self.text_box_height:, :, :] = self.fresh_frame
+    self._set_current_frame(frame)
+    self.fresh_frame = self.get_current_frame()
 
-  def draw_frame(self, frame) -> np.ndarray:
-    self.current_frame[self.text_box_height:, :, :] = frame
-    return self.current_frame
+  # def draw_frame(self, frame) -> np.ndarray:
+  #   self.current_frame[self.text_box_height:, :, :] = frame
+  #   return self.current_frame
 
   def draw_text_box(self) -> np.ndarray:
     self.current_frame[:self.text_box_height, :, :] = self.background_color
@@ -66,8 +69,21 @@ class Ui:
       cv2.putText(self.current_frame, str(det["id"]), (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, self.text_color, 2)
     return self.current_frame
 
-  def set_current_frame(self, frame) -> None:
-    self.current_frame[self.text_box_height:, :, :] = frame
+  def _set_current_frame(self, frame) -> None:
+    # Dimensions
+    h, w, _ = frame.shape
+    target = self.current_frame[self.text_box_height:, :, :]
+    H, W, _ = target.shape
+
+    # Determine where to place the smaller frame (e.g., top-left corner)
+    y0, x0 = 0, 0  # you can adjust this for centering or other placement
+    y1, x1 = y0 + min(h, H), x0 + min(w, W)
+
+    # Copy into subregion
+    target[y0:y1, x0:x1, :] = frame[:y1 - y0, :x1 - x0, :]
+
+    # Write back into current_frame
+    self.current_frame[self.text_box_height:, :, :] = target
 
   def get_current_frame(self) -> np.ndarray:
     return self.current_frame[self.text_box_height:, :, :].copy()
@@ -84,7 +100,7 @@ class Ui:
     cv2.setMouseCallback(self.window_name, lambda *_ : None)
 
   def show_updated_fencer_selection_frame(self, candidates: dict[int, dict], fencer_dir: str, selected_id: int | None) -> None:
-    self.set_current_frame(self.fresh_frame)
+    self._set_current_frame(self.fresh_frame)
     self.draw_candidates(candidates)
     self.write_to_ui(f"Click on the {fencer_dir} Fencer if their centrepoint is "
                      f"present and press 'w' to confirm. If not, press '1'.\n"
@@ -137,6 +153,7 @@ class Ui:
     cv2.imshow(self.window_name, self.current_frame)
 
   def draw_polygon(self, points: np.ndarray, color: tuple[int, int, int] = (0, 255, 0), thickness: int = 2) -> None:
+    # input format: np.ndarray of shape (4, 1, 2)
     if len(points) < 2:
       return
     # TODO: optimize by avoiding creating new list
@@ -236,7 +253,7 @@ class Ui:
     self.show_frame()
 
   def refresh_frame(self) -> None:
-    self.set_current_frame(self.fresh_frame)
+    self._set_current_frame(self.fresh_frame)
     self.draw_text_box()
 
   def get_fencer_id(self, candidates: dict[int, dict], left: bool) -> int | None:
@@ -282,4 +299,26 @@ class Ui:
     return None
 
   def close(self) -> None:
-    cv2.destroyAllWindows()
+    cv2.destroyWindow(self.window_name)
+
+  def get_confirmation(self, prompt: str) -> bool:
+    self.refresh_frame()
+    self.write_to_ui(prompt)
+    self.show_frame()
+    while True:
+      action = self.take_user_input(0, [UiCodes.CONFIRM_INPUT, UiCodes.SKIP_INPUT, UiCodes.QUIT])
+      if action in [UiCodes.CONFIRM_INPUT, UiCodes.SKIP_INPUT, UiCodes.QUIT]:
+        return action == UiCodes.CONFIRM_INPUT
+      
+  def get_fencer(self, prompt: str) -> str | None:
+    self.refresh_frame()
+    self.write_to_ui(prompt)
+    self.show_frame()
+    while True:
+      action = self.take_user_input(0, [UiCodes.PICK_LEFT_FENCER, UiCodes.PICK_RIGHT_FENCER, UiCodes.QUIT])
+      if action == UiCodes.PICK_LEFT_FENCER:
+        return "left"
+      elif action == UiCodes.PICK_RIGHT_FENCER:
+        return "right"
+      elif action == UiCodes.QUIT:
+        return None

@@ -4,7 +4,7 @@ import numpy as np
 from model.Ui import Ui
 from util import UiCodes, LEFT_FENCER_SCORE_LIGHT_INSTRUCTIONS, RIGHT_FENCER_SCORE_LIGHT_INSTRUCTIONS, convert_to_opencv_format, convert_from_opencv_format
 from model.FrameInfoManager import FrameInfoManager
-from model.PlanarTracker import PlanarTarget, TargetsTracker
+from model.PlanarTracker import PlanarTarget, PlanarTracker
 
 CSV_COLS = 58  # 7 + 17 * 3
 NUM_KEYPOINTS = 17
@@ -96,7 +96,7 @@ def main():
         return
 
 
-    planar_tracker = TargetsTracker()
+    planar_tracker = PlanarTracker()
     planar_tracker.add_target("piste", frame, convert_to_opencv_format(piste_positions))
     planar_tracker.add_target("left_fencer_score_light", frame, convert_to_opencv_format(left_fencer_score_light_positions))
     planar_tracker.add_target("right_fencer_score_light", frame, convert_to_opencv_format(right_fencer_score_light_positions))

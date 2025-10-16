@@ -1,6 +1,7 @@
 import csv
 from collections.abc import Callable
 from typing import Any
+import copy
 
 """
 This class manages loading and caching frame data from a CSV file.
@@ -36,7 +37,7 @@ class FrameInfoManager:
             f"FrameInfoManager initialized to load {self.num_frames_ahead} frames ahead at {self.fps} fps"
         )
 
-    def read_csv_by_frame(self, path):
+    def read_csv_by_frame(self, path, ffill: bool = True):
         with open(path, newline="") as f:
             reader = csv.reader(f)
             header = next(reader)
@@ -47,27 +48,59 @@ class FrameInfoManager:
                     f"CSV has {len(header)} columns, expected {len(self.header_format)}"
                 )
 
-            current_frame = None
+            last_seen = {}
             batch = {}
+            current_frame = None
 
-            for row in reader:
-                frame_id = int(row[0])  # assumes first col = frame_id
+            try:
+                current_row = next(reader)
+            except StopIteration:
+                return  # empty CSV
 
+            while True:
+                frame_id = int(current_row[0])
+                obj = self.row_mapper(current_row)
+                obj_id = obj["id"]
+
+                # Initialize frame tracking
                 if current_frame is None:
                     current_frame = frame_id
 
-                # Fill in skipped frames
-                while frame_id > current_frame:
-                    yield current_frame, batch
+                # If we moved to a new frame, yield the previous one
+                if frame_id != current_frame:
+                    # yield previous frame info (with ffill if enabled)
+                    # print(f"Yielding new frame {current_frame} with {len(batch)} objects")
+                    yield current_frame, copy.deepcopy(last_seen if ffill else batch)
+
+                    # fill missing frames if needed
+                    if ffill:
+                        for missing_frame in range(current_frame + 1, frame_id):
+                            # print(f"Filling missing frame {missing_frame}")
+                            yield missing_frame, copy.deepcopy(last_seen)
+
+                    # reset for next frame
                     batch = {}
+                    current_frame = frame_id
+
+                # Update current frame info
+                batch[obj_id] = obj
+                last_seen[obj_id] = obj
+
+                # Advance to next row
+                try:
+                    current_row = next(reader)
+                except StopIteration:
+                    # End of file — yield last known data once
+                    yield current_frame, copy.deepcopy(last_seen if ffill else batch)
+                    break
+            # Continue yielding last known state indefinitely
+            if current_frame is not None and ffill:
+                frozen_state = copy.deepcopy(last_seen)
+                while True:
+                    # print(f"Filling post-end frame {current_frame}")
                     current_frame += 1
-
-                # Use user-supplied row mapping
-                obj = self.row_mapper(row)
-                batch[obj["id"]] = obj
-
-            if current_frame is not None:
-                yield current_frame, batch
+                    yield current_frame, frozen_state
+                    
 
     def preload_info_at_frame(self, frame_index: int):
         target_index = frame_index + self.num_frames_ahead

@@ -4,11 +4,12 @@ import os
 from pathlib import Path
 import cv2
 import numpy as np
-from model.Ui import Ui
-from util import UiCodes, LEFT_FENCER_SCORE_LIGHT_INSTRUCTIONS, RIGHT_FENCER_SCORE_LIGHT_INSTRUCTIONS, \
-LEFT_FENCER_WHITE_LIGHT_INSTRUCTIONS, RIGHT_FENCER_WHITE_LIGHT_INSTRUCTIONS, convert_to_opencv_format, convert_from_opencv_format
-from model.FrameInfoManager import FrameInfoManager
-from model.PlanarTracker import TargetsTracker
+from src.model.Ui import Ui
+from src.util import UiCodes, LEFT_FENCER_SCORE_LIGHT_INSTRUCTIONS, RIGHT_FENCER_SCORE_LIGHT_INSTRUCTIONS, \
+LEFT_FENCER_SCORE_INSTRUCTIONS, RIGHT_FENCER_SCORE_INSTRUCTIONS, convert_to_opencv_format, convert_from_opencv_format
+from src.model.FrameInfoManager import FrameInfoManager
+from src.model.PlanarTracker import PlanarTracker
+from src.model.StaticTracker import StaticTracker
 
 
 
@@ -31,6 +32,7 @@ def main():
     path_object = Path(args.input_video)
     filename_without_extension = path_object.stem
     csv_path = os.path.join(output_folder, f"tracked_planes_{filename_without_extension}.csv")
+    print(f"Output CSV will be saved to: {csv_path}")
 
     cap = cv2.VideoCapture(args.input_video)
     if not cap.isOpened():
@@ -83,22 +85,22 @@ def main():
         print("Right fencer score light positions not fully selected, exiting.")
         return
 
-    left_fencer_white_light_positions = ui.get_n_points(LEFT_FENCER_WHITE_LIGHT_INSTRUCTIONS)
-    if len(left_fencer_white_light_positions) != 4:
-        print("Left fencer white light positions not fully selected, exiting.")
+    left_fencer_score_display_positions = ui.get_n_points(LEFT_FENCER_SCORE_INSTRUCTIONS)
+    if len(left_fencer_score_display_positions) != 4:
+        print("Left fencer score display positions not fully selected, exiting.")
         return
 
-    right_fencer_white_light_positions = ui.get_n_points(RIGHT_FENCER_WHITE_LIGHT_INSTRUCTIONS)
-    if len(right_fencer_white_light_positions) != 4:
-        print("Right fencer white light positions not fully selected, exiting.")
+    right_fencer_score_display_positions = ui.get_n_points(RIGHT_FENCER_SCORE_INSTRUCTIONS)
+    if len(right_fencer_score_display_positions) != 4:
+        print("Right fencer score display positions not fully selected, exiting.")
         return
 
-    planar_tracker = TargetsTracker()
-    planar_tracker.add_target("piste", frame, convert_to_opencv_format(piste_positions))
-    planar_tracker.add_target("left_fencer_score_light", frame, convert_to_opencv_format(left_fencer_score_light_positions))
-    planar_tracker.add_target("right_fencer_score_light", frame, convert_to_opencv_format(right_fencer_score_light_positions))
-    planar_tracker.add_target("left_fencer_white_light", frame, convert_to_opencv_format(left_fencer_white_light_positions))
-    planar_tracker.add_target("right_fencer_white_light", frame, convert_to_opencv_format(right_fencer_white_light_positions))
+    planar_tracker = StaticTracker()
+    # planar_tracker.add_target("piste", frame, convert_to_opencv_format(piste_positions))
+    # planar_tracker.add_target("left_fencer_score_light", frame, convert_to_opencv_format(left_fencer_score_light_positions))
+    # planar_tracker.add_target("right_fencer_score_light", frame, convert_to_opencv_format(right_fencer_score_light_positions))
+    planar_tracker.add_target("left_fencer_score_display", frame, convert_to_opencv_format(left_fencer_score_display_positions))
+    planar_tracker.add_target("right_fencer_score_display", frame, convert_to_opencv_format(right_fencer_score_display_positions))
 
     frame_id = 0
 
@@ -116,14 +118,14 @@ def main():
             piste_positions_tracked = tracked_positions.get("piste", None)
             left_fencer_score_light_tracked = tracked_positions.get("left_fencer_score_light", None)
             right_fencer_score_light_tracked = tracked_positions.get("right_fencer_score_light", None)
-            left_fencer_white_light_tracked = tracked_positions.get("left_fencer_white_light", None)
-            right_fencer_white_light_tracked = tracked_positions.get("right_fencer_white_light", None)
+            left_fencer_score_display_tracked = tracked_positions.get("left_fencer_score_display", None)
+            right_fencer_score_display_tracked = tracked_positions.get("right_fencer_score_display", None)
 
             ui.draw_polygon(piste_positions_tracked, color=(0, 255, 0))
             ui.draw_polygon(left_fencer_score_light_tracked, color=(0, 0, 255)) # cv2 uses BGR
             ui.draw_polygon(right_fencer_score_light_tracked, color=(0, 255, 0))
-            ui.draw_polygon(left_fencer_white_light_tracked, color=(255, 255, 255))
-            ui.draw_polygon(right_fencer_white_light_tracked, color=(255, 255, 255))
+            ui.draw_polygon(left_fencer_score_display_tracked, color=(255, 255, 255))
+            ui.draw_polygon(right_fencer_score_display_tracked, color=(255, 255, 255))
 
             ui.show_frame()
             

@@ -33,7 +33,7 @@ def convert_mts_to_mp4(input_file, output_file, reduce_quality=False, duration=6
 def main():
     parser = argparse.ArgumentParser(description="Convert MTS to MP4")
     parser.add_argument("input", help="Input MTS file")
-    parser.add_argument("output", nargs="?", help="Output MP4 file (optional)")
+    parser.add_argument("output", help="Output MP4 file")
     parser.add_argument("--reduce-quality", action="store_true",
                         help="Re-encode to standard high-quality MP4 and normalise FPS to 30")
     parser.add_argument("--duration", type=int, default=60,
