@@ -31,12 +31,13 @@ def main():
     parser.add_argument("input", help="Path to input video or image file")
     parser.add_argument("--model", default="yolov8n-pose.pt", help="Path to local YOLO model")
     parser.add_argument("--output-folder", default=".", help="Output folder for CSV")
+    parser.add_argument("--show", action="store_true", help="Show processed video/image")
     args = parser.parse_args()
 
-    os.makedirs(args.output, exist_ok=True)
+    os.makedirs(args.output_folder, exist_ok=True)
     path_object = Path(args.input)
     filename_without_extension = path_object.stem
-    csv_path = os.path.join(args.output, f"pose_results_{filename_without_extension}.csv")
+    csv_path = os.path.join(args.output_folder, f"pose_results_{filename_without_extension}.csv")
 
     # Load YOLO model with fallback
     model = load_model(args.model)
@@ -52,29 +53,47 @@ def main():
         writer.writerow(header_row)
 
         if is_video:
-            process_video(args.input, model, writer)
+            process_video(args.input, model, writer, args.show)
         else:
-            process_image(args.input, model, writer)
+            process_image(args.input, model, writer, args.show)
     print(f"CSV saved to {csv_path}")
 
-def process_image(input_path: str, model: YOLO, writer: csv.writer) -> None:
+def process_image(input_path: str, model: YOLO, writer: csv.writer, show: bool) -> None:
     frame = cv2.imread(input_path)
     results = model.predict(frame, verbose=False)
     rows = extract_rows(results, 0)
-    writer.writerows(rows)    
+    writer.writerows(rows)
+    if show:
+        cv2.imshow("Processed Image", frame)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
-def process_video(input_path: str, model: YOLO, writer: csv.writer) -> None:
+def process_video(input_path: str, model: YOLO, writer: csv.writer, show: bool) -> None:
     cap = cv2.VideoCapture(input_path)
+    if not cap.isOpened():
+        print(f"Error opening video file: {input_path}")
+        return
+
+    if show:
+        cv2.namedWindow("Processed Video", cv2.WINDOW_NORMAL)
     frame_idx = 0
     while True:
         ret, frame = cap.read()
         if not ret:
             break
+        
         results = model.track(frame, persist=True, verbose=False)
+        if show:
+            annotated_frame = results[0].plot()
+            cv2.imshow("Processed Video", annotated_frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
         rows = extract_rows(results, frame_idx)
         writer.writerows(rows)
         frame_idx += 1
     cap.release()
+    if show:
+        cv2.destroyAllWindows()
 
 def get_header_row() -> list[str]:
     kp_len = 17

@@ -35,3 +35,6 @@ python mark_video.py csv_path video_path --save-video --output-path outputs/outp
 ```
 - `--save-video` : Save video to output path
 - `--output-path`: File to store video (default: script folder)
+
+
+python 3.13

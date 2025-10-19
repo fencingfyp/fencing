@@ -5,6 +5,7 @@ import numpy as np
 from src.model.Ui import Ui
 from archive.verify_scores_5 import handle_pause
 from src.momentum_graph.extract_score_increases import extract_score_increases
+from src.momentum_graph.process_scores import process_scores
 from src.util import UiCodes, convert_to_opencv_format, convert_from_opencv_format
 from src.model.FrameInfoManager import FrameInfoManager
 from src.model.PatchLightDetector import PatchLightDetector
@@ -43,6 +44,7 @@ def refine_score_frames_with_lights(lights: np.ndarray,
             i = int(idx)
             if i < 0 or i >= n_frames:
                 refined[side][score] = idx
+                print(f"Score {side} {score} at frame {idx} is out of bounds, skipping refinement")
                 continue
 
             # --- Step 1: Walk backward over zeros until we find a 1 ---
@@ -61,6 +63,7 @@ def refine_score_frames_with_lights(lights: np.ndarray,
             # end = i
             # while end + 1 < n_frames and lights[end + 1, col] == 1:
             #     end += 1
+            print(f"Score {side} {score} at frame {idx} adjusted to light activation starting at frame {start}")
 
             refined[side][score] = start
 
@@ -108,15 +111,29 @@ def main():
     ui = Ui("Fencing Analysis", width=int(width), height=int(height))
     if output_video_path:
         writer = setup_output_video_io(output_video_path, fps, (width, height + ui.text_box_height))
-    frame_info_manager = FrameInfoManager(csv_path, fps, get_header_row(), row_mapper)
 
     scores_map = extract_score_increases(scores_csv_path)
 
-    left_score_timeout = 0
-    right_score_timeout = 0
+    # extract max frame_id to set total_length
+    max_frame_id = 0
+    for side in ("left", "right"):
+        if scores_map[side]:
+            max_frame_id = max(max_frame_id, max(scores_map[side].values())) + 1
+
+    # extract lights info into a np array
+    lights_df = pd.read_csv(csv_path)
+    # rename columns to match row_mapper
+    lights_df.rename(columns={"left_light": "left_score", "right_light": "right_score"}, inplace=True)
+    lights = process_scores(lights_df, smoothen=False, total_length=max_frame_id)
+
+
+    score_occurrences = refine_score_frames_with_lights(lights, scores_map)
 
     left_last_known_score = 0
     right_last_known_score = 0
+
+    left_score_timeout = -1
+    right_score_timeout = -1
 
     frame_id = 0
     while True:
@@ -124,30 +141,21 @@ def main():
         if not ret:
             break
 
-        detections = frame_info_manager.get_frame_info_at(frame_id).get("id")
         ui.set_fresh_frame(frame)
         ui.refresh_frame()
-
-        is_left_red = detections.get("left_light_on", False)
-        is_right_green = detections.get("right_light_on", False)
-        
-        left_has_score = None
+        left_has_score = score_occurrences["left"].get(left_last_known_score + 1, None) == frame_id
         is_left_timeout = frame_id <= left_score_timeout
-        if is_left_red and not is_left_timeout:
-            left_has_score = check_for_score("left", frame_id, scores_map, fps, SCORE_TIMEOUT)
-            if left_has_score is not None:
+        if not is_left_timeout and left_has_score:
                 left_score_timeout = frame_id + int(fps * SCORE_TIMEOUT)
-                left_last_known_score = left_has_score
+                left_last_known_score += 1
         left_string = f"Left scored: {left_last_known_score-1} -> {left_last_known_score}" if is_left_timeout else f"Left score: {left_last_known_score}"
 
 
-        right_has_score = None
+        right_has_score = score_occurrences["right"].get(right_last_known_score + 1, None) == frame_id
         is_right_timeout = frame_id <= right_score_timeout
-        if is_right_green and not is_right_timeout:
-            right_has_score = check_for_score("right", frame_id, scores_map, fps, SCORE_TIMEOUT)
-            if right_has_score is not None: 
+        if not is_right_timeout and right_has_score:
                 right_score_timeout = frame_id + int(fps * SCORE_TIMEOUT)
-                right_last_known_score = right_has_score
+                right_last_known_score += 1
         right_string = f"Right scored: {right_last_known_score-1} -> {right_last_known_score}" if is_right_timeout else f"Right score: {right_last_known_score}"
 
 

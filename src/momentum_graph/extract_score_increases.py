@@ -66,7 +66,7 @@ def extract_score_increases(csv_path: str) -> Dict[str, Dict[int, int | None]]:
     result = {"left": {}, "right": {}}
 
     for side in ("left", "right"):
-        raw_scores = df[f"{side}_score"].fillna(method="ffill").astype(int).to_list()
+        raw_scores = df[f"{side}_score"].ffill().astype(int).to_list()
         cleaned = _retroactive_flatten(raw_scores)
 
         seen = {}
