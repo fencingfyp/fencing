@@ -13,13 +13,19 @@ ALLOWED_ACTIONS_TO_KEYBINDS = {
   UiCodes.PAUSE: {ord('p'), ord('P')},
   UiCodes.PICK_LEFT_FENCER: {ord('n'), ord('N')},
   UiCodes.PICK_RIGHT_FENCER: {ord('m'), ord('M')},
+  UiCodes.CUSTOM_1: {ord('1')},
+  UiCodes.CUSTOM_2: {ord('2')},
+  UiCodes.CUSTOM_3: {ord('3')},
+  UiCodes.CUSTOM_4: {ord('4')},
 }
 
 class Ui:
-  def __init__(self, window_name: str, width: int = 1280, height: int = 720, text_box_height: int = 100) -> None:
+  def __init__(self, window_name: str, width: int = 1280, height: int = 720, min_width: int = None, min_height: int = None, text_box_height: int = 100) -> None:
     self.window_name = window_name
     self.width = width
     self.height = height
+    self.min_width = min_width
+    self.min_height = min_height
     self.text_box_height = text_box_height
     self.current_frame = np.zeros((height + text_box_height, width, 3), dtype=np.uint8)
     self.fresh_frame = np.zeros((height, width, 3), dtype=np.uint8) # just the video frame
@@ -39,10 +45,6 @@ class Ui:
   def set_fresh_frame(self, frame) -> None:
     self._set_current_frame(frame)
     self.fresh_frame = self.get_current_frame()
-
-  # def draw_frame(self, frame) -> np.ndarray:
-  #   self.current_frame[self.text_box_height:, :, :] = frame
-  #   return self.current_frame
 
   def draw_text_box(self) -> np.ndarray:
     self.current_frame[:self.text_box_height, :, :] = self.background_color
@@ -153,7 +155,7 @@ class Ui:
     cv2.imshow(self.window_name, self.current_frame)
 
   def draw_polygon(self, points: np.ndarray, color: tuple[int, int, int] = (0, 255, 0), thickness: int = 2) -> None:
-    # input format: np.ndarray of shape (4, 1, 2)
+    # input format: np.ndarray of shape (n, 1, 2)
     if len(points) < 2:
       return
     # TODO: optimize by avoiding creating new list
@@ -256,6 +258,9 @@ class Ui:
     self._set_current_frame(self.fresh_frame)
     self.draw_text_box()
 
+  def clear_frame(self) -> None:
+    self.current_frame = np.zeros((self.height + self.text_box_height, self.width, 3), dtype=np.uint8)
+
   def get_fencer_id(self, candidates: dict[int, dict], left: bool) -> int | None:
     if not candidates:
       return None
@@ -291,12 +296,14 @@ class Ui:
     self.unsetMouseCallback()
     return selected_id
 
-  def take_user_input(self, delay: int, allowed_actions: list[UiCodes]) -> UiCodes | None:
-    key = cv2.waitKey(delay) & 0xFF
-    for action in allowed_actions:
-      if key in ALLOWED_ACTIONS_TO_KEYBINDS[action]:
-        return action
-    return None
+  def take_user_input(self, delay: int, allowed_actions: list[UiCodes], must_be_valid=False) -> UiCodes | None:
+    while True:
+      key = cv2.waitKey(delay) & 0xFF
+      for action in allowed_actions:
+        if key in ALLOWED_ACTIONS_TO_KEYBINDS[action]:
+          return action
+      if not must_be_valid:
+        return None
 
   def close(self) -> None:
     cv2.destroyWindow(self.window_name)
@@ -322,3 +329,13 @@ class Ui:
         return "right"
       elif action == UiCodes.QUIT:
         return None
+
+
+  def handle_pause(self):
+      print("Paused. Press 'p' to resume or 'q' to quit.")
+      while True:
+          action = self.take_user_input(100, [UiCodes.PAUSE, UiCodes.QUIT])
+          if action == UiCodes.PAUSE:
+              return False
+          elif action == UiCodes.QUIT:
+              return True

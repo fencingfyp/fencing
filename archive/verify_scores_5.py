@@ -196,7 +196,7 @@ def main():
         elif action == UiCodes.QUIT:  # q or Esc to quit
             break
         elif action == UiCodes.PAUSE:
-            early_exit = handle_pause(ui)
+            early_exit = ui.handle_pause()
         elif action == UiCodes.CONFIRM_INPUT:
             # a fencer scored differently from predicted
             # ask which fencer scored
@@ -223,15 +223,6 @@ def main():
         for side in ["left", "right"]:
             row = [side] + [str(updated_score_map[side].get(i + 1, "")) for i in range(15)]
             f.write(",".join(row) + "\n")
-
-def handle_pause(ui):
-    while True:
-        action = ui.take_user_input(100, [UiCodes.PAUSE, UiCodes.QUIT])
-        if action == UiCodes.PAUSE:
-            return False
-        elif action == UiCodes.QUIT:
-            return True
-            
 
 if __name__ == "__main__":
     main()

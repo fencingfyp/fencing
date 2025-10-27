@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import argparse
+from src.util import setup_input_video_io
 
 def remove_isolated_spikes(series):
     """
@@ -81,12 +82,20 @@ def process_scores(pred: pd.DataFrame, smoothen=True, total_length=None, window_
         for col in ['left_score', 'right_score']:
             values = pred[col].to_numpy()
             for i in range(1, len(values)):
-                # If the jump between consecutive frames exceeds 1, clamp it
-                if abs(values[i] - values[i - 1]) > 1:
-                    # Option 1: snap to previous (maintain stability)
+                diff = values[i] - values[i - 1]
+
+                # If the jump between consecutive frames exceeds 1, fix it
+                if abs(diff) > 1:
+                    # ----------------------------------------
+                    # Option 1: Snap to previous (maintain stability)
+                    # ----------------------------------------
                     values[i] = values[i - 1]
-                    # Option 2 (alternative): gradually step by 1 toward target
-                    # values[i] = values[i - 1] + np.sign(values[i] - values[i - 1])
+
+                    # ----------------------------------------
+                    # Option 2: Ignore (leave as is)
+                    # ----------------------------------------
+                    # pass
+
             pred[col] = values
 
     # If total_length is specified, truncate or pad to that length
@@ -115,7 +124,9 @@ def main():
     folder = parse_arguments()
     # Load both CSVs
     df = pd.read_csv(f'{folder}/raw_scores.csv')
-    pred = process_scores(df)
+    cap, fps, _, _, _ = setup_input_video_io(f"{folder}/cropped_scoreboard.mp4")
+    cap.release()
+    pred = process_scores(df, window_median=int(fps * 7))
 
     # Rewrite the predictions CSV with cleaned data in this format: frame_id,left_score,right_score,left_confidence,right_confidence. set confidence to 1.0
     frame_ids = np.arange(len(pred))

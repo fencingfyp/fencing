@@ -16,4 +16,4 @@ python -m src.momentum_graph.crop_scoreboard_tracked path/to/input/video path/to
 
 - Run `process_scores` and `process_score_lights` on the folder to get the processed outputs
 
-- Run `run_analysis` on the folder to get the predictions
+- Run `evaluate_score_events` on the folder to get the predictions

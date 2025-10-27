@@ -5,6 +5,7 @@ import pandas as pd
 from typing import Dict
 import numpy as np
 import matplotlib.pyplot as plt
+from src.util import setup_input_video_io
 
 from src.momentum_graph.process_scores import process_scores
 
@@ -24,7 +25,7 @@ def _retroactive_flatten(scores: list[int]) -> list[int]:
 
     for i in range(1, n):
         curr = scores[i]
-        top_val, top_start = stack[-1]
+        top_val, _ = stack[-1]
 
         if curr > top_val:
             # new higher segment starts here
@@ -101,7 +102,10 @@ def main():
     # Load both CSVs
     pred = pd.read_csv(f'{folder}/raw_scores.csv')
 
-    pred = process_scores(pred)
+    cap, fps, _, _, _ = setup_input_video_io(f"{folder}/cropped_scoreboard.mp4")
+    cap.release()
+
+    pred = process_scores(pred, window_median=int(fps * 7))
     
     # retroactively flatten the prediction by columns and convert back to DataFrame
     smoothed_df = pd.DataFrame({'frame_id': np.arange(len(pred)), 'left_score': _retroactive_flatten(pred[:, 0].tolist()), 'right_score': _retroactive_flatten(pred[:, 1].tolist())
@@ -110,9 +114,9 @@ def main():
 
     # --- Left ---
     plt.figure("Left", figsize=(12, 6))
-    plt.plot(pred[:, 0], label='Pred Left (Smoothed)', color='blue', alpha=0.8)
-    plt.plot(smoothed[:, 0], '--', color='red', label='GT Left')
-    plt.title('Smoothed Predicted vs Ground Truth Scores (Left)')
+    plt.plot(pred[:, 0], label='Pred Left (Flattened)', color='blue', alpha=0.8)
+    plt.plot(smoothed[:, 0], '--', color='red', label='Pred Left')
+    plt.title('Flattened Predicted vs Normal Predicted (Left)')
     plt.xlabel('Frame ID')
     plt.ylabel('Score')
     plt.legend()
@@ -121,9 +125,9 @@ def main():
 
     # --- Right ---
     plt.figure("Right", figsize=(12, 6))
-    plt.plot(pred[:, 1], label='Pred Right (Smoothed)', color='blue', alpha=0.8)
-    plt.plot(smoothed[:, 1], '--', color='red', label='GT Right')
-    plt.title('Smoothed Predicted vs Ground Truth Scores (Right)')
+    plt.plot(pred[:, 1], label='Pred Right (Flattened)', color='blue', alpha=0.8)
+    plt.plot(smoothed[:, 1], '--', color='red', label='Pred Right')
+    plt.title('Flattened Predicted vs Normal Predicted (Right)')
     plt.xlabel('Frame ID')
     plt.ylabel('Score')
     plt.legend()

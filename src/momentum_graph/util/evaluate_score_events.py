@@ -3,15 +3,9 @@ import pandas as pd
 import cv2
 import numpy as np
 from src.model.Ui import Ui
-from archive.verify_scores_5 import handle_pause
-from src.momentum_graph.extract_score_increases import extract_score_increases
+from src.momentum_graph.util.extract_score_increases import extract_score_increases
 from src.momentum_graph.process_scores import process_scores
-from src.util import UiCodes, convert_to_opencv_format, convert_from_opencv_format
-from src.model.FrameInfoManager import FrameInfoManager
-from src.model.PatchLightDetector import PatchLightDetector
-from src.momentum_graph.extract_first_score_occurences import extract_first_score_occurrences
-from src.momentum_graph.crop_scoreboard_tracked import setup_input_video_io, setup_output_video_io
-
+from src.util import UiCodes, convert_to_opencv_format, convert_from_opencv_format, setup_input_video_io, setup_output_video_io
 
 DEFAULT_FPS = 50
 FULL_DELAY = int(1000 / DEFAULT_FPS)  # milliseconds
@@ -19,9 +13,11 @@ HALF_DELAY = FULL_DELAY // 16  # milliseconds
 
 SCORE_TIMEOUT = 5  # seconds to wait before re-trying fencer score detection
 # FALSE_ALARM_TIMEOUT = 3  # seconds to wait before re-trying fencer score detection
+FPS = 30
 
-def refine_score_frames_with_lights(lights: np.ndarray,
+def perform_last_activation_algorithm(lights: np.ndarray,
                                     score_occ: dict[str, dict[int, int]]) -> dict[str, dict[int, int]]:
+    """Process raw_scores.csv to extract last score light activations."""
     """
     For each fencer and score, find the first frame of the latest light activation
     near the score increase frame.
@@ -69,6 +65,49 @@ def refine_score_frames_with_lights(lights: np.ndarray,
 
     return refined
 
+def perform_first_increase_algorithm(lights: np.ndarray,
+                                    score_occ: dict[str, dict[int, int]]) -> dict[str, dict[int, int]]:
+    """For each light activation, search forward up to 7 seconds for the
+    first score increase and record the activation frame instead of the score frame."""
+    
+    max_forward = 7 * FPS  # allowed forward window in frames
+    side_to_col = {"left": 0, "right": 1}
+    result: dict[str, dict[int, int]] = {"left": {}, "right": {}}
+
+    # Precompute activation start frames (rising edges)
+    activations = {"left": [], "right": []}
+    for side, col in side_to_col.items():
+        light_col = lights[:, col]
+        rising_edges = np.where((light_col[:-1] == 0) & (light_col[1:] == 1))[0] + 1
+        activations[side] = rising_edges
+
+    # For each activation, find the first score increase that occurs within 7 seconds *after* it
+    for side in ["left", "right"]:
+        score_items = list(score_occ[side].items())  # list of (increase_idx, frame)
+        score_items.sort(key=lambda x: x[1])  # sort by frame
+
+        for start_frame in activations[side]:
+            # find first score frame >= start_frame and <= start_frame + max_forward
+            for inc_idx, inc_frame in score_items:
+                # skip increases already assigned earlier (prevents overwriting)
+                if inc_idx in result[side]:
+                    continue
+                if inc_frame >= start_frame and inc_frame - start_frame <= max_forward:
+                    result[side][inc_idx] = start_frame
+                    break  # move to next activation
+
+    return result
+
+def refine_score_frames_with_lights(lights: np.ndarray,
+                                    score_occ: dict[str, dict[int, int]],
+                                    algorithm: str = "first_increase") -> dict[str, dict[int, int]]:
+    if algorithm == "last_activation":
+        return perform_last_activation_algorithm(lights, score_occ)
+    elif algorithm == "first_increase":
+        return perform_first_increase_algorithm(lights, score_occ)
+    else:
+        raise ValueError(f"Unknown algorithm: {algorithm}")
+
 def row_mapper(row: list[str]) -> dict[str, any]:
     left = row[1]
     right = row[2]
@@ -86,18 +125,20 @@ def get_arguments():
     parser = argparse.ArgumentParser(description="Analyse video with csv data")
     parser.add_argument("input_video", help="Path to input video file")
     parser.add_argument("input_folder", help="Path to input folder containing CSV files")
+    parser.add_argument("--algorithm", type=str, default="first_increase", help="Refinement algorithm to use")
     parser.add_argument("--output_video", help="Path to output video file (optional)", default=None)
     args = parser.parse_args()
-    return args.input_folder, args.input_video, args.output_video
+    return args.input_folder, args.input_video, args.output_video, args.algorithm
 
 def main():
-    input_folder, input_video_path, output_video_path = get_arguments()
+    input_folder, input_video_path, output_video_path, algorithm = get_arguments()
     csv_path = f"{input_folder}/processed_lights.csv"
     scores_csv_path = f"{input_folder}/processed_scores.csv"
 
     writer = None
-    cap = setup_input_video_io(input_video_path)
-    fps = cap.get(cv2.CAP_PROP_FPS)
+    cap, fps, width, height, total_frames = setup_input_video_io(input_video_path)
+    global FPS
+    FPS = fps
     FULL_DELAY = int(1000 / fps)
     FAST_FORWARD = FULL_DELAY // 16
     print(f"Video FPS: {fps}, Frame delay: {FULL_DELAY} ms")
@@ -106,28 +147,19 @@ def main():
     slow = False
     early_exit = False
 
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     ui = Ui("Fencing Analysis", width=int(width), height=int(height))
     if output_video_path:
         writer = setup_output_video_io(output_video_path, fps, (width, height + ui.text_box_height))
 
     scores_map = extract_score_increases(scores_csv_path)
 
-    # extract max frame_id to set total_length
-    max_frame_id = 0
-    for side in ("left", "right"):
-        if scores_map[side]:
-            max_frame_id = max(max_frame_id, max(scores_map[side].values())) + 1
-
     # extract lights info into a np array
     lights_df = pd.read_csv(csv_path)
     # rename columns to match row_mapper
     lights_df.rename(columns={"left_light": "left_score", "right_light": "right_score"}, inplace=True)
-    lights = process_scores(lights_df, smoothen=False, total_length=max_frame_id)
+    lights = process_scores(lights_df, smoothen=False, total_length=total_frames)
 
-
-    score_occurrences = refine_score_frames_with_lights(lights, scores_map)
+    score_occurrences = refine_score_frames_with_lights(lights, scores_map, algorithm=algorithm)
 
     left_last_known_score = 0
     right_last_known_score = 0
@@ -175,7 +207,7 @@ def main():
         elif action == UiCodes.QUIT:  # q or Esc to quit
             break
         elif action == UiCodes.PAUSE:
-            early_exit = handle_pause(ui)
+            early_exit = ui.handle_pause()
 
         if early_exit:
             break

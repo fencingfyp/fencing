@@ -5,37 +5,14 @@ import cv2
 import numpy as np
 from src.model.Ui import Ui
 from src.model.PlanarTracker import PlanarTracker
-from src.util import UiCodes, convert_to_opencv_format
-
+from src.util import UiCodes, convert_to_opencv_format, setup_input_video_io, setup_output_video_io, setup_output_file, \
+    NORMAL_UI_FUNCTIONS
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Crop and rectify scoreboard region from video (with tracking)")
-    parser.add_argument("input_video", help="Path to input video file")
     parser.add_argument("output_folder", help="Path to folder for intermediate/final products")
     args = parser.parse_args()
-    return args.input_video, args.output_folder
-
-def setup_input_video_io(video_path) -> cv2.VideoCapture:
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        print(f"Error: Could not open video {video_path}")
-        exit(1)
-
-    return cap
-
-def setup_output_video_io(output_path, fps, frame_size) -> cv2.VideoWriter | None:
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    writer = cv2.VideoWriter(output_path, fourcc, fps, frame_size)
-    if not writer.isOpened():
-        print(f"Error: Could not open video writer {output_path}")
-        return exit(1)
-    return writer
-
-def setup_output_folder(folder_path):
-    os.makedirs(folder_path, exist_ok=True)
-    video_path = os.path.join(folder_path, "cropped_scoreboard.mp4")
-    print(f"Output video will be saved to: {video_path}")
-    return video_path
+    return args.output_folder
 
 def get_planar_dimensions(scoreboard_positions):
     scoreboard_corners = np.array(scoreboard_positions, dtype=np.float32)
@@ -53,17 +30,15 @@ def get_planar_dimensions(scoreboard_positions):
     
 
 def main():
-    input_video, output_folder = parse_arguments()
-    output_path = setup_output_folder(output_folder)
+    output_folder = parse_arguments()
+    input_video = os.path.join(output_folder, "original.mp4")
+    output_path = setup_output_file(output_folder, "cropped_scoreboard.mp4")
     crop_region(input_video, output_path, "scoreboard", "Scoreboard Cropping")
 
 def crop_region(input_video: str, output_path: str, plane_id: str, window_name: str = "Crop Planar Region"):
 
-    cap = setup_input_video_io(input_video)
+    cap, fps, width, height, _ = setup_input_video_io(input_video)
 
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     full_delay = int(1000 / fps)
     fast_forward = min(full_delay // 8, 1)
     print(f"Video FPS: {fps:.2f}")
@@ -131,12 +106,15 @@ def crop_region(input_video: str, output_path: str, plane_id: str, window_name: 
         writer.write(rectified)
 
         delay = full_delay if slow else fast_forward
-        action = ui.take_user_input(delay, [UiCodes.QUIT, UiCodes.TOGGLE_SLOW])
+        action = ui.take_user_input(delay, [*NORMAL_UI_FUNCTIONS])
         if action == UiCodes.TOGGLE_SLOW:
             slow = not slow
             print(f"Slow mode {'enabled' if slow else 'disabled'}.")
         elif action == UiCodes.QUIT:
             break
+        elif action == UiCodes.PAUSE:
+            early_exit = ui.handle_pause()
+
     cv2.destroyWindow(window_name)
     writer.release()
     cap.release()

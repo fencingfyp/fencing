@@ -5,7 +5,8 @@ import cv2
 import numpy as np
 from src.model.PatchLightDetector import PatchLightDetector
 from src.model.Ui import Ui
-from src.util import UiCodes, convert_to_opencv_format, convert_from_opencv_format, generate_select_quadrilateral_instructions
+from src.util import UiCodes, convert_to_opencv_format, convert_from_opencv_format, generate_select_quadrilateral_instructions, \
+    setup_input_video_io, setup_output_video_io, setup_output_file, NORMAL_UI_FUNCTIONS
 from src.momentum_graph.perform_ocr import convert_from_box_to_rect, convert_from_rect_to_box
 
 MIN_WINDOW_HEIGHT = 780
@@ -13,25 +14,21 @@ MIN_WINDOW_HEIGHT = 780
 def get_output_header_row() -> list[str]:
     return ["frame_id", "left_light", "right_light"]
 
-def main():
+def get_parse_args():
     parser = argparse.ArgumentParser(description="Use OCR to read scoreboard")
-    parser.add_argument("input_video", help="Path to input video file")
     parser.add_argument("output_folder", help="Path to output folder for intermediate/final products")
     parser.add_argument("--output_video", help="Path to output video file (optional)", default=None)
-    args = parser.parse_args() 
+    return parser.parse_args()
 
-    input_video_path = args.input_video
+def main():
+    args = get_parse_args()
     output_video_path = args.output_video
     output_folder = args.output_folder
 
-    output_csv_path = os.path.join(output_folder, "raw_lights.csv")
-    print(f"Output CSV will be saved to: {output_csv_path}")
+    output_csv_path = setup_output_file(output_folder, "raw_lights.csv")
+    input_video_path = os.path.join(output_folder, "cropped_score_lights.mp4")
 
-    cap = cv2.VideoCapture(input_video_path)
-    if not cap.isOpened():
-        print(f"Error: Could not open video {input_video_path}")
-        return
-    fps = cap.get(cv2.CAP_PROP_FPS)
+    cap, fps, original_width, original_height, _ = setup_input_video_io(input_video_path)
     FULL_DELAY = int(1000 / fps)
     FAST_FORWARD = min(FULL_DELAY // 16, 1)
     print(f"Video FPS: {fps}, Frame delay: {FULL_DELAY} ms")
@@ -40,8 +37,6 @@ def main():
     slow = False
     early_exit = False
 
-    original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     aspect_ratio = original_width / original_height
     width = original_width if original_height >= MIN_WINDOW_HEIGHT else int(MIN_WINDOW_HEIGHT * aspect_ratio)
     height = original_height if original_height >= MIN_WINDOW_HEIGHT else MIN_WINDOW_HEIGHT
@@ -49,13 +44,7 @@ def main():
     ui = Ui("Score Light Detection", width=width, height=height)
     video_writer = None
     if output_video_path:
-        print(f"Output video will be saved to: {output_video_path}")
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        video_writer = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height + ui.text_box_height))
-        print(width, height + ui.text_box_height)
-        if not video_writer.isOpened():
-            print(f"Failed to open video writer for {output_video_path}. Check the path and codec.")
-            return
+        video_writer = setup_output_video_io(output_video_path, fps, (width, height + ui.text_box_height))
 
     # Read first frame
     ret, frame = cap.read()
@@ -75,7 +64,7 @@ def main():
     left_score_positions = ui.get_n_points(generate_select_quadrilateral_instructions("left fencer score light"))
     right_score_positions = ui.get_n_points(generate_select_quadrilateral_instructions("right fencer score light"))
 
-    frame_id = 0
+    frame_id = 1
     with open(output_csv_path, "w", newline="") as f:
         csv_writer = csv.writer(f)
         header_row = get_output_header_row()
@@ -109,12 +98,14 @@ def main():
                 video_writer.write(ui.current_frame)
 
             delay: int = FULL_DELAY if slow else FAST_FORWARD
-            action = ui.take_user_input(delay, [UiCodes.QUIT, UiCodes.TOGGLE_SLOW])
+            action = ui.take_user_input(delay, [*NORMAL_UI_FUNCTIONS])
             if action == UiCodes.TOGGLE_SLOW:
                 slow = not slow
                 print(f"Slow mode {'enabled' if slow else 'disabled'}.")
             elif action == UiCodes.QUIT:  # q or Esc to quit
                 break
+            elif action == UiCodes.PAUSE:
+                early_exit = ui.handle_pause()
 
             if early_exit:
                 break

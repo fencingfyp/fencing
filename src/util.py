@@ -1,5 +1,7 @@
 import enum
+import os
 import numpy as np
+import cv2
 
 class UiCodes(enum.Enum):
     QUIT = 0
@@ -9,6 +11,12 @@ class UiCodes(enum.Enum):
     PAUSE = 4
     PICK_LEFT_FENCER = 5
     PICK_RIGHT_FENCER = 6
+    CUSTOM_1 = 7
+    CUSTOM_2 = 8
+    CUSTOM_3 = 9
+    CUSTOM_4 = 10
+
+NORMAL_UI_FUNCTIONS = [UiCodes.QUIT, UiCodes.TOGGLE_SLOW, UiCodes.PAUSE]
 
 PISTE_LENGTH_M = 14  # Standard piste length in meters
 
@@ -58,5 +66,31 @@ def project_point_on_line(line: tuple[tuple[int, int], tuple[int, int]],
     y_out = y1 + t * dy
     return int(x_out), int(y_out)
 
-
 # I/O stuff
+def setup_input_video_io(video_path) -> cv2.VideoCapture:
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"Error: Could not open video {video_path}")
+        exit(1)
+
+    return cap, cap.get(cv2.CAP_PROP_FPS), \
+        int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), \
+        int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), \
+        int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+
+def setup_output_video_io(output_path, fps, frame_size) -> cv2.VideoWriter | None:
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    writer = cv2.VideoWriter(output_path, fourcc, fps, frame_size)
+    if not writer.isOpened():
+        print(f"Error: Could not open video writer {output_path}")
+        return exit(1)
+    print(f"Output video will be saved to: {output_path}")
+    return writer
+
+
+def setup_output_file(folder_path, filename):
+    os.makedirs(folder_path, exist_ok=True)
+    file_path = os.path.join(folder_path, filename)
+    print(f"Output file will be saved to: {file_path}")
+    return file_path
