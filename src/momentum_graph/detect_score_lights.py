@@ -15,15 +15,17 @@ def get_output_header_row() -> list[str]:
     return ["frame_id", "left_light", "right_light"]
 
 def get_parse_args():
-    parser = argparse.ArgumentParser(description="Use OCR to read scoreboard")
+    parser = argparse.ArgumentParser(description="Detect score lights")
     parser.add_argument("output_folder", help="Path to output folder for intermediate/final products")
     parser.add_argument("--output_video", help="Path to output video file (optional)", default=None)
+    parser.add_argument("--demo", action="store_true", help="If set, doesn't output anything")
     return parser.parse_args()
 
 def main():
     args = get_parse_args()
     output_video_path = args.output_video
     output_folder = args.output_folder
+    demo_mode = args.demo
 
     output_csv_path = setup_output_file(output_folder, "raw_lights.csv")
     input_video_path = os.path.join(output_folder, "cropped_score_lights.mp4")
@@ -43,7 +45,7 @@ def main():
 
     ui = Ui("Score Light Detection", width=width, height=height)
     video_writer = None
-    if output_video_path:
+    if output_video_path and not demo_mode:
         video_writer = setup_output_video_io(output_video_path, fps, (width, height + ui.text_box_height))
 
     # Read first frame
@@ -65,10 +67,12 @@ def main():
     right_score_positions = ui.get_n_points(generate_select_quadrilateral_instructions("right fencer score light"))
 
     frame_id = 1
-    with open(output_csv_path, "w", newline="") as f:
+    mode = "a" if demo_mode else "w"
+    with open(output_csv_path, mode, newline="") as f:
         csv_writer = csv.writer(f)
         header_row = get_output_header_row()
-        csv_writer.writerow(header_row)
+        if not demo_mode:
+            csv_writer.writerow(header_row)
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -87,14 +91,15 @@ def main():
             is_left_red = left_colour_detector.check_light(frame, left_score_positions)
             is_right_green = right_colour_detector.check_light(frame, right_score_positions)
 
-            csv_writer.writerow([frame_id, 1 if is_left_red else 0, 1 if is_right_green else 0])
+            if not demo_mode:
+                csv_writer.writerow([frame_id, 1 if is_left_red else 0, 1 if is_right_green else 0])
 
             ui.write_to_ui(
                 f"Is left light on: {is_left_red}, Is right light on: {is_right_green}"
             )
             ui.show_frame()
 
-            if video_writer:
+            if video_writer and not demo_mode:
                 video_writer.write(ui.current_frame)
 
             delay: int = FULL_DELAY if slow else FAST_FORWARD
@@ -111,7 +116,7 @@ def main():
                 break
             frame_id += 1
 
-        if video_writer:
+        if video_writer and not demo_mode:
             video_writer.release()
         
         cap.release()

@@ -6,8 +6,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Process and visualize light state changes from CSV.")
     parser.add_argument('folder', type=str, help='Path to the folder containing the input CSV file.')
     parser.add_argument('--fps', type=int, default=30, help='Frames per second for the output video.')
-    args = parser.parse_args()
-    return args.folder, args.fps
+    parser.add_argument("--demo", action="store_true", help="If set, doesn't output anything")
+    return parser.parse_args()
 
 def remove_false_negatives(series, min_off_len=5):
     """
@@ -63,7 +63,10 @@ def remove_false_positives(series, min_on_len=5):
     return pd.Series(s, index=series.index)
 
 def main():
-    folder, fps = parse_arguments()
+    args = parse_arguments()
+    folder = args.folder
+    fps = args.fps
+    demo_mode = args.demo
     # --- 1. Load and smooth ---
     df = pd.read_csv(f"{folder}/raw_lights.csv")
 
@@ -101,7 +104,8 @@ def main():
 
     print(changes)
     # Optional: save to CSV
-    changes.to_csv(f"{folder}/processed_lights.csv", index=False)
+    if not demo_mode:
+        changes.to_csv(f"{folder}/processed_lights.csv", index=False)
 
 if __name__ == "__main__":
     main()

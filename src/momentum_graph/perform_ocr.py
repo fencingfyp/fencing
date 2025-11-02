@@ -123,11 +123,12 @@ def get_device():
     
 def get_parse_args():
     parser = argparse.ArgumentParser(description="Use OCR to read scoreboard")
-    parser.add_argument("input_video", help="Path to input video file")
+    # parser.add_argument("input_video", help="Path to input video file")
     parser.add_argument("output_folder", help="Path to output folder for intermediate/final products")
     parser.add_argument("--output_video", help="Path to output video file (optional)", default=None)
     parser.add_argument("--threshold-boundary", type=int, help="Threshold for binary segmentation", default=120)
     parser.add_argument("--seven-segment", action="store_true", help="Use seven-segment digit recognition mode")
+    parser.add_argument("--demo", action="store_true", help="If set, doesn't output anything")
     return parser.parse_args()
 
 def random_with_min_gap(total_frames, n, min_gap):
@@ -184,11 +185,13 @@ def calibrate_ocr(ui: Ui, ocr_reader, cap, threshold_boundary, total_frames, lef
 
 def main():
     args = get_parse_args()
-    input_video_path = args.input_video
     output_video_path = args.output_video
     output_folder = args.output_folder
     threshold_boundary = args.threshold_boundary
     use_seven_segment = args.seven_segment
+    demo_mode = args.demo
+
+    input_video_path = os.path.join(output_folder, "cropped_scoreboard.mp4")
 
     output_csv_path = setup_output_file(output_folder, OUTPUT_CSV_NAME)
 
@@ -207,7 +210,7 @@ def main():
     ui = Ui("Fencing Analysis", width=int(width), height=int(height))
 
     video_writer = None
-    if output_video_path:
+    if output_video_path and not demo_mode:
         video_writer = setup_output_video_io(output_video_path, fps, (width, height + ui.text_box_height))
 
     # Read first frame
@@ -238,10 +241,12 @@ def main():
     cv2.namedWindow(ocr_window_r, cv2.WINDOW_NORMAL)
 
     frame_id = 0
-    with open(output_csv_path, "w", newline="") as f:
+    mode = "a" if demo_mode else "w"
+    with open(output_csv_path, mode, newline="") as f:
         csv_writer = csv.writer(f)
         header_row = get_output_header_row()
-        csv_writer.writerow(header_row)
+        if not demo_mode:
+            csv_writer.writerow(header_row)
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -261,7 +266,8 @@ def main():
                 l_score, l_conf = extract_score_from_frame(l_frame, threshold_boundary, ocr_reader, ocr_window_l)
                 r_score, r_conf = extract_score_from_frame(r_frame, threshold_boundary, ocr_reader, ocr_window_r)
 
-                csv_writer.writerow([frame_id, l_score, r_score, l_conf, r_conf])
+                if not demo_mode:
+                    csv_writer.writerow([frame_id, l_score, r_score, l_conf, r_conf])
 
             ui.write_to_ui(
                 f"Left score: {l_score} Right score: {r_score} | "
@@ -273,12 +279,14 @@ def main():
                 video_writer.write(ui.current_frame)
 
             delay: int = FULL_DELAY if slow else FAST_FORWARD
-            action = ui.take_user_input(delay, [UiCodes.QUIT, UiCodes.TOGGLE_SLOW])
+            action = ui.take_user_input(delay, [UiCodes.QUIT, UiCodes.TOGGLE_SLOW, UiCodes.PAUSE])
             if action == UiCodes.TOGGLE_SLOW:
                 slow = not slow
                 print(f"Slow mode {'enabled' if slow else 'disabled'}.")
             elif action == UiCodes.QUIT:  # q or Esc to quit
                 break
+            elif action == UiCodes.PAUSE:
+                early_exit = ui.handle_pause()
 
             if early_exit:
                 break

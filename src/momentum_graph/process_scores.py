@@ -117,11 +117,13 @@ def process_scores(pred: pd.DataFrame, smoothen=True, total_length=None, window_
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Process and smooth score predictions.")
     parser.add_argument('folder', type=str, help='Path to the working folder.')
-    args = parser.parse_args()
-    return args.folder
+    parser.add_argument("--demo", action="store_true", help="If set, doesn't output anything")
+    return parser.parse_args()
 
 def main():
-    folder = parse_arguments()
+    args = parse_arguments()
+    folder = args.folder
+    demo_mode = args.demo
     # Load both CSVs
     df = pd.read_csv(f'{folder}/raw_scores.csv')
     cap, fps, _, _, _ = setup_input_video_io(f"{folder}/cropped_scoreboard.mp4")
@@ -131,7 +133,8 @@ def main():
     # Rewrite the predictions CSV with cleaned data in this format: frame_id,left_score,right_score,left_confidence,right_confidence. set confidence to 1.0
     frame_ids = np.arange(len(pred))
     pred_df = pd.DataFrame({'frame_id': frame_ids, 'left_score': pred[:, 0], 'right_score': pred[:, 1]})
-    pred_df.to_csv(f'{folder}/processed_scores.csv', index=False)
+    if not demo_mode:
+        pred_df.to_csv(f'{folder}/processed_scores.csv', index=False)
 
     # ---- Step 4: Plot both predictions ----
     plt.figure("Left", figsize=(12, 6))

@@ -11,8 +11,9 @@ from src.util import UiCodes, convert_to_opencv_format, setup_input_video_io, se
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Crop and rectify scoreboard region from video (with tracking)")
     parser.add_argument("output_folder", help="Path to folder for intermediate/final products")
+    parser.add_argument("--demo", action="store_true", help="If set, doesn't output anything")
     args = parser.parse_args()
-    return args.output_folder
+    return args.output_folder, args.demo
 
 def get_planar_dimensions(scoreboard_positions):
     scoreboard_corners = np.array(scoreboard_positions, dtype=np.float32)
@@ -30,12 +31,13 @@ def get_planar_dimensions(scoreboard_positions):
     
 
 def main():
-    output_folder = parse_arguments()
+    output_folder, demo_mode = parse_arguments()
     input_video = os.path.join(output_folder, "original.mp4")
-    output_path = setup_output_file(output_folder, "cropped_scoreboard.mp4")
+    output_path = setup_output_file(output_folder, "cropped_scoreboard.mp4") if not demo_mode else None
     crop_region(input_video, output_path, "scoreboard", "Scoreboard Cropping")
 
 def crop_region(input_video: str, output_path: str, plane_id: str, window_name: str = "Crop Planar Region"):
+    write_output = output_path is not None
 
     cap, fps, width, height, _ = setup_input_video_io(input_video)
 
@@ -75,10 +77,12 @@ def crop_region(input_video: str, output_path: str, plane_id: str, window_name: 
     planar_tracker = PlanarTracker()
     planar_tracker.add_target(plane_id, frame, convert_to_opencv_format(positions))
 
-    writer = setup_output_video_io(output_path, fps, dimensions)
+    if write_output:
+        writer = setup_output_video_io(output_path, fps, dimensions)
 
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     slow = False
+    early_exit = False
 
     print("Tracking and warping in progress...")
     while True:
@@ -103,7 +107,8 @@ def crop_region(input_video: str, output_path: str, plane_id: str, window_name: 
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
         cv2.imshow(window_name, rectified)
-        writer.write(rectified)
+        if write_output:
+            writer.write(rectified)
 
         delay = full_delay if slow else fast_forward
         action = ui.take_user_input(delay, [*NORMAL_UI_FUNCTIONS])
@@ -114,9 +119,13 @@ def crop_region(input_video: str, output_path: str, plane_id: str, window_name: 
             break
         elif action == UiCodes.PAUSE:
             early_exit = ui.handle_pause()
+        
+        if early_exit:
+            break
 
     cv2.destroyWindow(window_name)
-    writer.release()
+    if write_output:
+        writer.release()
     cap.release()
     ui.close()
     print(f"Saved video to: {output_path}")
