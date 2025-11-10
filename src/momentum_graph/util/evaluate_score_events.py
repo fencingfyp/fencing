@@ -13,7 +13,6 @@ HALF_DELAY = FULL_DELAY // 16  # milliseconds
 
 SCORE_TIMEOUT = 5  # seconds to wait before re-trying fencer score detection
 # FALSE_ALARM_TIMEOUT = 3  # seconds to wait before re-trying fencer score detection
-FPS = 30
 
 def perform_last_activation_algorithm(lights: np.ndarray,
                                     score_occ: dict[str, dict[int, int]]) -> dict[str, dict[int, int]]:
@@ -66,11 +65,11 @@ def perform_last_activation_algorithm(lights: np.ndarray,
     return refined
 
 def perform_first_increase_algorithm(lights: np.ndarray,
-                                    score_occ: dict[str, dict[int, int]]) -> dict[str, dict[int, int]]:
+                                    score_occ: dict[str, dict[int, int]], fps: float) -> dict[str, dict[int, int]]:
     """For each light activation, search forward up to 7 seconds for the
     first score increase and record the activation frame instead of the score frame."""
-    
-    max_forward = 7 * FPS  # allowed forward window in frames
+
+    max_forward = int(7 * fps)  # allowed forward window in frames
     side_to_col = {"left": 0, "right": 1}
     result: dict[str, dict[int, int]] = {"left": {}, "right": {}}
 
@@ -100,11 +99,12 @@ def perform_first_increase_algorithm(lights: np.ndarray,
 
 def refine_score_frames_with_lights(lights: np.ndarray,
                                     score_occ: dict[str, dict[int, int]],
+                                    fps: float,
                                     algorithm: str = "first_increase") -> dict[str, dict[int, int]]:
     if algorithm == "last_activation":
         return perform_last_activation_algorithm(lights, score_occ)
     elif algorithm == "first_increase":
-        return perform_first_increase_algorithm(lights, score_occ)
+        return perform_first_increase_algorithm(lights, score_occ, fps)
     else:
         raise ValueError(f"Unknown algorithm: {algorithm}")
 
@@ -137,8 +137,6 @@ def main():
 
     writer = None
     cap, fps, width, height, total_frames = setup_input_video_io(input_video_path)
-    global FPS
-    FPS = fps
     FULL_DELAY = int(1000 / fps)
     FAST_FORWARD = FULL_DELAY // 16
     print(f"Video FPS: {fps}, Frame delay: {FULL_DELAY} ms")
@@ -149,9 +147,10 @@ def main():
 
     ui = Ui("Fencing Analysis", width=int(width), height=int(height))
     if output_video_path:
-        writer = setup_output_video_io(output_video_path, fps, (width, height + ui.text_box_height))
+        writer = setup_output_video_io(output_video_path, fps, ui.get_output_dimensions())
 
-    scores_map = extract_score_increases(scores_csv_path)
+    scores_df = pd.read_csv(f'{input_folder}/processed_scores.csv', usecols=["frame_id", "left_score", "right_score"])
+    scores_map = extract_score_increases(scores_df)
 
     # extract lights info into a np array
     lights_df = pd.read_csv(csv_path)
@@ -159,7 +158,7 @@ def main():
     lights_df.rename(columns={"left_light": "left_score", "right_light": "right_score"}, inplace=True)
     lights = process_scores(lights_df, smoothen=False, total_length=total_frames)
 
-    score_occurrences = refine_score_frames_with_lights(lights, scores_map, algorithm=algorithm)
+    score_occurrences = refine_score_frames_with_lights(lights, scores_map, fps, algorithm=algorithm)
 
     left_last_known_score = 0
     right_last_known_score = 0

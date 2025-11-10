@@ -102,7 +102,7 @@ def main():
         inplace=True,
     )
 
-    print(changes)
+    # print(changes)
     # Optional: save to CSV
     if not demo_mode:
         changes.to_csv(f"{folder}/processed_lights.csv", index=False)

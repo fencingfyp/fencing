@@ -20,21 +20,37 @@ ALLOWED_ACTIONS_TO_KEYBINDS = {
 }
 
 class Ui:
-  def __init__(self, window_name: str, width: int = 1280, height: int = 720, min_width: int = None, min_height: int = None, text_box_height: int = 100) -> None:
+  @staticmethod
+  def calculate_display_dimensions(width: int, height: int, display_width: int = None, display_height: int = None) -> tuple[int, int]:
+    if display_width is not None and display_height is not None:
+      raise ValueError("Specify either display_width and display_height or neither.")
+    aspect_ratio = width / height
+    if display_width is None and display_height is None:
+      display_width = width
+      display_height = height
+    elif display_width is not None:
+      display_height = int(display_width / aspect_ratio)
+    elif display_height is not None:
+      display_width = int(display_height * aspect_ratio)
+    return display_width, display_height
+
+  def __init__(self, window_name: str, width: int = 1280, height: int = 720, display_width: int = None, display_height: int = None, text_box_height: int = 100) -> None:
     self.window_name = window_name
     self.width = width
     self.height = height
-    self.min_width = min_width
-    self.min_height = min_height
+    self.display_width, self.display_height = self.calculate_display_dimensions(width, height, display_width, display_height)
     self.text_box_height = text_box_height
-    self.current_frame = np.zeros((height + text_box_height, width, 3), dtype=np.uint8)
-    self.fresh_frame = np.zeros((height, width, 3), dtype=np.uint8) # just the video frame
+    self.current_frame = np.zeros((self.display_height + text_box_height, self.display_width, 3), dtype=np.uint8)
+    self.fresh_frame = np.zeros((self.display_height, self.display_width, 3), dtype=np.uint8) # just the video frame
     self.text_color = (0, 0, 0) # Black
     self.background_color = (255, 255, 255) # White
     self.left_fencer_colour = (255, 0, 0)  # Blue
     self.right_fencer_colour = (0, 0, 255)  # Red
     self.piste_centre_line_colour = (0, 255, 0)  # Green
     cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+
+  def get_output_dimensions(self) -> tuple[int, int]:
+    return (self.display_width, self.display_height + self.text_box_height)
 
   def show_candidates(self, detections) -> None:
     self._set_current_frame(self.fresh_frame)
@@ -56,10 +72,6 @@ class Ui:
   def apply_offset_point(self, x, y) -> None:
     y += self.text_box_height
     return x, y
-  
-  def draw_fresh_frame(self) -> np.ndarray:
-    self.current_frame[self.text_box_height:, :, :] = self.fresh_frame
-    return self.current_frame
 
   def draw_candidates(self, detections) -> np.ndarray:
     for det in detections.values():
@@ -72,17 +84,25 @@ class Ui:
     return self.current_frame
 
   def _set_current_frame(self, frame) -> None:
-    # Dimensions
-    h, w, _ = frame.shape
-    target = self.current_frame[self.text_box_height:, :, :]
-    H, W, _ = target.shape
-
-    # Determine where to place the smaller frame (e.g., top-left corner)
-    y0, x0 = 0, 0  # you can adjust this for centering or other placement
-    y1, x1 = y0 + min(h, H), x0 + min(w, W)
-
-    # Copy into subregion
-    target[y0:y1, x0:x1, :] = frame[:y1 - y0, :x1 - x0, :]
+    # Check aspect ratio and pad if needed
+    frame_h, frame_w = frame.shape[:2]
+    target_aspect = self.display_width / self.display_height
+    frame_aspect = frame_w / frame_h
+    if frame_aspect > target_aspect:
+      # frame is wider than target, pad height
+      new_height = int(frame_w / target_aspect)
+      pad_vert = (new_height - frame_h) // 2
+      padded = cv2.copyMakeBorder(frame, pad_vert, pad_vert, 0, 0, cv2.BORDER_CONSTANT, value=(0, 0, 0))
+      target = cv2.resize(padded, (self.display_width, self.display_height), interpolation=cv2.INTER_CUBIC)
+    elif frame_aspect < target_aspect:
+      # frame is taller than target, pad width
+      new_width = int(frame_h * target_aspect)
+      pad_horiz = (new_width - frame_w) // 2
+      padded = cv2.copyMakeBorder(frame, 0, 0, pad_horiz, pad_horiz, cv2.BORDER_CONSTANT, value=(0, 0, 0))
+      target = cv2.resize(padded, (self.display_width, self.display_height), interpolation=cv2.INTER_CUBIC)
+    else:
+      # same aspect ratio
+      target = cv2.resize(frame, (self.display_width, self.display_height), interpolation=cv2.INTER_CUBIC)
 
     # Write back into current_frame
     self.current_frame[self.text_box_height:, :, :] = target
@@ -115,7 +135,7 @@ class Ui:
     Draw text inside a bounding box (x1,y1,x2,y2), auto-scaling font to fit.
     """
     self.draw_text_box()
-    box_w, box_h = self.width, self.text_box_height
+    box_w, box_h = self.display_width, self.text_box_height
     x1, y1 = 0, 0
 
     scale = font_scale
@@ -259,7 +279,7 @@ class Ui:
     self.draw_text_box()
 
   def clear_frame(self) -> None:
-    self.current_frame = np.zeros((self.height + self.text_box_height, self.width, 3), dtype=np.uint8)
+    self.current_frame = np.zeros((self.display_height + self.text_box_height, self.display_width, 3), dtype=np.uint8)
 
   def get_fencer_id(self, candidates: dict[int, dict], left: bool) -> int | None:
     if not candidates:

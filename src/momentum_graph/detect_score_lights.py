@@ -5,9 +5,9 @@ import cv2
 import numpy as np
 from src.model.PatchLightDetector import PatchLightDetector
 from src.model.Ui import Ui
-from src.util import UiCodes, convert_to_opencv_format, convert_from_opencv_format, generate_select_quadrilateral_instructions, \
-    setup_input_video_io, setup_output_video_io, setup_output_file, NORMAL_UI_FUNCTIONS
-from src.momentum_graph.perform_ocr import convert_from_box_to_rect, convert_from_rect_to_box
+from src.util import UiCodes, convert_to_opencv_format, generate_select_quadrilateral_instructions, \
+    setup_input_video_io, setup_output_video_io, setup_output_file, NORMAL_UI_FUNCTIONS, \
+    convert_from_box_to_rect, convert_from_rect_to_box
 
 MIN_WINDOW_HEIGHT = 780
 
@@ -39,25 +39,18 @@ def main():
     slow = False
     early_exit = False
 
-    aspect_ratio = original_width / original_height
-    width = original_width if original_height >= MIN_WINDOW_HEIGHT else int(MIN_WINDOW_HEIGHT * aspect_ratio)
-    height = original_height if original_height >= MIN_WINDOW_HEIGHT else MIN_WINDOW_HEIGHT
-
-    ui = Ui("Score Light Detection", width=width, height=height)
-    video_writer = None
+    ui = Ui("Score Light Detection", width=original_width, height=original_height, display_height=MIN_WINDOW_HEIGHT)
+    video_writer: cv2.VideoWriter = None
     if output_video_path and not demo_mode:
-        video_writer = setup_output_video_io(output_video_path, fps, (width, height + ui.text_box_height))
+        video_writer = setup_output_video_io(output_video_path, fps, ui.get_output_dimensions())
 
     # Read first frame
     ret, frame = cap.read()
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # reset to beginning
     if not ret:
         print("Error: Could not read first frame.")
         return
     
-    # autoscale frame to fit window if needed
-    if original_height < MIN_WINDOW_HEIGHT:
-        frame = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
-
     ui.set_fresh_frame(frame)
 
     left_colour_detector = PatchLightDetector('red')
@@ -78,18 +71,14 @@ def main():
             if not ret:
                 break
             
-            # autoscale frame to fit window if needed
-            if original_height < MIN_WINDOW_HEIGHT:
-                frame = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
-
             ui.set_fresh_frame(frame)
             ui.refresh_frame()
 
             ui.draw_polygon(convert_to_opencv_format(left_score_positions), color=(0, 0, 255)) # cv2 uses BGR
             ui.draw_polygon(convert_to_opencv_format(right_score_positions), color=(0, 255, 0))
 
-            is_left_red = left_colour_detector.check_light(frame, left_score_positions)
-            is_right_green = right_colour_detector.check_light(frame, right_score_positions)
+            is_left_red = left_colour_detector.check_light(ui.get_current_frame(), left_score_positions)
+            is_right_green = right_colour_detector.check_light(ui.get_current_frame(), right_score_positions)
 
             if not demo_mode:
                 csv_writer.writerow([frame_id, 1 if is_left_red else 0, 1 if is_right_green else 0])

@@ -19,53 +19,54 @@ class PatchLightDetector:
         cv2.fillPoly(mask, [shifted], 255)
         return cv2.mean(roi, mask=mask)[:3]  # B,G,R
 
+    # def _get_bounding_rect(self, frame, patch_pts):
+    #     patch_pts = np.asarray(patch_pts, dtype=np.int32)
+
+    #     # bounding rect (clamped to frame)
+    #     h_frame, w_frame = frame.shape[:2]
+    #     x, y, w, h = cv2.boundingRect(patch_pts)
+    #     x = max(0, min(x, w_frame - 1))
+    #     y = max(0, min(y, h_frame - 1))
+    #     w = max(0, min(w, w_frame - x))
+    #     h = max(0, min(h, h_frame - y))
+    #     return (x, y, w, h)
+
     def _extract_patch(self, frame, patch_pts):
         """
-        Extract rectangular ROI covering patch_pts and mask out pixels
-        outside the polygon. Pixels outside the polygon are set to 255
-        (saturated) so downstream 'unsaturated' masking will ignore them.
-        Returns a 3-channel array (B,G,R) matching the cropped ROI size.
+        Extracts the patch defined by `patch_pts` (4 points in order) from `frame`.
+        If the patch is not axis-aligned, it is rectified via perspective transform.
+        Returns a 3-channel BGR image of the patch.
         """
-        patch_pts = np.asarray(patch_pts, dtype=np.int32)
+        patch_pts = np.asarray(patch_pts, dtype=np.float32)
 
-        # bounding rect (clamped to frame)
-        h_frame, w_frame = frame.shape[:2]
-        x, y, w, h = cv2.boundingRect(patch_pts)
-        x = max(0, min(x, w_frame - 1))
-        y = max(0, min(y, h_frame - 1))
-        w = max(0, min(w, w_frame - x))
-        h = max(0, min(h, h_frame - y))
+        # Compute width and height of the quadrilateral
+        w = int(max(np.linalg.norm(patch_pts[0] - patch_pts[1]),
+                    np.linalg.norm(patch_pts[2] - patch_pts[3])))
+        h = int(max(np.linalg.norm(patch_pts[0] - patch_pts[3]),
+                    np.linalg.norm(patch_pts[1] - patch_pts[2])))
 
         if w == 0 or h == 0:
-            # return an empty safe patch to avoid downstream crashes
-            return np.full((1, 1, 3), 255, dtype=frame.dtype)
+            raise ValueError(f"Invalid patch dimensions: {(w, h)}")
 
-        roi = frame[y:y + h, x:x + w].copy()
+        # Destination rectangle coordinates
+        dst_pts = np.array([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]], dtype=np.float32)
 
-        # ensure 3 channels
-        if roi.ndim == 2:
-            roi = cv2.cvtColor(roi, cv2.COLOR_GRAY2BGR)
+        # Perspective transform to warp quadrilateral into rectangle
+        M = cv2.getPerspectiveTransform(patch_pts, dst_pts)
+        patch = cv2.warpPerspective(frame, M, (w, h))
 
-        # polygon mask (shifted into ROI coords)
-        mask = np.zeros((h, w), dtype=np.uint8)
-        shifted = patch_pts - np.array([x, y], dtype=np.int32)
-        cv2.fillPoly(mask, [shifted], 255)
+        # Ensure 3 channels
+        if patch.ndim == 2:
+            patch = cv2.cvtColor(patch, cv2.COLOR_GRAY2BGR)
 
-        # set outside-polygon pixels to saturated value so they get excluded
-        # by the "> 250" saturation test in downstream code
-        masked_roi = roi.copy()
-        # mask==0 -> outside polygon
-        masked_roi[mask == 0] = 255
-
-        return masked_roi
-
+        return patch
 
     def check_light(
         self,
         frame,
         patch_pts,
         v_thresh=35,
-        rel_thresh=0.15,
+        rel_thresh=0.25,
         sat_thresh=0.09,
         chroma_thresh=0.04,
         baseline_alpha=0.001,  # for slow baseline drift correction

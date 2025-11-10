@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from src.model.TargetTracker import TargetTracker
+from src.model.tracker.TargetTracker import TargetTracker
 
 MIN_INLIERS = 15  # tune as needed
 

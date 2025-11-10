@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from src.model.Ui import Ui
-from src.model.PlanarTracker import PlanarTracker
+from src.model.tracker.PlanarTracker import PlanarTracker
 from src.util import UiCodes, convert_to_opencv_format, setup_input_video_io, setup_output_video_io, setup_output_file, \
     NORMAL_UI_FUNCTIONS
 
@@ -84,6 +84,7 @@ def crop_region(input_video: str, output_path: str, plane_id: str, window_name: 
     slow = False
     early_exit = False
 
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # reset to beginning
     print("Tracking and warping in progress...")
     while True:
         ret, frame = cap.read()

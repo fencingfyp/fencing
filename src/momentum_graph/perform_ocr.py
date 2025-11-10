@@ -3,17 +3,21 @@ import csv
 import os
 import cv2
 import numpy as np
-import easyocr
+from src.util import convert_from_box_to_rect
 import torch
 from src.model.Ui import Ui
-from src.util import UiCodes, convert_to_opencv_format, convert_from_opencv_format,\
+from src.util import UiCodes,\
     generate_select_quadrilateral_instructions, setup_input_video_io, setup_output_video_io, \
-    setup_output_file
+    setup_output_file, convert_from_rect_to_box
 from src.model.EasyOcrReader import EasyOcrReader
 
 DO_OCR_EVERY_N_FRAMES = 5  # Set >1 to skip frames for speed (but less frequent score updates)
 OUTPUT_CSV_NAME = "raw_scores.csv"
 MIN_WINDOW_HEIGHT = 780
+
+OUTPUT_VIDEO_NAME = "perform_ocr_output.mp4"
+OUTPUT_OCR_L_WINDOW = "ocr_left.mp4"
+OUTPUT_OCR_R_WINDOW = "ocr_right.mp4"
 
 def fontify_7segment(binary):
     # assume binary: 0/255, white digits on black background
@@ -38,28 +42,13 @@ def row_mapper(row: list[str]) -> dict[str, any]:
       "box": box,  # [x1, y1, x2, y2, x3, y3, x4, y4]
     }
 
-def convert_from_box_to_rect(box: list[tuple[int, int]]) -> tuple[int, int, int, int]:
-    """Convert 4-point box to x,y,w,h rectangle"""
-    xs = [p[0] for p in box]
-    ys = [p[1] for p in box]
-    x = min(xs)
-    y = min(ys)
-    w = max(xs) - x
-    h = max(ys) - y
-    return (x, y, w, h)
-
-def convert_from_rect_to_box(rect: tuple[int, int, int, int]) -> list[tuple[int, int]]:
-    """Convert x,y,w,h rectangle to 4-point box"""
-    x, y, w, h = rect
-    return [(x, y), (x+w, y), (x+w, y+h), (x, y+h)]
-
 def get_output_header_row() -> list[str]:
     return ["frame_id", "left_score", "right_score", "left_confidence", "right_confidence"]
 
 def process_image(image, threshold_boundary, is_7_segment=False):
     # Scale up to help OCR (makes thin strokes thicker)
     gray_up = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    scale = 10
+    # scale = 10
     # gray_up = cv2.resize(gray, (gray.shape[1]*scale, gray.shape[0]*scale), interpolation=cv2.INTER_CUBIC)
     # print(gray_up.shape)
     # Light denoising
@@ -102,7 +91,7 @@ def process_image(image, threshold_boundary, is_7_segment=False):
     #     if cv2.contourArea(cnt) > 5:  # keep only larger blobs
     #         cv2.drawContours(mask, [cnt], -1, 255, -1)
     # clean = mask
-    return gray_up
+    return cv2.cvtColor(gray_up, cv2.COLOR_GRAY2BGR)
 
 def get_device():
     # Select best available device: CUDA -> MPS (Apple) -> CPU
@@ -123,12 +112,11 @@ def get_device():
     
 def get_parse_args():
     parser = argparse.ArgumentParser(description="Use OCR to read scoreboard")
-    # parser.add_argument("input_video", help="Path to input video file")
     parser.add_argument("output_folder", help="Path to output folder for intermediate/final products")
-    parser.add_argument("--output_video", help="Path to output video file (optional)", default=None)
+    parser.add_argument("--output-video", action="store_true", help="If set, outputs video with OCR results")
     parser.add_argument("--threshold-boundary", type=int, help="Threshold for binary segmentation", default=120)
     parser.add_argument("--seven-segment", action="store_true", help="Use seven-segment digit recognition mode")
-    parser.add_argument("--demo", action="store_true", help="If set, doesn't output anything")
+    parser.add_argument("--demo", action="store_true", help="If set, doesn't output any csv")
     return parser.parse_args()
 
 def random_with_min_gap(total_frames, n, min_gap):
@@ -144,8 +132,6 @@ def random_with_min_gap(total_frames, n, min_gap):
 def ask_user_confirmation(ui: Ui, frame, threshold_boundary, ocr_reader, n_correct, n_total) -> tuple[int, int, bool]:
     score, conf = extract_score_from_frame(frame, threshold_boundary, ocr_reader)
     processed = process_image(frame, threshold_boundary)
-    # rearrange grayscale to 3-channel BGR for UI display
-    processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
     ui.clear_frame()
     ui.set_fresh_frame(processed)
     ui.write_to_ui(f"OCR Left Score: {score} (Conf: {conf:.2f}), press 1 if it's correct, 2 if not, 3 to skip")
@@ -169,7 +155,7 @@ def calibrate_ocr(ui: Ui, ocr_reader, cap, threshold_boundary, total_frames, lef
         ret, frame = cap.read()
         if not ret:
             continue
-        frame = cv2.resize(frame, (ui.width, ui.height), interpolation=cv2.INTER_CUBIC)
+        frame = cv2.resize(frame, (ui.display_width, ui.display_height), interpolation=cv2.INTER_CUBIC)
         if frame_idx % 2 == 0:
             frame = extract_score_frame_from_frame(frame, left_score_positions)
         else:
@@ -181,11 +167,13 @@ def calibrate_ocr(ui: Ui, ocr_reader, cap, threshold_boundary, total_frames, lef
     print(f"OCR Precheck complete. Accuracy: {accuracy*100:.2f}% ({n_correct}/{n_total})")
     if accuracy < threshold_confidence:
         print("Warning: OCR accuracy below threshold. Consider recalibrating or adjusting settings.")
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to start
+    
+def regularise_rectangle(pts: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    return convert_from_rect_to_box(convert_from_box_to_rect(pts))
 
 def main():
     args = get_parse_args()
-    output_video_path = args.output_video
+    output_video = args.output_video
     output_folder = args.output_folder
     threshold_boundary = args.threshold_boundary
     use_seven_segment = args.seven_segment
@@ -200,18 +188,10 @@ def main():
     FAST_FORWARD = min(FULL_DELAY // 16, 1)
     print(f"Video FPS: {fps}, Frame delay: {FULL_DELAY} ms")
 
-    aspect_ratio = original_width / original_height
-    width = original_width if original_height >= MIN_WINDOW_HEIGHT else int(MIN_WINDOW_HEIGHT * aspect_ratio)
-    height = original_height if original_height >= MIN_WINDOW_HEIGHT else MIN_WINDOW_HEIGHT
-
     # UI
     slow = False
     early_exit = False
-    ui = Ui("Fencing Analysis", width=int(width), height=int(height))
-
-    video_writer = None
-    if output_video_path and not demo_mode:
-        video_writer = setup_output_video_io(output_video_path, fps, (width, height + ui.text_box_height))
+    ui = Ui("Performing OCR", width=int(original_width), height=int(original_height), display_height=MIN_WINDOW_HEIGHT)
 
     # Read first frame
     ret, frame = cap.read()
@@ -219,14 +199,10 @@ def main():
         print("Error: Could not read first frame.")
         return
 
-    # autoscale frame to fit window if needed
-    if original_height < MIN_WINDOW_HEIGHT:
-        frame = cv2.resize(frame, (width, height), interpolation=cv2.INTER_CUBIC)
-
     ui.set_fresh_frame(frame)
 
-    left_score_positions = ui.get_n_points(generate_select_quadrilateral_instructions("left fencer score display"))
-    right_score_positions = ui.get_n_points(generate_select_quadrilateral_instructions("right fencer score display"))
+    left_score_positions = regularise_rectangle(ui.get_n_points(generate_select_quadrilateral_instructions("left fencer score display")))
+    right_score_positions = regularise_rectangle(ui.get_n_points(generate_select_quadrilateral_instructions("right fencer score display")))
 
     # Initialise OCR
     device = get_device()
@@ -240,6 +216,18 @@ def main():
     ocr_window_r = "OCR Preview R"
     cv2.namedWindow(ocr_window_r, cv2.WINDOW_NORMAL)
 
+    video_writer = None
+    if output_video:
+        output_video_path = os.path.join(output_folder, OUTPUT_VIDEO_NAME)
+        ocr_window_l_path = os.path.join(output_folder, OUTPUT_OCR_L_WINDOW)
+        ocr_window_r_path = os.path.join(output_folder, OUTPUT_OCR_R_WINDOW)
+        video_writer = setup_output_video_io(output_video_path, fps, ui.get_output_dimensions())
+        _, _, w1, h1 = convert_from_box_to_rect(left_score_positions)
+        _, _, w2, h2 = convert_from_box_to_rect(right_score_positions)
+        ocr_window_l_writer = setup_output_video_io(ocr_window_l_path, fps, (w1, h1))
+        ocr_window_r_writer = setup_output_video_io(ocr_window_r_path, fps, (w2, h2))
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to start
     frame_id = 0
     mode = "a" if demo_mode else "w"
     with open(output_csv_path, mode, newline="") as f:
@@ -252,15 +240,11 @@ def main():
             if not ret:
                 break
 
-            # autoscale frame to fit window if needed
-            if original_height < MIN_WINDOW_HEIGHT:
-                frame = cv2.resize(frame, (width, height), interpolation=cv2.INTER_CUBIC)
-
             ui.set_fresh_frame(frame)
             ui.refresh_frame()
 
-            l_frame = extract_score_frame_from_frame(frame, left_score_positions)
-            r_frame = extract_score_frame_from_frame(frame, right_score_positions)
+            l_frame = extract_score_frame_from_frame(ui.get_current_frame(), left_score_positions)
+            r_frame = extract_score_frame_from_frame(ui.get_current_frame(), right_score_positions)
 
             if frame_id % DO_OCR_EVERY_N_FRAMES == 0:
                 l_score, l_conf = extract_score_from_frame(l_frame, threshold_boundary, ocr_reader, ocr_window_l)
@@ -275,7 +259,9 @@ def main():
             )
             ui.show_frame()
 
-            if video_writer:
+            if output_video:
+                ocr_window_l_writer.write(process_image(l_frame, threshold_boundary))
+                ocr_window_r_writer.write(process_image(r_frame, threshold_boundary))
                 video_writer.write(ui.current_frame)
 
             delay: int = FULL_DELAY if slow else FAST_FORWARD
@@ -292,17 +278,18 @@ def main():
                 break
             frame_id += 1
 
-        if video_writer:
+        if output_video:
             video_writer.release()
-        
+            ocr_window_l_writer.release()
+            ocr_window_r_writer.release()
+
         cap.release()
         ui.close()
         cv2.destroyWindow(ocr_window_l)
         cv2.destroyWindow(ocr_window_r)
 
 def extract_score_frame_from_frame(frame, score_positions):
-    rect = convert_from_box_to_rect(score_positions)
-    x, y, w, h = rect
+    x, y, w, h = convert_from_box_to_rect(score_positions)
     out = frame[y:y+h, x:x+w]
     return out
 

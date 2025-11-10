@@ -94,3 +94,20 @@ def setup_output_file(folder_path, filename):
     file_path = os.path.join(folder_path, filename)
     print(f"Output file will be saved to: {file_path}")
     return file_path
+
+
+def convert_from_box_to_rect(box: list[tuple[int, int]]) -> tuple[int, int, int, int]:
+    """Convert 4-point box to x,y,w,h rectangle"""
+    xs = [p[0] for p in box]
+    ys = [p[1] for p in box]
+    x = min(xs)
+    y = min(ys)
+    w = max(xs) - x
+    h = max(ys) - y
+    return (x, y, w, h)
+
+
+def convert_from_rect_to_box(rect: tuple[int, int, int, int]) -> list[tuple[int, int]]:
+    """Convert x,y,w,h rectangle to 4-point box"""
+    x, y, w, h = rect
+    return [(x, y), (x+w, y), (x+w, y+h), (x, y+h)]

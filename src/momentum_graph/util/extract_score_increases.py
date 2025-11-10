@@ -48,7 +48,7 @@ def _retroactive_flatten(scores: list[int]) -> list[int]:
 
     return cleaned
 
-def extract_score_increases(csv_path: str) -> Dict[str, Dict[int, int | None]]:
+def extract_score_increases(df: pd.DataFrame) -> Dict[str, Dict[int, int | None]]:
     """
     Reads per-frame scores and returns the first frame_id where each valid score increase occurs,
     ignoring temporary bumps (e.g. 1->2->1 treated as continuous 1).
@@ -62,7 +62,6 @@ def extract_score_increases(csv_path: str) -> Dict[str, Dict[int, int | None]]:
             "right": {score: first_frame_id or None}
         }
     """
-    df = pd.read_csv(csv_path, usecols=["frame_id", "left_score", "right_score"])
     frames = df["frame_id"].to_list()
     result = {"left": {}, "right": {}}
 
