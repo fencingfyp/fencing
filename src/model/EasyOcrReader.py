@@ -1,14 +1,14 @@
-import easyocr
-import torch
 import cv2
+import easyocr
 import numpy as np
+
 
 class EasyOcrReader:
     def __init__(self, device, seven_segment=False):
-      self.reader = easyocr.Reader(['ch_sim'], gpu=device)
-      self.seven_segment = seven_segment
+        self.reader = easyocr.Reader(["ch_sim"], gpu=device)
+        self.seven_segment = seven_segment
 
-    def read(self, image, max_digits=2, height_tol=0.8, pad=10):
+    def read(self, image, max_digits=2, height_tol=0.8, pad=20):
         """
         Reads numeric content from an image.
 
@@ -29,8 +29,12 @@ class EasyOcrReader:
             else:
                 gray = roi.copy()
 
-            _, bin_img = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            contours, _ = cv2.findContours(bin_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            _, bin_img = cv2.threshold(
+                gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+            )
+            contours, _ = cv2.findContours(
+                bin_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
             if not contours:
                 return []
 
@@ -46,7 +50,9 @@ class EasyOcrReader:
             results = self.reader.recognize(image, allowlist="0123456789")
             score, conf = "", 0
             if results:
-                for bbox, text, prob in sorted(results, key=lambda x: x[2], reverse=True):
+                for bbox, text, prob in sorted(
+                    results, key=lambda x: x[2], reverse=True
+                ):
                     if bbox is None or len(bbox) != 4 or not text:
                         continue
                     score = text
@@ -61,13 +67,24 @@ class EasyOcrReader:
 
         digits, confidences = [], []
 
-        for (x, y, w, h) in boxes:
-            x0 = max(0, x - pad)
-            y0 = max(0, y - pad)
-            x1 = min(image.shape[1], x + w + pad)
-            y1 = min(image.shape[0], y + h + pad)
+        for x, y, w, h in boxes:
+            # Crop strictly within the box (no pre-padding)
+            x0 = max(0, x)
+            y0 = max(0, y)
+            x1 = min(image.shape[1], x + w)
+            y1 = min(image.shape[0], y + h)
 
             crop = image[y0:y1, x0:x1]
+
+            # Now pad outward using edge values
+            crop = cv2.copyMakeBorder(
+                crop,
+                top=pad,
+                bottom=pad,
+                left=pad,
+                right=pad,
+                borderType=cv2.BORDER_REPLICATE,
+            )
             results = self.reader.recognize(crop, allowlist="0123456789")
             if results:
                 best = max(results, key=lambda x: x[2])  # highest confidence
@@ -76,7 +93,7 @@ class EasyOcrReader:
                 confidences.append(prob)
 
         if digits:
-            final_score = ''.join(digits)
+            final_score = "".join(digits)
             avg_conf = np.mean(confidences) if confidences else 0
             return final_score, float(avg_conf)
         else:

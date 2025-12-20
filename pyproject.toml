@@ -5,4 +5,4 @@ build-backend = "setuptools.build_meta"
 [tool.pytest.ini_options]
 # tell pytest to look in tests/ and use src/ as the source path
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["."]

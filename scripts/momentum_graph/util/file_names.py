@@ -1,0 +1,6 @@
+CROPPED_SCORE_LIGHTS_VIDEO_NAME = "cropped_score_lights.mp4"
+ORIGINAL_VIDEO_NAME = "original.mp4"
+CROPPED_SCOREBOARD_VIDEO_NAME = "cropped_scoreboard.mp4"
+PROCESSED_SCORES_CSV = "processed_scores.csv"
+RAW_LIGHTS_CSV = "raw_lights.csv"
+SCORE_LIGHTS_VIDEO_NAME = "score_lights_detection_output.mp4"
