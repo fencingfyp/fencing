@@ -45,37 +45,47 @@ def main():
                 UiCodes.CUSTOM_2,
                 UiCodes.CUSTOM_3,
                 UiCodes.CUSTOM_4,
+                UiCodes.CUSTOM_5,
+                UiCodes.CUSTOM_6,
             ],
             must_be_valid=is_paused,
         )
-        if action == UiCodes.TOGGLE_SLOW:
-            slow = not slow
-            print(f"Slow mode {'enabled' if slow else 'disabled'}.")
-        elif action == UiCodes.QUIT:
-            early_exit = True
-            break
-        elif action == UiCodes.PAUSE:
-            is_paused = not is_paused
-        elif action == UiCodes.CUSTOM_1:
-            # set frame-1 to current frame
-            current_frame_index = max(0, current_frame_index - 1)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame_index)
-        elif action == UiCodes.CUSTOM_2:
-            # set frame+1 to current frame
-            current_frame_index += 1
-            cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame_index)
-        elif action == UiCodes.CUSTOM_4:
-            current_frame_index += int(fps * 10)  # skip forward 10 seconds
-            cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame_index)
-        elif action == UiCodes.CUSTOM_3:
-            current_frame_index = int(
-                max(0, current_frame_index - fps * 10)
-            )  # skip back 10 seconds
-            cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame_index)
+        match action:
+            case UiCodes.TOGGLE_SLOW:
+                slow = not slow
+                print(f"Slow mode {'enabled' if slow else 'disabled'}.")
+            case UiCodes.QUIT:
+                early_exit = True
+            case UiCodes.PAUSE:
+                is_paused = not is_paused
+            case UiCodes.CUSTOM_1:
+                # set frame-1 to current frame
+                current_frame_index = max(0, current_frame_index - 1)
+            case UiCodes.CUSTOM_2:
+                # set frame+1 to current frame
+                current_frame_index = min(
+                    cap.get(cv2.CAP_PROP_FRAME_COUNT) - 1, current_frame_index + 1
+                )
+            case UiCodes.CUSTOM_3:
+                current_frame_index = max(
+                    0, current_frame_index - int(fps)
+                )  # skip back 1 second
+            case UiCodes.CUSTOM_4:
+                current_frame_index = min(
+                    cap.get(cv2.CAP_PROP_FRAME_COUNT) - 1,
+                    current_frame_index + int(fps),
+                )  # skip forward 1 second
+            case UiCodes.CUSTOM_5:
+                current_frame_index = int(
+                    max(0, current_frame_index - fps * 10)
+                )  # skip back 10 seconds
+            case UiCodes.CUSTOM_6:
+                current_frame_index += int(fps * 10)  # skip forward 10 seconds
+            case _:
+                if not is_paused:
+                    current_frame_index += 1
 
-        if not is_paused:
-            current_frame_index += 1
-
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(current_frame_index))
         if early_exit:
             break
 

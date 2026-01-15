@@ -31,17 +31,18 @@ from scripts.momentum_graph.util.file_names import (
 )
 from src.util.io import setup_input_video_io
 
+MOMENTUM_GT_CSV_NAME = "momentum_gt.csv"
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Process and smooth score predictions."
     )
-    parser.add_argument("gt", type=str, help="Path to the ground truth CSV file.")
     parser.add_argument("folder", type=str, help="Path to the working folder.")
     parser.add_argument(
         "--algorithm",
         type=str,
-        default="first_increase",
+        default="last_activation",
         help="Refinement algorithm to use",
     )
     return parser.parse_args()
@@ -62,7 +63,7 @@ def main():
     scores_path = path.join(folder, SCORES_CSV_NAME)
     lights_path = path.join(folder, LIGHTS_CSV_NAME)
 
-    gt_momentum_path = args.gt
+    gt_momentum_path = path.join(folder, MOMENTUM_GT_CSV_NAME)
 
     # load video for fps
     cap, fps, _, _, n_frames = setup_input_video_io(video_path)

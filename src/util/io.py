@@ -32,5 +32,4 @@ def setup_output_video_io(output_path, fps, frame_size) -> cv2.VideoWriter | Non
 def setup_output_file(folder_path, filename):
     os.makedirs(folder_path, exist_ok=True)
     file_path = os.path.join(folder_path, filename)
-    print(f"Output file will be saved to: {file_path}")
     return file_path

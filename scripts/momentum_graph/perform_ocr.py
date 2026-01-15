@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 
 import scripts.momentum_graph.crop_scoreboard as crop_scoreboard
+from scripts.momentum_graph.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME
 from src.model.EasyOcrReader import EasyOcrReader
 from src.model.Ui import Ui, UiCodes
 from src.util.gpu import get_device
@@ -103,51 +104,18 @@ def validate_input_video(original_path: str, cropped_path: str) -> bool:
 
 
 def process_image(image, threshold_boundary, is_seven_segment=False):
-    # Scale up to help OCR (makes thin strokes thicker)
     gray_up = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    # scale = 10
-    # gray_up = cv2.resize(gray, (gray.shape[1]*scale, gray.shape[0]*scale), interpolation=cv2.INTER_CUBIC)
-    # print(gray_up.shape)
-    # Light denoising
-    # gray_up = cv2.medianBlur(gray_up, 3)
 
-    # apply unsharp masking
-    # gaussian = cv2.GaussianBlur(gray_up, (7, 7), 2.0)
-    # gray_up = cv2.addWeighted(gray_up, 2, gaussian, -1, 0)
+    # Pad with black border to avoid cutting off digits
+    gray_up = cv2.copyMakeBorder(
+        gray_up, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=[0, 0, 0]
+    )
 
     # Adaptive threshold (handles varying lighting)
     gray_up = cv2.threshold(gray_up, threshold_boundary, 255, cv2.THRESH_BINARY)[1]
     # if is_seven_segment:
     #     gray_up = fontify_7segment(gray_up)
 
-    # print(thresh)
-    # thresh = cv2.adaptiveThreshold(
-    #     gray_up, 255,
-    #     cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,
-    #     11, 2
-    # )[1]
-
-    # sharpen image
-    # kernel = np.array([[0, -1, 0],
-    #                    [-1, 5,-1],
-    #                    [0, -1, 0]])
-    # thresh = cv2.filter2D(gray_up, -1, kernel)
-
-    # Small closing to connect broken strokes
-    # kernel = np.ones((3,3), np.uint8)
-    # gray_up = cv2.morphologyEx(gray_up, cv2.MORPH_CLOSE, kernel, iterations=5)
-
-    # erode to thin lines
-    # kernel = np.ones((3,3), np.uint8)
-    # gray_up = cv2.erode(gray_up, kernel, iterations=3)
-
-    # Optional: remove tiny specks with contour filtering
-    # contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    # mask = np.zeros_like(thresh)
-    # for cnt in contours:
-    #     if cv2.contourArea(cnt) > 5:  # keep only larger blobs
-    #         cv2.drawContours(mask, [cnt], -1, 255, -1)
-    # clean = mask
     return cv2.cvtColor(gray_up, cv2.COLOR_GRAY2BGR)
 
 
@@ -271,7 +239,7 @@ def main():
 
     input_video_path = os.path.join(
         output_folder,
-        code.momentum_graph.util.file_names.CROPPED_SCOREBOARD_VIDEO_NAME,
+        CROPPED_SCOREBOARD_VIDEO_NAME,
     )
     original_video_path = os.path.join(
         output_folder, crop_scoreboard.ORIGINAL_VIDEO_NAME
@@ -399,9 +367,7 @@ def main():
                 video_writer.write(ui.current_frame)
 
             delay: int = FULL_DELAY if slow else FAST_FORWARD
-            action = ui.take_user_input(
-                delay, [UiCodes.QUIT, UiCodes.TOGGLE_SLOW, UiCodes.PAUSE]
-            )
+            action = ui.take_user_input(delay)
             if action == UiCodes.TOGGLE_SLOW:
                 slow = not slow
                 print(f"Slow mode {'enabled' if slow else 'disabled'}.")

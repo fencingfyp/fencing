@@ -1,6 +1,7 @@
 /data
 /models
 /outputs
+/matches_data
 
 .DS_Store
 

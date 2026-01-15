@@ -26,6 +26,8 @@ class UiCodes(enum.Enum):
     CUSTOM_2 = 8
     CUSTOM_3 = 9
     CUSTOM_4 = 10
+    CUSTOM_5 = 11
+    CUSTOM_6 = 12
 
 
 NORMAL_UI_FUNCTIONS = [UiCodes.QUIT, UiCodes.TOGGLE_SLOW, UiCodes.PAUSE]
@@ -44,6 +46,8 @@ ALLOWED_ACTIONS_TO_KEYBINDS = {
     UiCodes.CUSTOM_2: {ord("2")},
     UiCodes.CUSTOM_3: {ord("3")},
     UiCodes.CUSTOM_4: {ord("4")},
+    UiCodes.CUSTOM_5: {ord("5")},
+    UiCodes.CUSTOM_6: {ord("6")},
 }
 
 

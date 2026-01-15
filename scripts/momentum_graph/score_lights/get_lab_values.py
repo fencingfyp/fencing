@@ -3,37 +3,42 @@ import csv
 import os
 
 import cv2
+import pandas as pd
 
 from scripts.momentum_graph.perform_ocr import validate_input_video
+from scripts.momentum_graph.process_scores import densify_frames
 from scripts.momentum_graph.util.file_names import (
     CROPPED_SCORE_LIGHTS_VIDEO_NAME,
+    LAB_VALUES_CSV,
+    LAB_VALUES_VIDEO_NAME,
+    LIGHTS_GT_CSV,
+    ORIGINAL_VIDEO_NAME,
     RAW_LIGHTS_CSV,
     SCORE_LIGHTS_VIDEO_NAME,
 )
 from src.model.PatchLightDetector import Colour, PatchLightDetector
 from src.model.Ui import NORMAL_UI_FUNCTIONS, Ui, UiCodes
-from src.util.file_names import ORIGINAL_VIDEO_NAME
 from src.util.io import setup_input_video_io, setup_output_file, setup_output_video_io
 
 MIN_WINDOW_HEIGHT = 780
 
 
-def get_output_header_row(is_debug: bool = False) -> list[str]:
-    headers = ["frame_id", "left_light", "right_light"]
-    if is_debug:
-        headers.extend(["left_debug_info", "right_debug_info"])
+def get_output_header_row() -> list[str]:
+    headers = ["frame_id", "label", "l", "a", "b"]
     return headers
 
 
 def get_parse_args():
-    parser = argparse.ArgumentParser(description="Detect score lights")
+    parser = argparse.ArgumentParser(
+        description="Obtain the LAB values of score lights"
+    )
     parser.add_argument(
         "output_folder", help="Path to output folder for intermediate/final products"
     )
     parser.add_argument(
         "--output-video",
         action="store_true",
-        help="If set, outputs video with OCR results",
+        help="If set, outputs video with LAB value results",
     )
     parser.add_argument(
         "--demo", action="store_true", help="If set, doesn't output anything"
@@ -49,34 +54,43 @@ def main():
     output_video = args.output_video
     output_folder = args.output_folder
     demo_mode = args.demo
-    debug_mode = args.debug
 
-    output_csv_path = setup_output_file(output_folder, RAW_LIGHTS_CSV)
+    output_csv_path = setup_output_file(output_folder, LAB_VALUES_CSV)
     input_video_path = os.path.join(output_folder, CROPPED_SCORE_LIGHTS_VIDEO_NAME)
     original_video_path = os.path.join(output_folder, ORIGINAL_VIDEO_NAME)
+    lights_gt_csv_path = os.path.join(output_folder, LIGHTS_GT_CSV)
 
     validate_input_video(original_video_path, input_video_path)
 
-    cap, fps, original_width, original_height, _ = setup_input_video_io(
+    cap, fps, original_width, original_height, total_length = setup_input_video_io(
         input_video_path
     )
     FULL_DELAY = int(1000 / fps)
     FAST_FORWARD = min(FULL_DELAY // 16, 1)
     print(f"Video FPS: {fps}, Frame delay: {FULL_DELAY} ms")
 
+    lights_gt = pd.read_csv(lights_gt_csv_path)
+    lights_gt.rename(
+        columns={"left": "left_score", "right": "right_score"}, inplace=True
+    )
+    lights_gt = densify_frames(lights_gt, total_length=total_length)
+    lights_gt.rename(
+        columns={"left_score": "left", "right_score": "right"}, inplace=True
+    )
+
     # UI
     slow = False
     early_exit = False
 
     ui = Ui(
-        "Score Light Detection",
+        "LAB values collection",
         width=original_width,
         height=original_height,
         display_height=MIN_WINDOW_HEIGHT,
     )
     video_writer: cv2.VideoWriter = None
     if output_video:
-        output_video_path = os.path.join(output_folder, SCORE_LIGHTS_VIDEO_NAME)
+        output_video_path = os.path.join(output_folder, LAB_VALUES_VIDEO_NAME)
         video_writer = setup_output_video_io(
             output_video_path, fps, ui.get_output_dimensions()
         )
@@ -100,7 +114,7 @@ def main():
     mode = "a" if demo_mode else "w"
     with open(output_csv_path, mode, newline="") as f:
         csv_writer = csv.writer(f)
-        header_row = get_output_header_row(is_debug=debug_mode)
+        header_row = get_output_header_row()
         if not demo_mode:
             csv_writer.writerow(header_row)
         while True:
@@ -111,34 +125,24 @@ def main():
             ui.set_fresh_frame(frame)
             ui.refresh_frame()
 
-            is_left_red = (
-                left_colour_detector.classify(
-                    ui.get_current_frame(), left_score_positions
-                )
-                == Colour.RED
+            left_lab_values = left_colour_detector.get_lab_values(
+                ui.get_current_frame(), left_score_positions
             )
-            is_right_green = (
-                right_colour_detector.classify(
-                    ui.get_current_frame(), right_score_positions
-                )
-                == Colour.GREEN
+            right_lab_values = right_colour_detector.get_lab_values(
+                ui.get_current_frame(), right_score_positions
             )
 
             ui.draw_quadrilateral(left_score_positions, color=(0, 0, 255))
             ui.draw_quadrilateral(right_score_positions, color=(0, 255, 0))
 
             if not demo_mode:
-                row = [frame_id, 1 if is_left_red else 0, 1 if is_right_green else 0]
-                if debug_mode:
-                    debug_info = [
-                        left_colour_detector.get_debug_info(),
-                        right_colour_detector.get_debug_info(),
-                    ]
-                    row.extend(debug_info)
-                csv_writer.writerow(row)
+                if int(lights_gt.at[frame_id, "left"]) == 1:
+                    csv_writer.writerow([frame_id, "red", *left_lab_values])
+                if int(lights_gt.at[frame_id, "right"]) == 1:
+                    csv_writer.writerow([frame_id, "green", *right_lab_values])
 
             ui.write_to_ui(
-                f"left light on: {is_left_red}, right light on: {is_right_green}"
+                f"Frame: {frame_id} | Left LAB: {left_lab_values} | Right LAB: {right_lab_values}"
             )
             ui.show_frame()
 

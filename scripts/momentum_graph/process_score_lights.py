@@ -4,7 +4,8 @@ from os import path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from scripts.momentum_graph.util.file_names import ORIGINAL_VIDEO_NAME
+from scripts.momentum_graph.util.file_names import RAW_LIGHTS_CSV
+from src.util.file_names import ORIGINAL_VIDEO_NAME
 from src.util.io import setup_input_video_io
 
 OUTPUT_CSV_NAME = "processed_lights.csv"
@@ -85,13 +86,13 @@ def main():
     cap.release()
     demo_mode = args.demo
     # --- 1. Load and smooth ---
-    df = pd.read_csv(f"{folder}/raw_lights.csv")
+    df = pd.read_csv(f"{folder}/{RAW_LIGHTS_CSV}")
 
-    df["left_light"] = remove_false_negatives(df["left_light"], min_off_len=fps // 2)
-    df["right_light"] = remove_false_negatives(df["right_light"], min_off_len=fps // 2)
+    # df["left_light"] = remove_false_negatives(df["left_light"], min_off_len=fps // 2)
+    # df["right_light"] = remove_false_negatives(df["right_light"], min_off_len=fps // 2)
 
-    df["left_light"] = remove_false_positives(df["left_light"], min_on_len=fps // 2)
-    df["right_light"] = remove_false_positives(df["right_light"], min_on_len=fps // 2)
+    # df["left_light"] = remove_false_positives(df["left_light"], min_on_len=fps // 2)
+    # df["right_light"] = remove_false_positives(df["right_light"], min_on_len=fps // 2)
     # --- 2. Plot ---
     plt.figure("Left Light", figsize=(8, 3))
     plt.plot(df["frame_id"], df["left_light"], label="Left light")

@@ -83,7 +83,7 @@ def get_arguments():
     parser.add_argument(
         "--algorithm",
         type=str,
-        default="first_increase",
+        default="last_activation",
         help="Refinement algorithm to use",
     )
     return parser.parse_args()
@@ -101,7 +101,6 @@ def main():
     # load video for fps
     cap, fps, _, _, n_frames = setup_input_video_io(video_path)
     cap.release()
-
     # Load processed scores
     scores_df = pd.read_csv(
         scores_path, usecols=["frame_id", "left_score", "right_score"]
@@ -133,7 +132,7 @@ def plot_score_light_progression(
     refined_scores: dict[str, dict[int, int]],
     lights: pd.DataFrame,
     fps: int,
-    frame_ids: int,
+    frame_ids: np.ndarray,
 ):
 
     time_s = frame_ids / fps

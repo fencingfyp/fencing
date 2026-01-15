@@ -6,13 +6,11 @@ import os
 import cv2
 import numpy as np
 
-from scripts.momentum_graph.util.file_names import (
-    CROPPED_SCOREBOARD_VIDEO_NAME,
-    ORIGINAL_VIDEO_NAME,
-)
+from scripts.momentum_graph.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME
 from src.model.Quadrilateral import Quadrilateral
 from src.model.tracker import OrbTracker, SiftTracker
 from src.model.Ui import NORMAL_UI_FUNCTIONS, Ui, UiCodes
+from src.util.file_names import ORIGINAL_VIDEO_NAME
 from src.util.io import setup_input_video_io, setup_output_file, setup_output_video_io
 
 

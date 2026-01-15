@@ -37,4 +37,10 @@ python mark_video.py csv_path video_path --save-video --output-path outputs/outp
 - `--output-path`: File to store video (default: script folder)
 
 
+## Dependencies
+### Mamba/Conda
 python 3.13
+pyside6
+
+### Pip
+???

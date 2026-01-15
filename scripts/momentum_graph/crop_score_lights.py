@@ -11,12 +11,10 @@ from scripts.momentum_graph.crop_scoreboard import (
     get_rectified_target,
     get_scoreboard_initial_corners,
 )
-from scripts.momentum_graph.util.file_names import (
-    CROPPED_SCORE_LIGHTS_VIDEO_NAME,
-    ORIGINAL_VIDEO_NAME,
-)
-from src.model.tracker import SiftTracker
-from src.model.Ui import NORMAL_UI_FUNCTIONS, Ui, UiCodes
+from scripts.momentum_graph.util.file_names import CROPPED_SCORE_LIGHTS_VIDEO_NAME
+from src.model.tracker import OrbTracker, SiftTracker
+from src.model.Ui import Ui, UiCodes
+from src.util.file_names import ORIGINAL_VIDEO_NAME
 from src.util.io import setup_input_video_io, setup_output_file, setup_output_video_io
 
 
@@ -72,7 +70,7 @@ def main():
     )
 
     # Initialise planar tracker
-    planar_tracker = SiftTracker()
+    planar_tracker = OrbTracker()
     planar_tracker.add_target(plane_id, frame, positions)
 
     if write_output:

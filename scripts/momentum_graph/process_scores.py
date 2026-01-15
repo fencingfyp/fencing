@@ -125,12 +125,12 @@ def process_scores(
                 # ----------------------------------------
                 # Option 1: Snap to previous (maintain stability)
                 # ----------------------------------------
-                # values[i] = values[i - 1]
+                values[i] = values[i - 1]
 
                 # ----------------------------------------
                 # Option 2: Ignore (leave as is)
                 # ----------------------------------------
-                pass
+                # pass
 
         pred[col] = values
 
