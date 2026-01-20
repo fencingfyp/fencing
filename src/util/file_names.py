@@ -1,1 +1,5 @@
 ORIGINAL_VIDEO_NAME = "original.mp4"
+CROPPED_SCOREBOARD_VIDEO_NAME = "cropped_scoreboard.mp4"
+CROPPED_SCORE_LIGHTS_VIDEO_NAME = "cropped_score_lights.mp4"
+OCR_OUTPUT_CSV_NAME = "raw_scores.csv"
+DETECT_LIGHTS_OUTPUT_CSV_NAME = "raw_lights.csv"

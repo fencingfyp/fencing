@@ -3,9 +3,9 @@ import argparse
 import numpy as np
 import pandas as pd
 
+from model.OpenCvUi import OpenCvUi, UiCodes
 from scripts.momentum_graph.process_scores import densify_frames
 from scripts.momentum_graph.util.extract_score_increases import extract_score_increases
-from src.model.Ui import Ui, UiCodes
 from src.util.io import setup_input_video_io, setup_output_video_io
 
 DEFAULT_FPS = 50
@@ -170,7 +170,7 @@ def main():
     slow = False
     early_exit = False
 
-    ui = Ui("Fencing Analysis", width=int(width), height=int(height))
+    ui = OpenCvUi("Fencing Analysis", width=int(width), height=int(height))
     if output_video_path:
         writer = setup_output_video_io(
             output_video_path, fps, ui.get_output_dimensions()

@@ -5,19 +5,16 @@ import os
 import cv2
 import pandas as pd
 
+from model.OpenCvUi import NORMAL_UI_FUNCTIONS, OpenCvUi, UiCodes
 from scripts.momentum_graph.perform_ocr import validate_input_video
 from scripts.momentum_graph.process_scores import densify_frames
 from scripts.momentum_graph.util.file_names import (
-    CROPPED_SCORE_LIGHTS_VIDEO_NAME,
     LAB_VALUES_CSV,
     LAB_VALUES_VIDEO_NAME,
     LIGHTS_GT_CSV,
-    ORIGINAL_VIDEO_NAME,
-    RAW_LIGHTS_CSV,
-    SCORE_LIGHTS_VIDEO_NAME,
 )
-from src.model.PatchLightDetector import Colour, PatchLightDetector
-from src.model.Ui import NORMAL_UI_FUNCTIONS, Ui, UiCodes
+from src.model.PatchLightDetector import PatchLightDetector
+from src.util.file_names import CROPPED_SCORE_LIGHTS_VIDEO_NAME, ORIGINAL_VIDEO_NAME
 from src.util.io import setup_input_video_io, setup_output_file, setup_output_video_io
 
 MIN_WINDOW_HEIGHT = 780
@@ -82,7 +79,7 @@ def main():
     slow = False
     early_exit = False
 
-    ui = Ui(
+    ui = OpenCvUi(
         "LAB values collection",
         width=original_width,
         height=original_height,
@@ -101,13 +98,11 @@ def main():
         print("Error: Could not read first frame.")
         return
 
-    ui.set_fresh_frame(frame)
-
     left_colour_detector = PatchLightDetector("red")
     right_colour_detector = PatchLightDetector("green")
 
-    left_score_positions = ui.get_quadrilateral("left fencer score light")
-    right_score_positions = ui.get_quadrilateral("right fencer score light")
+    left_score_positions = ui.get_quadrilateral(frame, "left fencer score light")
+    right_score_positions = ui.get_quadrilateral(frame, "right fencer score light")
 
     frame_id = 0
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # reset to beginning

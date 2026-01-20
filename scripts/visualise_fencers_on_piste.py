@@ -3,7 +3,7 @@ import argparse
 import cv2
 
 from model.FrameInfoManager import FrameInfoManager
-from model.Ui import Ui, UiCodes
+from model.OpenCvUi import OpenCvUi, UiCodes
 from src.model.tracker.OrbTracker import OrbTracker
 from src.util.utils import (
     LEFT_FENCER_SCORE_LIGHT_INSTRUCTIONS,
@@ -68,7 +68,7 @@ def main():
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    ui = Ui("Fencing Analysis", width=int(width), height=int(height))
+    ui = OpenCvUi("Fencing Analysis", width=int(width), height=int(height))
     if args.output_video:
         print(f"Output video will be saved to: {args.output_video}")
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
@@ -95,8 +95,7 @@ def main():
         print("No frames found in CSV, exiting.")
         return
 
-    ui.set_fresh_frame(frame)
-    piste_positions = ui.get_piste_positions()
+    piste_positions = ui.get_piste_positions(frame)
     if len(piste_positions) != 4:
         print("Piste positions not fully selected, exiting.")
         return

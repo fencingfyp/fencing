@@ -54,6 +54,45 @@
     <string>Back</string>
    </property>
   </widget>
+  <widget class="QPushButton" name="momentumGraphButton">
+   <property name="geometry">
+    <rect>
+     <x>50</x>
+     <y>660</y>
+     <width>141</width>
+     <height>51</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Momentum Graph</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="heatMapButton">
+   <property name="geometry">
+    <rect>
+     <x>210</x>
+     <y>660</y>
+     <width>141</width>
+     <height>51</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Heat Map</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="actionMapButton">
+   <property name="geometry">
+    <rect>
+     <x>370</x>
+     <y>660</y>
+     <width>141</width>
+     <height>51</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Action Map</string>
+   </property>
+  </widget>
  </widget>
  <customwidgets>
   <customwidget>

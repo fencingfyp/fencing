@@ -5,10 +5,13 @@ import os
 import cv2
 import numpy as np
 
-import scripts.momentum_graph.crop_scoreboard as crop_scoreboard
-from scripts.momentum_graph.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME
+from src.model import OpenCvUi, UiCodes
 from src.model.EasyOcrReader import EasyOcrReader
-from src.model.Ui import Ui, UiCodes
+from src.util.file_names import (
+    CROPPED_SCOREBOARD_VIDEO_NAME,
+    OCR_OUTPUT_CSV_NAME,
+    ORIGINAL_VIDEO_NAME,
+)
 from src.util.gpu import get_device
 from src.util.io import setup_input_video_io, setup_output_file, setup_output_video_io
 from src.util.utils import (
@@ -20,7 +23,6 @@ from src.util.utils import (
 DO_OCR_EVERY_N_FRAMES = (
     5  # Set >1 to skip frames for speed (but less frequent score updates)
 )
-OUTPUT_CSV_NAME = "raw_scores.csv"
 MIN_WINDOW_HEIGHT = 780
 
 OUTPUT_VIDEO_NAME = "perform_ocr_output.mp4"
@@ -106,7 +108,6 @@ def validate_input_video(original_path: str, cropped_path: str) -> bool:
 def process_image(image, threshold_boundary, is_seven_segment=False):
     gray_up = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Pad with black border to avoid cutting off digits
     gray_up = cv2.copyMakeBorder(
         gray_up, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=[0, 0, 0]
     )
@@ -158,7 +159,7 @@ def random_with_min_gap(total_frames, n, min_gap):
 
 
 def ask_user_confirmation(
-    ui: Ui, frame, threshold_boundary, ocr_reader, n_correct, n_total
+    ui: OpenCvUi, frame, threshold_boundary, ocr_reader, n_correct, n_total
 ) -> tuple[int, int, bool]:
     score, conf = extract_score_from_frame(frame, threshold_boundary, ocr_reader)
     processed = process_image(frame, threshold_boundary, ocr_reader.seven_segment)
@@ -183,7 +184,7 @@ def ask_user_confirmation(
 
 
 def calibrate_ocr(
-    ui: Ui,
+    ui: OpenCvUi,
     ocr_reader,
     cap,
     threshold_boundary,
@@ -241,12 +242,10 @@ def main():
         output_folder,
         CROPPED_SCOREBOARD_VIDEO_NAME,
     )
-    original_video_path = os.path.join(
-        output_folder, crop_scoreboard.ORIGINAL_VIDEO_NAME
-    )
+    original_video_path = os.path.join(output_folder, ORIGINAL_VIDEO_NAME)
     validate_input_video(original_video_path, input_video_path)
 
-    output_csv_path = setup_output_file(output_folder, OUTPUT_CSV_NAME)
+    output_csv_path = setup_output_file(output_folder, OCR_OUTPUT_CSV_NAME)
 
     cap, fps, original_width, original_height, frame_count = setup_input_video_io(
         input_video_path
@@ -258,7 +257,7 @@ def main():
     # UI
     slow = False
     early_exit = False
-    ui = Ui(
+    ui = OpenCvUi(
         "Performing OCR",
         width=int(original_width),
         height=int(original_height),
@@ -271,16 +270,16 @@ def main():
         print("Error: Could not read first frame.")
         return
 
-    ui.set_fresh_frame(frame)
-
     left_score_positions = regularise_rectangle(
         ui.get_n_points(
-            generate_select_quadrilateral_instructions("left fencer score display")
+            frame,
+            generate_select_quadrilateral_instructions("left fencer score display"),
         )
     )
     right_score_positions = regularise_rectangle(
         ui.get_n_points(
-            generate_select_quadrilateral_instructions("right fencer score display")
+            frame,
+            generate_select_quadrilateral_instructions("right fencer score display"),
         )
     )
 

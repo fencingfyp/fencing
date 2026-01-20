@@ -2,7 +2,7 @@ import argparse
 
 import cv2
 
-from src.model import Ui, UiCodes
+from src.model import OpenCvUi, UiCodes
 from src.util.io import setup_input_video_io
 
 
@@ -22,7 +22,7 @@ def main():
     fast_forward = min(full_delay // 8, 1)
     print(f"Video FPS: {fps:.2f}")
 
-    ui = Ui("Window", width=width, height=height)
+    ui = OpenCvUi("Window", width=width, height=height)
 
     current_frame_index = 0
     early_exit = False

@@ -4,15 +4,15 @@ import os
 
 import cv2
 
+from model.OpenCvUi import NORMAL_UI_FUNCTIONS, OpenCvUi, UiCodes
 from scripts.momentum_graph.perform_ocr import validate_input_video
-from scripts.momentum_graph.util.file_names import (
-    CROPPED_SCORE_LIGHTS_VIDEO_NAME,
-    RAW_LIGHTS_CSV,
-    SCORE_LIGHTS_VIDEO_NAME,
-)
+from scripts.momentum_graph.util.file_names import SCORE_LIGHTS_VIDEO_NAME
 from src.model.PatchLightDetector import Colour, PatchLightDetector
-from src.model.Ui import NORMAL_UI_FUNCTIONS, Ui, UiCodes
-from src.util.file_names import ORIGINAL_VIDEO_NAME
+from src.util.file_names import (
+    CROPPED_SCORE_LIGHTS_VIDEO_NAME,
+    DETECT_LIGHTS_OUTPUT_CSV_NAME,
+    ORIGINAL_VIDEO_NAME,
+)
 from src.util.io import setup_input_video_io, setup_output_file, setup_output_video_io
 
 MIN_WINDOW_HEIGHT = 780
@@ -51,7 +51,7 @@ def main():
     demo_mode = args.demo
     debug_mode = args.debug
 
-    output_csv_path = setup_output_file(output_folder, RAW_LIGHTS_CSV)
+    output_csv_path = setup_output_file(output_folder, DETECT_LIGHTS_OUTPUT_CSV_NAME)
     input_video_path = os.path.join(output_folder, CROPPED_SCORE_LIGHTS_VIDEO_NAME)
     original_video_path = os.path.join(output_folder, ORIGINAL_VIDEO_NAME)
 
@@ -68,7 +68,7 @@ def main():
     slow = False
     early_exit = False
 
-    ui = Ui(
+    ui = OpenCvUi(
         "Score Light Detection",
         width=original_width,
         height=original_height,
@@ -87,13 +87,11 @@ def main():
         print("Error: Could not read first frame.")
         return
 
-    ui.set_fresh_frame(frame)
-
     left_colour_detector = PatchLightDetector("red")
     right_colour_detector = PatchLightDetector("green")
 
-    left_score_positions = ui.get_quadrilateral("left fencer score light")
-    right_score_positions = ui.get_quadrilateral("right fencer score light")
+    left_score_positions = ui.get_quadrilateral(frame, "left fencer score light")
+    right_score_positions = ui.get_quadrilateral(frame, "right fencer score light")
 
     frame_id = 0
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # reset to beginning

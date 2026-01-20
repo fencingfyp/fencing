@@ -37,6 +37,15 @@ class Ui_ManageMatchWidget(object):
         self.backButton = QPushButton(ManageMatchWidget)
         self.backButton.setObjectName(u"backButton")
         self.backButton.setGeometry(QRect(10, 10, 100, 32))
+        self.momentumGraphButton = QPushButton(ManageMatchWidget)
+        self.momentumGraphButton.setObjectName(u"momentumGraphButton")
+        self.momentumGraphButton.setGeometry(QRect(50, 660, 141, 51))
+        self.heatMapButton = QPushButton(ManageMatchWidget)
+        self.heatMapButton.setObjectName(u"heatMapButton")
+        self.heatMapButton.setGeometry(QRect(210, 660, 141, 51))
+        self.actionMapButton = QPushButton(ManageMatchWidget)
+        self.actionMapButton.setObjectName(u"actionMapButton")
+        self.actionMapButton.setGeometry(QRect(370, 660, 141, 51))
 
         self.retranslateUi(ManageMatchWidget)
 
@@ -47,5 +56,8 @@ class Ui_ManageMatchWidget(object):
         ManageMatchWidget.setWindowTitle(QCoreApplication.translate("ManageMatchWidget", u"Form", None))
         self.matchName.setText(QCoreApplication.translate("ManageMatchWidget", u"matchName", None))
         self.backButton.setText(QCoreApplication.translate("ManageMatchWidget", u"Back", None))
+        self.momentumGraphButton.setText(QCoreApplication.translate("ManageMatchWidget", u"Momentum Graph", None))
+        self.heatMapButton.setText(QCoreApplication.translate("ManageMatchWidget", u"Heat Map", None))
+        self.actionMapButton.setText(QCoreApplication.translate("ManageMatchWidget", u"Action Map", None))
     # retranslateUi
 

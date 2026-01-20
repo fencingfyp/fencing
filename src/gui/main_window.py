@@ -4,6 +4,8 @@ from PySide6.QtCore import Slot
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 
+from src.gui.momentum_graph.momentum_graph_main_widget import MomentumGraphMainWidget
+
 from .manage_match_widget import ManageMatchWidget
 from .select_match_widget import SelectMatchWidget
 
@@ -34,16 +36,28 @@ class MainWindow(QMainWindow):
         # Status Bar
         self.status = self.statusBar()
 
-        self.stack = QStackedWidget()
+        self.stack = QStackedWidget(self)
+        self.stack.currentChanged.connect(
+            lambda idx: self.stack.widget(idx).update() and self.stack.clearFocus()
+        )
 
         self.select_match_widget = SelectMatchWidget()
-        self.manage_match_widget = ManageMatchWidget()
         self.stack.addWidget(self.select_match_widget)
-        self.stack.addWidget(self.manage_match_widget)
-        self.stack.currentChanged.connect(lambda idx: self.stack.widget(idx).update())
         self.select_match_widget.selected.connect(self.on_match_selected)
+
+        self.manage_match_widget = ManageMatchWidget()
+        self.stack.addWidget(self.manage_match_widget)
         self.manage_match_widget.navigate_to_select_match.connect(
             lambda: self.stack.setCurrentWidget(self.select_match_widget)
+        )
+
+        self.momentum_graph_widget = MomentumGraphMainWidget()
+        self.stack.addWidget(self.momentum_graph_widget)
+        self.momentum_graph_widget.navigate_to_manage_match.connect(
+            lambda: self.stack.setCurrentWidget(self.manage_match_widget)
+        )
+        self.manage_match_widget.navigate_to_momentum_graph.connect(
+            lambda: self.stack.setCurrentWidget(self.momentum_graph_widget)
         )
 
         self.setCentralWidget(self.stack)
@@ -53,6 +67,9 @@ class MainWindow(QMainWindow):
         self.status.showMessage(f"Selected match: {match_name}")
         self.manage_match_widget.set_match(match_name)
         self.stack.setCurrentWidget(self.manage_match_widget)
+        self.momentum_graph_widget.set_match(
+            match_name,
+        )
 
 
 if __name__ == "__main__":

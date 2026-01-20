@@ -11,7 +11,7 @@ from typing import Any
 import cv2
 
 from model.FrameInfoManager import FrameInfoManager
-from model.Ui import Ui, UiCodes
+from model.OpenCvUi import OpenCvUi, UiCodes
 from scripts.estimate_poses import get_header_row
 
 # --- CONFIG ---
@@ -57,7 +57,7 @@ def row_mapper(row: list[str]) -> dict[str, Any]:
 
 def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
     cap: cv2.VideoCapture = cv2.VideoCapture(video_path)
-    ui: Ui = Ui(
+    ui: OpenCvUi = OpenCvUi(
         "Obtain Fencer IDs",
         width=int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
         height=int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
@@ -161,7 +161,7 @@ def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
 
 
 def get_fencer_id(
-    ui: Ui,
+    ui: OpenCvUi,
     detections: dict[int, dict],
     known_ids: set[int],
     exclude_ids: set[int],
