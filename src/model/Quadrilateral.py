@@ -28,7 +28,7 @@ class Quadrilateral:
 
     def opencv_format(self) -> np.ndarray:
         """Return points in OpenCV format (Nx1x2 array)."""
-        return self.points.reshape((-1, 1, 2))
+        return self.points.reshape((-1, 1, 2)).copy()
 
     @staticmethod
     def from_xywh(xywh: tuple[int, int, int, int]) -> "Quadrilateral":
@@ -50,7 +50,7 @@ class Quadrilateral:
     def to_drawable(self) -> np.ndarray:
         """Return points in a format suitable for drawing functions."""
         ordered_points = self._order_points()
-        return ordered_points.reshape((-1, 1, 2))
+        return ordered_points.reshape((-1, 1, 2)).copy()
 
     def _order_points(self) -> np.ndarray:
         """Ensure points are ordered as: top-left, top-right, bottom-right, bottom-left."""

@@ -1,60 +1,61 @@
 import os
+from typing import override
 
 import cv2
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import Slot
 
-from scripts.momentum_graph.crop_scoreboard import crop_region
+from src.gui.momentum_graph.crop_scoreboard_widget import CropRegionPysideController
 from src.gui.util.task_graph import MomentumGraphTasksToIds
-from src.model import PysideUi
 from src.util.file_names import CROPPED_SCORE_LIGHTS_VIDEO_NAME, ORIGINAL_VIDEO_NAME
 
-from .ui_crop_score_lights_widget import Ui_CropScoreLightsWidget
+from .base_task_widget import BaseTaskWidget
 
 
-class CropScoreLightsWidget(QWidget):
-    back_button_clicked = Signal()
-    run_started = Signal(object)
-    run_completed = Signal(object)
-
+class CropScoreLightsWidget(BaseTaskWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.ui = Ui_CropScoreLightsWidget()
-        self.ui.setupUi(self)
 
-        self.cap = None
-        self.working_dir = None
-
-        self.ui.backButton.clicked.connect(self.back_button_clicked.emit)
-
-        # UI adapter (composition)
-        self.interactive_ui = PysideUi(
-            video_label=self.ui.videoLabel,
-            text_label=self.ui.uiTextLabel,
-            parent=self,
-        )
-
-        self.ui.runButton.clicked.connect(self.on_run_button_clicked)
-        self.interactive_ui.task_completed.connect(
-            lambda: self.run_completed.emit(MomentumGraphTasksToIds.CROP_SCORE_LIGHTS)
-        )
-
-    def set_working_directory(self, working_dir: str):
-        self.working_dir = working_dir
-        video_path = os.path.join(working_dir, ORIGINAL_VIDEO_NAME)
+    @override
+    def setup(self):
+        video_path = os.path.join(self.working_dir, ORIGINAL_VIDEO_NAME)
         self.cap = cv2.VideoCapture(video_path)
+        self.ui.videoLabel.setFixedSize(
+            *self.get_new_video_label_size(
+                int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+            )
+        )
         self.interactive_ui.show_single_frame(self.cap)
+        self.interactive_ui.write("Press 'Run' to start cropping the score lights.")
 
-    def on_run_button_clicked(self):
+    @override
+    @Slot()
+    def on_runButton_clicked(self):
         if not self.cap or not self.working_dir:
             return
 
         self.run_started.emit(MomentumGraphTasksToIds.CROP_SCORE_LIGHTS)
-        crop_region(
+
+        output_path = os.path.join(self.working_dir, CROPPED_SCORE_LIGHTS_VIDEO_NAME)
+
+        # Create controller
+        self.controller = CropRegionPysideController(
             cap=self.cap,
-            output_path=os.path.join(self.working_dir, CROPPED_SCORE_LIGHTS_VIDEO_NAME),
+            output_path=output_path,
             ui=self.interactive_ui,
+            parent=self,
+            region="score lights",
         )
+
+        # When finished → emit completion
+        self.controller.finished.connect(self._on_finished)
+
+        # Start async pipeline
+        self.controller.start()
+
+    def _on_finished(self):
+        self.interactive_ui.write("Cropping score lights completed.")
+        self.run_completed.emit(MomentumGraphTasksToIds.CROP_SCORE_LIGHTS)
 
 
 if __name__ == "__main__":
@@ -64,6 +65,6 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
     widget = CropScoreLightsWidget()
-    widget.set_working_directory("matches_data/sabre_1/original.mp4")
+    widget.set_working_directory("matches_data/sabre_1")
     widget.show()
     sys.exit(app.exec())

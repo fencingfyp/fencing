@@ -77,6 +77,16 @@ def remove_false_positives(series, min_on_len=5):
     return pd.Series(s, index=series.index)
 
 
+def process_score_lights(df: pd.DataFrame, fps: int) -> pd.DataFrame:
+    df = df.copy()
+    df["left_light"] = remove_false_negatives(df["left_light"], min_off_len=fps // 2)
+    df["right_light"] = remove_false_negatives(df["right_light"], min_off_len=fps // 2)
+
+    df["left_light"] = remove_false_positives(df["left_light"], min_on_len=fps // 2)
+    df["right_light"] = remove_false_positives(df["right_light"], min_on_len=fps // 2)
+    return df
+
+
 def main():
     args = parse_arguments()
     folder = args.folder
@@ -86,12 +96,7 @@ def main():
     demo_mode = args.demo
     # --- 1. Load and smooth ---
     df = pd.read_csv(path.join(folder, DETECT_LIGHTS_OUTPUT_CSV_NAME))
-
-    # df["left_light"] = remove_false_negatives(df["left_light"], min_off_len=fps // 2)
-    # df["right_light"] = remove_false_negatives(df["right_light"], min_off_len=fps // 2)
-
-    # df["left_light"] = remove_false_positives(df["left_light"], min_on_len=fps // 2)
-    # df["right_light"] = remove_false_positives(df["right_light"], min_on_len=fps // 2)
+    df = process_score_lights(df, fps=fps)
     # --- 2. Plot ---
     plt.figure("Left Light", figsize=(8, 3))
     plt.plot(df["frame_id"], df["left_light"], label="Left light")

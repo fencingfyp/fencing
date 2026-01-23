@@ -122,6 +122,7 @@ class TaskGraph(QObject):
     def _outputs_exist(self, task: Task) -> bool:
         if self.working_dir is None:
             return all(p.exists() for p in task.outputs)
+        # [print(self.working_dir / p) for p in task.outputs]
         return all((self.working_dir / p).exists() for p in task.outputs)
 
     def _deps_done(self, task: Task) -> bool:

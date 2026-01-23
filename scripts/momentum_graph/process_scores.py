@@ -5,11 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-import scripts.momentum_graph.perform_ocr as perform_ocr
-from scripts.momentum_graph.util.file_names import (
-    CROPPED_SCOREBOARD_VIDEO_NAME,
-    PROCESSED_SCORES_CSV,
-)
+from scripts.momentum_graph.util.file_names import PROCESSED_SCORES_CSV
+from src.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME, OCR_OUTPUT_CSV_NAME
 from src.util.io import setup_input_video_io
 
 
@@ -67,7 +64,7 @@ def process_scores(
     pred: pd.DataFrame, total_length=None, window_median=350, confidence_threshold=0.5
 ) -> np.ndarray:
     """
-    Loads, cleans, and smooths prediction CSVs.
+    Cleans, and smooths prediction CSVs.
     Handles sparse frame_ids by forward-filling to produce a dense sequence.
 
     Returns:
@@ -154,7 +151,7 @@ def main():
     folder = args.folder
     demo_mode = args.demo
     # Load both CSVs
-    df = pd.read_csv(path.join(folder, perform_ocr.OUTPUT_CSV_NAME))
+    df = pd.read_csv(path.join(folder, OCR_OUTPUT_CSV_NAME))
     cap, fps, _, _, total_length = setup_input_video_io(
         path.join(folder, CROPPED_SCOREBOARD_VIDEO_NAME)
     )

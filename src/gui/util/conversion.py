@@ -34,3 +34,22 @@ def np_to_pixmap(image: np.ndarray) -> QPixmap:
     qimg = QImage(frame.data, w, h, bits_per_line, QImage.Format_RGB888)
     pixmap = QPixmap.fromImage(qimg)
     return pixmap
+
+
+def pixmap_to_np(pixmap: QPixmap) -> np.ndarray | None:
+    qimg = pixmap.toImage().convertToFormat(QImage.Format_RGB888)
+
+    w = qimg.width()
+    h = qimg.height()
+    bytes_per_line = qimg.bytesPerLine()
+
+    ptr = qimg.bits()  # memoryview
+    arr = np.frombuffer(ptr, np.uint8)
+
+    arr = arr.reshape((h, bytes_per_line))[:, : w * 3]
+    arr = arr.reshape((h, w, 3))
+    arr = arr.copy()
+
+    arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+
+    return arr

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'crop_scoreboard_widget.ui'
+## Form generated from reading UI file 'base_task_widget.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.10.1
 ##
@@ -18,34 +18,34 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QApplication, QLabel, QPushButton, QSizePolicy,
     QWidget)
 
-class Ui_CropScoreboardWidget(object):
-    def setupUi(self, CropScoreboardWidget):
-        if not CropScoreboardWidget.objectName():
-            CropScoreboardWidget.setObjectName(u"CropScoreboardWidget")
-        CropScoreboardWidget.resize(897, 726)
-        self.backButton = QPushButton(CropScoreboardWidget)
+class Ui_BaseTaskWidget(object):
+    def setupUi(self, BaseTaskWidget):
+        if not BaseTaskWidget.objectName():
+            BaseTaskWidget.setObjectName(u"BaseTaskWidget")
+        BaseTaskWidget.resize(897, 726)
+        self.backButton = QPushButton(BaseTaskWidget)
         self.backButton.setObjectName(u"backButton")
         self.backButton.setGeometry(QRect(10, 10, 100, 32))
-        self.runButton = QPushButton(CropScoreboardWidget)
+        self.runButton = QPushButton(BaseTaskWidget)
         self.runButton.setObjectName(u"runButton")
         self.runButton.setGeometry(QRect(0, 660, 100, 32))
-        self.uiTextLabel = QLabel(CropScoreboardWidget)
+        self.uiTextLabel = QLabel(BaseTaskWidget)
         self.uiTextLabel.setObjectName(u"uiTextLabel")
         self.uiTextLabel.setGeometry(QRect(10, 610, 871, 41))
-        self.videoLabel = QLabel(CropScoreboardWidget)
+        self.videoLabel = QLabel(BaseTaskWidget)
         self.videoLabel.setObjectName(u"videoLabel")
         self.videoLabel.setGeometry(QRect(10, 50, 861, 561))
 
-        self.retranslateUi(CropScoreboardWidget)
+        self.retranslateUi(BaseTaskWidget)
 
-        QMetaObject.connectSlotsByName(CropScoreboardWidget)
+        QMetaObject.connectSlotsByName(BaseTaskWidget)
     # setupUi
 
-    def retranslateUi(self, CropScoreboardWidget):
-        CropScoreboardWidget.setWindowTitle(QCoreApplication.translate("CropScoreboardWidget", u"Form", None))
-        self.backButton.setText(QCoreApplication.translate("CropScoreboardWidget", u"Back", None))
-        self.runButton.setText(QCoreApplication.translate("CropScoreboardWidget", u"Run", None))
-        self.uiTextLabel.setText(QCoreApplication.translate("CropScoreboardWidget", u"Press \"Run\" to start cropping the scoreboard", None))
+    def retranslateUi(self, BaseTaskWidget):
+        BaseTaskWidget.setWindowTitle(QCoreApplication.translate("BaseTaskWidget", u"Form", None))
+        self.backButton.setText(QCoreApplication.translate("BaseTaskWidget", u"Back", None))
+        self.runButton.setText(QCoreApplication.translate("BaseTaskWidget", u"Run", None))
+        self.uiTextLabel.setText(QCoreApplication.translate("BaseTaskWidget", u"Press \"Run\" to start the task", None))
         self.videoLabel.setText("")
     # retranslateUi
 

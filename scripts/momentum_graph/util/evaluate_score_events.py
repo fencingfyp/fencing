@@ -3,9 +3,9 @@ import argparse
 import numpy as np
 import pandas as pd
 
-from model.OpenCvUi import OpenCvUi, UiCodes
 from scripts.momentum_graph.process_scores import densify_frames
 from scripts.momentum_graph.util.extract_score_increases import extract_score_increases
+from src.model.OpenCvUi import OpenCvUi, UiCodes
 from src.util.io import setup_input_video_io, setup_output_video_io
 
 DEFAULT_FPS = 50
@@ -63,9 +63,9 @@ def perform_last_activation_algorithm(
             # end = i
             # while end + 1 < n_frames and lights[end + 1, col] == 1:
             #     end += 1
-            print(
-                f"Score {side} {score} at frame {idx} adjusted to light activation starting at frame {start}"
-            )
+            # print(
+            #     f"Score {side} {score} at frame {idx} adjusted to light activation starting at frame {start}"
+            # )
 
             refined[side][score] = start
 
@@ -111,7 +111,7 @@ def refine_score_frames_with_lights(
     lights: np.ndarray,
     score_occ: dict[str, dict[int, int]],
     fps: float,
-    algorithm: str = "first_increase",
+    algorithm: str = "last_activation",
 ) -> dict[str, dict[int, int]]:
     if algorithm == "last_activation":
         return perform_last_activation_algorithm(lights, score_occ)

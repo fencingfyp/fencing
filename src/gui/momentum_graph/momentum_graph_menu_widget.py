@@ -4,6 +4,40 @@ from PySide6.QtWidgets import QPushButton, QWidget
 from src.gui.util.io import load_ui_dynamic
 from src.gui.util.task_graph import MomentumGraphTasksToIds, TaskGraph, TaskState
 
+BUTTON_CSS_DONE = """
+QPushButton {
+    background-color: #2ecc71;
+    color: black;
+    border: none;
+}
+QPushButton:hover {
+    background-color: #27ae60;
+}
+QPushButton:pressed {
+    background-color: #1e8449;
+}
+"""
+BUTTON_CSS_READY = """
+QPushButton {
+    background-color: #f1c40f;
+    color: black;
+    border: none;
+}
+QPushButton:hover {
+    background-color: #d4ac0d;
+}
+QPushButton:pressed {
+    background-color: #b7950b;
+}
+"""
+BUTTON_CSS_LOCKED = """
+QPushButton {
+    background-color: #7f8c8d;
+    color: black;
+    border: none;
+}
+"""
+
 
 class MomentumGraphMenuWidget(QWidget):
     navigate_to_manage_match = Signal()
@@ -57,10 +91,13 @@ class MomentumGraphMenuWidget(QWidget):
             state = self.task_graph.state(task_id)
             if state == TaskState.LOCKED:
                 button.setEnabled(False)
+                button.setStyleSheet(BUTTON_CSS_LOCKED)
                 # button.setText(f"{task_id.name.replace('_', ' ').title()} (Locked)")
             elif state == TaskState.READY:
                 button.setEnabled(True)
+                button.setStyleSheet(BUTTON_CSS_READY)
                 # button.setText(f"{task_id.name.replace('_', ' ').title()} (Ready)")
             else:
                 button.setEnabled(True)
+                button.setStyleSheet(BUTTON_CSS_DONE)
                 # button.setText(f"{task_id.name.replace('_', ' ').title()} (Done)")

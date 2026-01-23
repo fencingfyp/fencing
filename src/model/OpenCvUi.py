@@ -12,7 +12,7 @@ from src.util.utils import (
 )
 
 from .Quadrilateral import Quadrilateral
-from .Ui import PipelineUiDriver
+from .Ui import Ui
 
 
 class UiCodes(enum.Enum):
@@ -60,7 +60,7 @@ def calculate_centrepoint(det):
     return cx, cy
 
 
-class OpenCvUi(PipelineUiDriver):
+class OpenCvUi(Ui):
     @staticmethod
     def calculate_display_dimensions(
         width: int, height: int, display_width: int = None, display_height: int = None
@@ -326,7 +326,15 @@ class OpenCvUi(PipelineUiDriver):
         color: tuple[int, int, int] = (0, 255, 0),
         thickness: int = 2,
     ) -> None:
-        self.draw_polygon(quad.opencv_format(), color=color, thickness=thickness)
+        # quick hack: scale to current frame size from original frame size
+        quad = quad.opencv_format()
+        # using self.width and self.height as original frame size
+        scale_x = self.display_width / self.width
+        scale_y = self.display_height / self.height
+        for i in range(4):
+            quad[i][0][0] = int(quad[i][0][0] * scale_x)
+            quad[i][0][1] = int(quad[i][0][1] * scale_y)
+        self.draw_polygon(quad, color=color, thickness=thickness)
 
     def draw_piste_centre_line(
         self, positions: list[tuple[int, int]], color: tuple[int, int, int] = None
@@ -410,6 +418,9 @@ class OpenCvUi(PipelineUiDriver):
                 generate_select_quadrilateral_instructions(item_name),
             )
         )
+
+    def get_n_points_async(self, frame, instructions, callback) -> None:
+        callback(self.get_n_points(frame, instructions))
 
     def get_n_points(
         self, frame: np.ndarray, instructions: list[str]
@@ -585,16 +596,23 @@ class OpenCvUi(PipelineUiDriver):
     def process_crop_region_loop(
         self,
         cap: cv2.VideoCapture,
-        pipeline,
+        frame_callback,
         writer: cv2.VideoWriter | None,
     ):
+        """
+        UI-owned main loop.
+        frame_callback(frame) -> (rectified, pts)
+        """
+
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
 
-            rectified, pts = pipeline.process(frame)
+            # Delegate all processing
+            rectified, pts = frame_callback(frame)
 
+            # UI rendering
             self.set_fresh_frame(frame)
             self.plot_points(pts, (0, 255, 0))
             self.show_frame()
@@ -603,6 +621,17 @@ class OpenCvUi(PipelineUiDriver):
             if writer:
                 writer.write(rectified)
 
+            # Input handling (this is the real event boundary)
             action = self.take_user_input(1)
             if action == UiCodes.QUIT:
+                break
+
+    def run_loop(self, step_fn):
+        """
+        UI-owned main loop.
+        step_fn() is called every frame.
+        """
+
+        while True:
+            if step_fn():
                 break

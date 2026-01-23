@@ -7,14 +7,15 @@ import numpy as np
 from src.model import (
     OpenCvUi,
     OrbTracker,
-    PipelineUiDriver,
     Quadrilateral,
     SiftTracker,
     TargetTracker,
+    Ui,
     UiCodes,
 )
 from src.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME, ORIGINAL_VIDEO_NAME
 from src.util.io import setup_input_video_io, setup_output_file, setup_output_video_io
+from src.util.utils import generate_select_quadrilateral_instructions
 
 
 def parse_arguments():
@@ -32,49 +33,98 @@ def parse_arguments():
     return args.output_folder, args.demo
 
 
-class CropRegionPipeline:
-    def __init__(
-        self,
-        tracker: TargetTracker,
-        plane_id: str,
-        dst_corners: np.ndarray,
-        dimensions: tuple[int, int],
-    ):
-        self.tracker = tracker
-        self.plane_id = plane_id
-        self.dst_corners = dst_corners
-        self.dimensions = dimensions
+class CropRegionController:
+    def __init__(self, cap, output_path: str | None, ui: Ui, region: str):
+        self.cap = cap
+        self.output_path = output_path
+        self.ui = ui
+        self.region = region
 
-    def process(
+        # Persistent state
+        self.first_frame: np.ndarray | None = None
+        self.positions: Quadrilateral | None = None
+        self.dimensions: tuple[int, int] | None = None
+        self.dst_corners: np.ndarray | None = None
+        self.tracker: TargetTracker | None = None
+        self.writer = None
+
+        self.plane_id = "tracked_plane"
+
+    # ---- ENTRY POINT ----
+
+    def start(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            return
+
+        self.first_frame = frame
+
+        # UI step 1: select corners (returns via callback)
+        self.ui.get_n_points_async(
+            frame,
+            generate_select_quadrilateral_instructions(self.region),
+            callback=self.on_initial_corners_selected,
+        )
+
+    # ---- CALLBACK 1 ----
+
+    def on_initial_corners_selected(self, positions: list[tuple[int, int]]):
+        if len(positions) != 4:
+            raise ValueError("Need to select 4 points for the planar region.")
+
+        self.positions = Quadrilateral(positions)
+
+        # Geometry
+        self.dimensions = get_planar_dimensions(self.positions)
+        self.dst_corners = make_destination_corners(self.dimensions)
+
+        # Tracker
+        self.tracker = OrbTracker()
+        self.tracker.add_target(self.plane_id, self.first_frame, self.positions)
+
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+        # Writer
+        if self.output_path:
+            self.writer = setup_output_video_io(
+                self.output_path,
+                self.cap.get(cv2.CAP_PROP_FPS),
+                self.dimensions,
+            )
+
+        # Start processing loop (UI-owned)
+        self.ui.process_crop_region_loop(
+            cap=self.cap,
+            frame_callback=self.process_frame,
+            writer=self.writer,
+        )
+
+    # ---- PER-FRAME CALLBACK ----
+
+    def process_frame(
         self, frame: np.ndarray
     ) -> tuple[np.ndarray, list[tuple[float, float]]]:
+        """
+        Called by the UI loop on every frame.
+        Returns rectified frame + tracked points for overlay.
+        """
         tracked = self.tracker.update_all(frame)
         quad = tracked.get(self.plane_id)
 
         if quad is None:
             quad = self.tracker.get_previous_quad(self.plane_id)
 
-        rectified = get_rectified_target(frame, quad, self.dst_corners, self.dimensions)
-
+        rectified = self.get_rectified(frame, quad)
         pts = self.tracker.get_target_pts(self.plane_id)
 
         return rectified, pts
 
-    def get_quad(self):
-        return self.tracker.get_previous_quad(self.plane_id)
+    # ---- HELPERS ----
 
-
-def get_rectified_target(
-    frame,
-    tracked_corners: Quadrilateral,
-    dst_corners: np.ndarray,
-    dimensions: tuple[int, int],
-) -> np.ndarray:
-    """Get the frame rectified to the tracked planar region."""
-    width, height = dimensions
-    transform_matrix = cv2.getPerspectiveTransform(tracked_corners.numpy(), dst_corners)
-    rectified = cv2.warpPerspective(frame, transform_matrix, (width, height))
-    return rectified
+    def get_rectified(self, frame, quad: Quadrilateral) -> np.ndarray:
+        width, height = self.dimensions
+        transform = cv2.getPerspectiveTransform(quad.numpy(), self.dst_corners)
+        return cv2.warpPerspective(frame, transform, (width, height))
 
 
 def get_planar_dimensions(scoreboard_positions: Quadrilateral) -> tuple[int, int]:
@@ -96,9 +146,7 @@ def get_planar_dimensions(scoreboard_positions: Quadrilateral) -> tuple[int, int
     return scoreboard_width, scoreboard_height
 
 
-def get_target_initial_corners(
-    ui: PipelineUiDriver, frame: np.ndarray
-) -> Quadrilateral:
+def get_target_initial_corners(ui: Ui, frame: np.ndarray) -> Quadrilateral:
     """Get initial target corners from user input."""
     positions = ui.get_n_points(
         frame,
@@ -131,7 +179,6 @@ def make_destination_corners(dimensions: tuple[int, int]) -> np.ndarray:
 
 
 def main():
-    """Main function to crop and rectify scoreboard region from video."""
     output_folder, demo_mode = parse_arguments()
     input_video = os.path.join(output_folder, ORIGINAL_VIDEO_NAME)
     output_path = (
@@ -139,46 +186,12 @@ def main():
         if not demo_mode
         else None
     )
+
     cap, _, width, height, _ = setup_input_video_io(input_video)
     ui = OpenCvUi("Scoreboard Cropping", width=width, height=height)
-    crop_region(cap, output_path, ui)
 
-
-def crop_region(
-    cap: cv2.VideoCapture,
-    output_path: str,
-    ui: PipelineUiDriver,
-):
-    ret, frame = cap.read()
-    if not ret:
-        return
-
-    positions = get_target_initial_corners(ui, frame)
-    dimensions = get_planar_dimensions(positions)
-    dst_corners = make_destination_corners(dimensions)
-
-    tracker = OrbTracker()
-    plane_id = "tracked_plane"
-    tracker.add_target(plane_id, frame, positions)
-
-    pipeline = CropRegionPipeline(
-        tracker=tracker,
-        plane_id=plane_id,
-        dst_corners=dst_corners,
-        dimensions=dimensions,
-    )
-
-    writer = (
-        setup_output_video_io(output_path, cap.get(cv2.CAP_PROP_FPS), dimensions)
-        if output_path
-        else None
-    )
-
-    ui.process_crop_region_loop(
-        cap=cap,
-        pipeline=pipeline,
-        writer=writer,
-    )
+    controller = CropRegionController(cap, output_path, ui, region="scoreboard")
+    controller.start()
 
 
 if __name__ == "__main__":

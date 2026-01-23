@@ -4,9 +4,9 @@ import os
 
 import cv2
 
-from model.OpenCvUi import NORMAL_UI_FUNCTIONS, OpenCvUi, UiCodes
 from scripts.momentum_graph.perform_ocr import validate_input_video
 from scripts.momentum_graph.util.file_names import SCORE_LIGHTS_VIDEO_NAME
+from src.model.OpenCvUi import NORMAL_UI_FUNCTIONS, OpenCvUi, UiCodes
 from src.model.PatchLightDetector import Colour, PatchLightDetector
 from src.util.file_names import (
     CROPPED_SCORE_LIGHTS_VIDEO_NAME,
@@ -110,15 +110,10 @@ def main():
             ui.refresh_frame()
 
             is_left_red = (
-                left_colour_detector.classify(
-                    ui.get_current_frame(), left_score_positions
-                )
-                == Colour.RED
+                left_colour_detector.classify(frame, left_score_positions) == Colour.RED
             )
             is_right_green = (
-                right_colour_detector.classify(
-                    ui.get_current_frame(), right_score_positions
-                )
+                right_colour_detector.classify(frame, right_score_positions)
                 == Colour.GREEN
             )
 
