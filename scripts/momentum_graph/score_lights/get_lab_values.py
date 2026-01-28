@@ -145,7 +145,7 @@ def main():
                 video_writer.write(ui.current_frame)
 
             delay: int = FULL_DELAY if slow else FAST_FORWARD
-            action = ui.take_user_input(delay, [*NORMAL_UI_FUNCTIONS])
+            action = ui.get_user_input(delay, [*NORMAL_UI_FUNCTIONS])
             if action == UiCodes.TOGGLE_SLOW:
                 slow = not slow
                 print(f"Slow mode {'enabled' if slow else 'disabled'}.")

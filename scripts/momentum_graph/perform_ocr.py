@@ -169,7 +169,7 @@ def ask_user_confirmation(
         f"OCR Left Score: {score} (Conf: {conf:.2f}), press 1 if it's correct, 2 if not, 3 to skip"
     )
     ui.show_frame()
-    action = ui.take_user_input(
+    action = ui.get_user_input(
         0,
         [UiCodes.CUSTOM_1, UiCodes.CUSTOM_2, UiCodes.CUSTOM_3, UiCodes.QUIT],
         must_be_valid=True,
@@ -366,7 +366,7 @@ def main():
                 video_writer.write(ui.current_frame)
 
             delay: int = FULL_DELAY if slow else FAST_FORWARD
-            action = ui.take_user_input(delay)
+            action = ui.get_user_input(delay)
             if action == UiCodes.TOGGLE_SLOW:
                 slow = not slow
                 print(f"Slow mode {'enabled' if slow else 'disabled'}.")

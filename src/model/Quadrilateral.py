@@ -18,6 +18,10 @@ class Quadrilateral:
     def numpy(self) -> np.ndarray:
         return self.points.copy()
 
+    def to_list(self) -> list[tuple[float, float]]:
+        ordered_points = self._order_points()
+        return [(float(pt[0]), float(pt[1])) for pt in ordered_points]
+
     @staticmethod
     def from_opencv_format(pts: np.ndarray) -> "Quadrilateral":
         """Create a Quadrilateral from OpenCV format (Nx1x2 array)."""

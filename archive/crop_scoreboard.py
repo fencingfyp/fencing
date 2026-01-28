@@ -237,7 +237,7 @@ def crop_region(
             writer.write(rectified)
 
         delay = full_delay if slow else fast_forward
-        action = ui.take_user_input(delay)
+        action = ui.get_user_input(delay)
         if action == UiCodes.TOGGLE_SLOW:
             slow = not slow
             print(f"Slow mode {'enabled' if slow else 'disabled'}.")

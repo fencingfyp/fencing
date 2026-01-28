@@ -18,7 +18,7 @@ from scripts.momentum_graph.util.extract_score_increases import extract_score_in
 from scripts.momentum_graph.util.file_names import (
     PROCESSED_SCORES_CSV as SCORES_CSV_NAME,
 )
-from src.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME
+from src.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME, MOMENTUM_DATA_CSV_NAME
 from src.util.io import setup_input_video_io
 
 
@@ -129,7 +129,7 @@ def main():
 
     # save momentum data points to csv
     momentum_df = pd.DataFrame({"frame_id": frames, "momentum": momenta})
-    momentum_df.to_csv(path.join(folder, "momentum_data.csv"), index=False)
+    momentum_df.to_csv(path.join(folder, MOMENTUM_DATA_CSV_NAME), index=False)
 
 
 def plot_score_light_progression(

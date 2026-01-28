@@ -3,11 +3,10 @@
 import argparse
 import os
 
-from src.model import OpenCvUi
+from src.model import OpenCvUiV2
+from src.pipelines.crop_region_pipeline import CropRegionPipeline
 from src.util.file_names import CROPPED_SCORE_LIGHTS_VIDEO_NAME, ORIGINAL_VIDEO_NAME
 from src.util.io import setup_input_video_io, setup_output_file
-
-from .crop_scoreboard import crop_region
 
 
 def parse_arguments():
@@ -34,8 +33,9 @@ def main():
         else None
     )
     cap, _, width, height, _ = setup_input_video_io(input_video_path)
-    ui = OpenCvUi("Score Lights Cropping", width=width, height=height)
-    crop_region(cap, output_video_path, ui)
+    ui = OpenCvUiV2("Score Lights Cropping", width=width, height=height)
+    controller = CropRegionPipeline(cap, output_video_path, ui, region="score lights")
+    controller.start()
 
 
 if __name__ == "__main__":

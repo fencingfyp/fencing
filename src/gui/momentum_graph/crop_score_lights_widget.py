@@ -4,7 +4,7 @@ from typing import override
 import cv2
 from PySide6.QtCore import Slot
 
-from src.gui.momentum_graph.crop_scoreboard_widget import CropRegionPysideController
+from src.gui.momentum_graph.crop_scoreboard_widget import CropRegionPipeline
 from src.gui.util.task_graph import MomentumGraphTasksToIds
 from src.util.file_names import CROPPED_SCORE_LIGHTS_VIDEO_NAME, ORIGINAL_VIDEO_NAME
 
@@ -39,16 +39,14 @@ class CropScoreLightsWidget(BaseTaskWidget):
         output_path = os.path.join(self.working_dir, CROPPED_SCORE_LIGHTS_VIDEO_NAME)
 
         # Create controller
-        self.controller = CropRegionPysideController(
+        self.controller = CropRegionPipeline(
             cap=self.cap,
             output_path=output_path,
             ui=self.interactive_ui,
             parent=self,
             region="score lights",
         )
-
-        # When finished → emit completion
-        self.controller.finished.connect(self._on_finished)
+        self.controller.set_on_finished(self._on_finished)
 
         # Start async pipeline
         self.controller.start()

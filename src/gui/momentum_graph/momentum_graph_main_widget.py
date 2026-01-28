@@ -10,7 +10,9 @@ from src.util.file_names import (
     CROPPED_SCORE_LIGHTS_VIDEO_NAME,
     CROPPED_SCOREBOARD_VIDEO_NAME,
     DETECT_LIGHTS_OUTPUT_CSV_NAME,
+    MOMENTUM_DATA_CSV_NAME,
     OCR_OUTPUT_CSV_NAME,
+    START_TIME_JSON_NAME,
 )
 
 from .crop_score_lights_widget import CropScoreLightsWidget
@@ -19,6 +21,8 @@ from .detect_score_lights_widget import DetectScoreLightsWidget
 from .generate_momentum_graph_widget import GenerateMomentumGraphWidget
 from .momentum_graph_menu_widget import MomentumGraphMenuWidget
 from .perform_ocr_widget import PerformOcrWidget
+from .select_start_time_widget import SelectStartTimeWidget
+from .view_stats_widget import ViewStatsWidget
 
 TASK_DEPENDENCIES = [
     Task(
@@ -40,10 +44,23 @@ TASK_DEPENDENCIES = [
     ),
     Task(
         MomentumGraphTasksToIds.GENERATE_MOMENTUM_GRAPH.value,
-        [],
+        [MOMENTUM_DATA_CSV_NAME],
         deps=[
             MomentumGraphTasksToIds.PERFORM_OCR.value,
             MomentumGraphTasksToIds.DETECT_SCORE_LIGHTS.value,
+        ],
+    ),
+    Task(
+        MomentumGraphTasksToIds.GET_START_TIME.value,
+        [START_TIME_JSON_NAME],
+        deps=[],
+    ),
+    Task(
+        MomentumGraphTasksToIds.VIEW_STATS.value,
+        [],
+        deps=[
+            MomentumGraphTasksToIds.GENERATE_MOMENTUM_GRAPH.value,
+            MomentumGraphTasksToIds.GET_START_TIME.value,
         ],
     ),
 ]
@@ -86,6 +103,12 @@ class MomentumGraphMainWidget(QWidget):
         )
         self.tasks_to_widgets[MomentumGraphTasksToIds.GENERATE_MOMENTUM_GRAPH.value] = (
             GenerateMomentumGraphWidget()
+        )
+        self.tasks_to_widgets[MomentumGraphTasksToIds.GET_START_TIME.value] = (
+            SelectStartTimeWidget()
+        )
+        self.tasks_to_widgets[MomentumGraphTasksToIds.VIEW_STATS.value] = (
+            ViewStatsWidget()
         )
 
         for task_id, widget in self.tasks_to_widgets.items():

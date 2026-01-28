@@ -136,7 +136,7 @@
      <x>650</x>
      <y>236</y>
      <width>91</width>
-     <height>41</height>
+     <height>43</height>
     </rect>
    </property>
    <property name="orientation">
@@ -169,7 +169,7 @@
     <string>Back</string>
    </property>
   </widget>
-  <widget class="QPushButton" name="selectStartTimeButton">
+  <widget class="QPushButton" name="trackPosesButton">
    <property name="geometry">
     <rect>
      <x>60</x>
@@ -179,10 +179,10 @@
     </rect>
    </property>
    <property name="text">
-    <string>Get Bout Start Time</string>
+    <string>Track Poses</string>
    </property>
   </widget>
-  <widget class="QPushButton" name="viewStatsButton">
+  <widget class="QPushButton" name="generateHeatMapButton">
    <property name="geometry">
     <rect>
      <x>600</x>
@@ -192,16 +192,16 @@
     </rect>
    </property>
    <property name="text">
-    <string>View Statistics</string>
+    <string>Generate Heat Map</string>
    </property>
   </widget>
   <widget class="Line" name="line_7">
    <property name="geometry">
     <rect>
-     <x>210</x>
+     <x>372</x>
      <y>270</y>
-     <width>485</width>
-     <height>16</height>
+     <width>323</width>
+     <height>20</height>
     </rect>
    </property>
    <property name="orientation">
@@ -221,6 +221,34 @@
     <enum>Qt::Orientation::Horizontal</enum>
    </property>
   </widget>
+  <widget class="QPushButton" name="trackFencersButton">
+   <property name="geometry">
+    <rect>
+     <x>240</x>
+     <y>250</y>
+     <width>131</width>
+     <height>61</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Track Fencers</string>
+   </property>
+  </widget>
+  <widget class="Line" name="line_9">
+   <property name="geometry">
+    <rect>
+     <x>210</x>
+     <y>270</y>
+     <width>31</width>
+     <height>16</height>
+    </rect>
+   </property>
+   <property name="orientation">
+    <enum>Qt::Orientation::Horizontal</enum>
+   </property>
+  </widget>
+  <zorder>trackPosesButton</zorder>
+  <zorder>generateHeatMapButton</zorder>
   <zorder>line_5</zorder>
   <zorder>generateMomentumGraphButton</zorder>
   <zorder>line_6</zorder>
@@ -233,10 +261,10 @@
   <zorder>line_3</zorder>
   <zorder>line_4</zorder>
   <zorder>backButton</zorder>
-  <zorder>getBoutStartTimeButton</zorder>
-  <zorder>viewStatisticsButton</zorder>
   <zorder>line_7</zorder>
   <zorder>line_8</zorder>
+  <zorder>trackFencersButton</zorder>
+  <zorder>line_9</zorder>
  </widget>
  <resources/>
  <connections/>

@@ -83,6 +83,12 @@ class MomentumGraphMenuWidget(QWidget):
         task_buttons[MomentumGraphTasksToIds.GENERATE_MOMENTUM_GRAPH.value] = (
             ui.findChild(QPushButton, "generateMomentumGraphButton")
         )
+        task_buttons[MomentumGraphTasksToIds.GET_START_TIME.value] = ui.findChild(
+            QPushButton, "selectStartTimeButton"
+        )
+        task_buttons[MomentumGraphTasksToIds.VIEW_STATS.value] = ui.findChild(
+            QPushButton, "viewStatsButton"
+        )
         return task_buttons
 
     @Slot()

@@ -24,6 +24,7 @@ from src.gui.util.task_graph import MomentumGraphTasksToIds
 from src.model import PysideUi
 from src.util.file_names import (
     DETECT_LIGHTS_OUTPUT_CSV_NAME,
+    MOMENTUM_DATA_CSV_NAME,
     OCR_OUTPUT_CSV_NAME,
     ORIGINAL_VIDEO_NAME,
 )
@@ -125,48 +126,58 @@ class MomentumGraphController(QObject):
 
         frames, momenta = get_momentum_data_points(score_occurrences, fps)
 
+        momentum_df = pd.DataFrame({"frame_id": frames, "momentum": momenta})
+        momentum_df.to_csv(
+            os.path.join(self.working_dir, MOMENTUM_DATA_CSV_NAME), index=False
+        )
+
         self.plot_momentum_on_label(frames, momenta, fps)
 
     def plot_momentum_on_label(self, frames, momenta, fps):
-        fig = Figure(figsize=(10, 5), dpi=100)
-        canvas = FigureCanvasAgg(fig)
-        ax = fig.add_subplot(111)
-
-        ax.plot(
-            frames / fps,
-            momenta,
-            label="Momentum",
-            linewidth=2,
-            color="tab:green",
-            marker="o",
-            markersize=6,
-            markeredgecolor="k",
-            markerfacecolor="tab:green",
-        )
-        ax.axhline(0, linestyle="--", linewidth=1, color="gray")
-        ax.set_title("Momentum Over Time")
-        ax.set_xlabel("Time (seconds)")
-        ax.set_ylabel("Momentum (+ left / - right)")
-        ax.grid(True, alpha=0.3)
-        ax.legend()
-        fig.tight_layout()
-        # Render to RGBA array
-        canvas.draw()
-        width, height = fig.get_size_inches() * fig.get_dpi()
-        img = np.frombuffer(canvas.tostring_argb(), dtype=np.uint8)
-        img = img.reshape(int(height), int(width), 4)
-        # Convert ARGB → RGBA
-        img = img[:, :, [1, 2, 3, 0]]
-        img = np.ascontiguousarray(img)
-
-        # Convert to QPixmap
-        pixmap = QPixmap.fromImage(
-            QImage(img.data, img.shape[1], img.shape[0], QImage.Format_RGBA8888)
-        )
+        pixmap = get_momentum_graph_pixmap(frames, momenta, fps)
 
         # Paint onto the label
         self.ui.set_fresh_frame(pixmap_to_np(pixmap))
         self.finished.emit()
+
+
+def get_momentum_graph_pixmap(frames, momenta, fps):
+    fig = Figure(figsize=(10, 5), dpi=300)
+    canvas = FigureCanvasAgg(fig)
+    ax = fig.add_subplot(111)
+
+    ax.plot(
+        frames / fps,
+        momenta,
+        label="Momentum",
+        linewidth=2,
+        color="tab:green",
+        marker="o",
+        markersize=6,
+        markeredgecolor="k",
+        markerfacecolor="tab:green",
+    )
+    ax.axhline(0, linestyle="--", linewidth=1, color="gray")
+    ax.set_title("Momentum Over Time")
+    ax.set_xlabel("Time (seconds)")
+    ax.set_ylabel("Momentum (+ left / - right)")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    fig.tight_layout()
+    # Render to RGBA array
+    canvas.draw()
+    width, height = fig.get_size_inches() * fig.get_dpi()
+    img = np.frombuffer(canvas.tostring_argb(), dtype=np.uint8)
+    img = img.reshape(int(height), int(width), 4)
+    # Convert ARGB → RGBA
+    img = img[:, :, [1, 2, 3, 0]]
+    img = np.ascontiguousarray(img)
+
+    # Convert to QPixmap
+    pixmap = QPixmap.fromImage(
+        QImage(img.data, img.shape[1], img.shape[0], QImage.Format_RGBA8888)
+    )
+    return pixmap
 
 
 if __name__ == "__main__":

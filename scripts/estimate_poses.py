@@ -18,64 +18,32 @@ Output: A csv marking the poses
 """
 
 
-def load_model(local_path: str) -> YOLO:
-    model = YOLO(local_path)
-    print(f"Loaded local model: {local_path}")
-    return model
-
-
 def main():
-    """WARNING: this needs a pose model"""
     parser = argparse.ArgumentParser(
         description="Process video/image with YOLO pose+tracking to CSV"
     )
-    parser.add_argument("input", help="Path to input video or image file")
-    parser.add_argument("model", help="Path to local YOLO model")
-    parser.add_argument("--output-folder", default=".", help="Output folder")
+    parser.add_argument("folder", help="Path to working folder")
+    parser.add_argument(
+        "--model", default="models/yolo11l-pose.pt", help="Path to local YOLO model"
+    )
     parser.add_argument(
         "--show", action="store_true", help="Show processed video/image"
     )
     args = parser.parse_args()
+    output_folder = args.folder
+    model_path = args.model
 
-    os.makedirs(args.output_folder, exist_ok=True)
-    path_object = Path(args.input)
-    filename_without_extension = path_object.stem
-    csv_path = os.path.join(
-        args.output_folder, f"pose_results_{filename_without_extension}.csv"
-    )
-
-    # Load YOLO model
-    model = load_model(args.model)
-
-    # Decide if input is video or image
-    is_video = (
-        args.input.lower().endswith((".mp4", ".avi", ".mov", ".mkv"))
-        and cv2.VideoCapture(args.input).isOpened()
-    )
+    csv_path = os.path.join(output_folder, "raw_pose_results.csv")
+    model = YOLO(model_path)
 
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
-
-        # Assume COCO keypoints (17)
         header_row = get_header_row()
         writer.writerow(header_row)
 
-        if is_video:
-            process_video(args.input, model, writer, args.show, args.output_folder)
-        else:
-            process_image(args.input, model, writer, args.show)
+        process_video(args.input, model, writer, args.show, args.output_folder)
+
     print(f"CSV saved to {csv_path}")
-
-
-def process_image(input_path: str, model: YOLO, writer: csv.writer, show: bool) -> None:
-    frame = cv2.imread(input_path)
-    results = model.predict(frame, verbose=False)
-    rows = extract_rows(results, 0)
-    writer.writerows(rows)
-    if show:
-        cv2.imshow("Processed Image", frame)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
 
 
 def process_video(

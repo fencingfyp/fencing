@@ -49,6 +49,13 @@ class MomentumGraphTasksToIds(Enum):
     PERFORM_OCR = "perform_ocr"
     DETECT_SCORE_LIGHTS = "detect_score_lights"
     GENERATE_MOMENTUM_GRAPH = "generate_momentum_graph"
+    GET_START_TIME = "get_start_time"
+    VIEW_STATS = "view_stats"
+
+
+class HeatMapTasksToIds(Enum):
+    TRACK_POSES = "track_poses"
+    TRACK_FENCERS = "track_fencers"
 
 
 class TaskState(Enum):

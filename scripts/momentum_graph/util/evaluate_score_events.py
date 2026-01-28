@@ -243,7 +243,7 @@ def main():
             writer.write(ui.current_frame)
 
         delay: int = FULL_DELAY if slow else FAST_FORWARD
-        action = ui.take_user_input(
+        action = ui.get_user_input(
             delay, [UiCodes.QUIT, UiCodes.TOGGLE_SLOW, UiCodes.PAUSE]
         )
         if action == UiCodes.TOGGLE_SLOW:

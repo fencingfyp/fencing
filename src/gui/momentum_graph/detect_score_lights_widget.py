@@ -216,7 +216,7 @@ class ScoreLightsController(QObject):
         self.current_frame_id += 1
 
         # Handle interactive actions
-        action = self.ui.take_user_input()
+        action = self.ui.get_user_input()
         if action == UiCodes.QUIT:
             self.cancel()
 

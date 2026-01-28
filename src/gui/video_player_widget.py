@@ -109,6 +109,15 @@ class VideoPlayerWidget(QWidget):
     def set_position(self):
         pos = self.positionslider.value()
         self.video_frame.set_relative_position(pos)
+        self.set_time_label()
+
+    def set_time_label(self):
+        current_time = self.video_frame.get_current_time_msec() / 1000
+        total_time = self.video_frame.get_total_time_msec() / 1000
+        self.timelabel.setText(
+            f"{int(current_time // 60):02}:{int(current_time % 60):02} / "
+            f"{int(total_time // 60):02}:{int(total_time % 60):02}"
+        )
 
     def set_video_source(self, video_path: str):
         self.video_frame.set_video_source(video_path)
@@ -143,12 +152,7 @@ class VideoPlayerWidget(QWidget):
                 pos = int((current_frame / total_frames) * 1000)
                 self.positionslider.setValue(pos)
 
-            current_time = self.video_frame.get_current_time_msec() / 1000
-            total_time = self.video_frame.get_total_time_msec() / 1000
-            self.timelabel.setText(
-                f"{int(current_time // 60):02}:{int(current_time % 60):02} / "
-                f"{int(total_time // 60):02}:{int(total_time % 60):02}"
-            )
+            self.set_time_label()
             self.next_frame()
 
     def next_frame(self):

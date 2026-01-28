@@ -38,7 +38,7 @@ def main():
         ui.show_frame()
 
         delay = full_delay if slow else fast_forward
-        action = ui.take_user_input(
+        action = ui.get_user_input(
             delay,
             [
                 UiCodes.CUSTOM_1,

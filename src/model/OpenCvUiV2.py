@@ -11,56 +11,17 @@ from src.util.utils import (
     project_point_on_line,
 )
 
+from .OpenCvUi import (
+    ALLOWED_ACTIONS_TO_KEYBINDS,
+    NORMAL_UI_FUNCTIONS,
+    QUIT_KEYS,
+    UiCodes,
+)
 from .Quadrilateral import Quadrilateral
 from .Ui import Ui
 
 
-class UiCodes(enum.Enum):
-    QUIT = 0
-    TOGGLE_SLOW = 1
-    SKIP_INPUT = 2
-    CONFIRM_INPUT = 3
-    PAUSE = 4
-    PICK_LEFT_FENCER = 5
-    PICK_RIGHT_FENCER = 6
-    CUSTOM_1 = 7
-    CUSTOM_2 = 8
-    CUSTOM_3 = 9
-    CUSTOM_4 = 10
-    CUSTOM_5 = 11
-    CUSTOM_6 = 12
-
-
-NORMAL_UI_FUNCTIONS = [UiCodes.QUIT, UiCodes.TOGGLE_SLOW, UiCodes.PAUSE]
-
-QUIT_KEYS = {ord("q"), ord("Q"), 27}  # q or Esc to quit
-
-ALLOWED_ACTIONS_TO_KEYBINDS = {
-    UiCodes.QUIT: QUIT_KEYS,
-    UiCodes.TOGGLE_SLOW: {ord(" ")},
-    UiCodes.SKIP_INPUT: {ord("1")},
-    UiCodes.CONFIRM_INPUT: {ord("w")},
-    UiCodes.PAUSE: {ord("p"), ord("P")},
-    UiCodes.PICK_LEFT_FENCER: {ord("n"), ord("N")},
-    UiCodes.PICK_RIGHT_FENCER: {ord("m"), ord("M")},
-    UiCodes.CUSTOM_1: {ord("1")},
-    UiCodes.CUSTOM_2: {ord("2")},
-    UiCodes.CUSTOM_3: {ord("3")},
-    UiCodes.CUSTOM_4: {ord("4")},
-    UiCodes.CUSTOM_5: {ord("5")},
-    UiCodes.CUSTOM_6: {ord("6")},
-}
-
-
-def calculate_centrepoint(det):
-    left_shoulder = det["keypoints"][6]
-    right_shoulder = det["keypoints"][7]
-    cx = int((left_shoulder[0] + right_shoulder[0]) / 2)
-    cy = int((left_shoulder[1] + right_shoulder[1]) / 2)
-    return cx, cy
-
-
-class OpenCvUi(Ui):
+class OpenCvUiV2(Ui):
     @staticmethod
     def calculate_display_dimensions(
         width: int, height: int, display_width: int = None, display_height: int = None
@@ -108,6 +69,11 @@ class OpenCvUi(Ui):
         self.right_fencer_colour = (0, 0, 255)  # Red
         self.piste_centre_line_colour = (0, 255, 0)  # Green
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+        self.fps = None
+        self._additional_windows: set[int | str] = set()
+
+    def initialise(self, fps: float) -> None:
+        self.fps = fps
 
     def plot_points(self, points: np.ndarray, color: tuple[int, int, int]) -> None:
         for pt in points:
@@ -138,26 +104,6 @@ class OpenCvUi(Ui):
     def apply_offset_point(self, x, y) -> None:
         y += self.text_box_height
         return x, y
-
-    def draw_candidates(self, detections) -> np.ndarray:
-        for det in detections.values():
-            x1, y1, x2, y2 = map(int, det["box"])
-            x1, y1, x2, y2 = self.apply_offset(x1, y1, x2, y2)
-            cv2.rectangle(
-                self.current_frame, (x1, y1), (x2, y2), self.text_color, 2
-            )  # draw bounding box
-            cx, cy = self.apply_offset_point(*calculate_centrepoint(det))
-            cv2.circle(self.current_frame, (cx, cy), 3, self.text_color, -1)
-            cv2.putText(
-                self.current_frame,
-                str(det["id"]),
-                (x1, y1 - 10),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.9,
-                self.text_color,
-                2,
-            )
-        return self.current_frame
 
     def _set_current_frame(self, frame) -> None:
         # Check aspect ratio and pad if needed
@@ -364,20 +310,6 @@ class OpenCvUi(Ui):
             cx, cy = self.apply_offset_point(cx, cy)
             cv2.circle(self.current_frame, (cx, cy), 3, color, -1)
 
-    def draw_fencer_projection(
-        self,
-        fencer_position: dict,
-        piste_centre_line: tuple[tuple[int, int], tuple[int, int]],
-        colour: tuple[int, int, int],
-    ) -> tuple[int, int] | None:
-        if fencer_position is None:
-            return None
-        centrept = calculate_centrepoint(fencer_position)
-        proj = project_point_on_line(piste_centre_line, centrept)
-        proj_adjusted = self.apply_offset_point(int(proj[0]), int(proj[1]))
-        cv2.circle(self.current_frame, proj_adjusted, 3, colour, -1)
-        return proj_adjusted
-
     def draw_fencer_positions_on_piste(
         self,
         left_fencer_position: dict,
@@ -422,6 +354,31 @@ class OpenCvUi(Ui):
     def get_n_points_async(self, frame, instructions, callback) -> None:
         callback(self.get_n_points(frame, instructions))
 
+    def show_updated_point_selection_frame(
+        self, positions, instructions, current_idx
+    ) -> None:
+        self.refresh_frame()
+        # Draw existing points
+        for i, (px, py) in enumerate(positions):
+            px, py = self.apply_offset_point(px, py)
+            cv2.circle(self.current_frame, (px, py), 5, (0, 0, 255), -1)
+            cv2.putText(
+                self.current_frame,
+                str(i + 1),
+                (
+                    px + 10 if i % 2 == 0 else px - 30,
+                    py,
+                ),  # adjust text position for right side
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 0, 255),
+                2,
+            )
+
+        # Show instruction text
+        self.write_to_ui(instructions[current_idx])
+        self.show_frame()
+
     def get_n_points(
         self, frame: np.ndarray, instructions: list[str]
     ) -> list[tuple[int, int]]:
@@ -439,7 +396,7 @@ class OpenCvUi(Ui):
                 else:
                     positions[current_idx] = (x, y)
 
-                self.show_updated_piste_selection_frame(
+                self.show_updated_point_selection_frame(
                     positions, instructions, current_idx
                 )
 
@@ -447,7 +404,7 @@ class OpenCvUi(Ui):
 
         self.set_fresh_frame(frame)
         while current_idx < len(instructions):
-            self.show_updated_piste_selection_frame(
+            self.show_updated_point_selection_frame(
                 positions, instructions, current_idx
             )
 
@@ -474,30 +431,8 @@ class OpenCvUi(Ui):
     def get_piste_positions(self, frame: np.ndarray) -> list[tuple[int, int]]:
         return self.get_n_points(frame, PISTE_INSTRUCTIONS)
 
-    def show_updated_piste_selection_frame(
-        self, positions, instructions, current_idx
-    ) -> None:
-        self.refresh_frame()
-        # Draw existing points
-        for i, (px, py) in enumerate(positions):
-            px, py = self.apply_offset_point(px, py)
-            cv2.circle(self.current_frame, (px, py), 5, (0, 0, 255), -1)
-            cv2.putText(
-                self.current_frame,
-                str(i + 1),
-                (
-                    px + 10 if i % 2 == 0 else px - 30,
-                    py,
-                ),  # adjust text position for right side
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 0, 255),
-                2,
-            )
-
-        # Show instruction text
-        self.write_to_ui(instructions[current_idx])
-        self.show_frame()
+    def take_user_input(self) -> UiCodes:
+        return self.get_user_input(1)
 
     def refresh_frame(self) -> None:
         self._set_current_frame(self.fresh_frame)
@@ -509,46 +444,8 @@ class OpenCvUi(Ui):
             dtype=np.uint8,
         )
 
-    def get_fencer_id(self, candidates: dict[int, dict], left: bool) -> int | None:
-        if not candidates:
-            return None
-        fencer_dir = "Left" if left else "Right"
-        selected_id = None
-        self.show_updated_fencer_selection_frame(candidates, fencer_dir, selected_id)
-
-        def mouse_callback(event, x, y, flags, param):
-            nonlocal selected_id
-            if event == cv2.EVENT_LBUTTONDOWN:
-                closest_det = min(
-                    candidates.values(),
-                    key=lambda c: (calculate_centrepoint(c)[0] - x) ** 2
-                    + (calculate_centrepoint(c)[1] - y) ** 2,
-                    default=None,
-                )
-                if closest_det:
-                    selected_id = closest_det["id"]
-
-                self.show_updated_fencer_selection_frame(
-                    candidates, fencer_dir, selected_id
-                )
-
-        self.setMouseCallback(mouse_callback)
-
-        while True:
-            action = self.get_user_input(
-                0, [UiCodes.QUIT, UiCodes.CONFIRM_INPUT, UiCodes.SKIP_INPUT]
-            )
-            if action == UiCodes.CONFIRM_INPUT and selected_id is not None:
-                break
-            elif action == UiCodes.SKIP_INPUT:
-                selected_id = None
-                break
-            elif action == UiCodes.QUIT:
-                selected_id = -1
-                break
-
-        self.unsetMouseCallback()
-        return selected_id
+    def _make_additional_window_name(self, key: int | str) -> str:
+        return f"Additional - {key}"
 
     def get_user_input(
         self,
@@ -572,6 +469,9 @@ class OpenCvUi(Ui):
 
     def close(self) -> None:
         cv2.destroyWindow(self.window_name)
+        for key in self._additional_windows:
+            window_name = self._make_additional_window_name(key)
+            cv2.destroyWindow(window_name)
 
     def get_confirmation(self, prompt: str) -> bool:
         self.refresh_frame()
@@ -593,39 +493,6 @@ class OpenCvUi(Ui):
             elif action == UiCodes.QUIT:
                 return True
 
-    def process_crop_region_loop(
-        self,
-        cap: cv2.VideoCapture,
-        frame_callback,
-        writer: cv2.VideoWriter | None,
-    ):
-        """
-        UI-owned main loop.
-        frame_callback(frame) -> (rectified, pts)
-        """
-
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-
-            # Delegate all processing
-            rectified, pts = frame_callback(frame)
-
-            # UI rendering
-            self.set_fresh_frame(frame)
-            self.plot_points(pts, (0, 255, 0))
-            self.show_frame()
-
-            cv2.imshow("cropped_view", rectified)
-            if writer:
-                writer.write(rectified)
-
-            # Input handling (this is the real event boundary)
-            action = self.get_user_input(1)
-            if action == UiCodes.QUIT:
-                break
-
     def run_loop(self, step_fn):
         """
         UI-owned main loop.
@@ -633,14 +500,14 @@ class OpenCvUi(Ui):
         """
 
         while True:
-            if step_fn():
+            if not step_fn():
                 break
 
-    def initialise(self, fps):
-        self.fps = fps
-
-    def show_additional(self, key, frame):
-        cv2.imshow(key, frame)
-
-    def take_user_input(self):
-        pass
+    def show_additional(self, key: int | str, frame: np.ndarray) -> None:
+        """
+        Show the given frame in a separate top-level window.
+        Each index corresponds to a separate window.
+        """
+        window_name = self._make_additional_window_name(key)
+        cv2.imshow(window_name, frame)
+        self._additional_windows.add(key)

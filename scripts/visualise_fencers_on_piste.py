@@ -167,7 +167,7 @@ def main():
             writer.write(ui.current_frame)
 
         delay: int = FULL_DELAY if slow else HALF_DELAY
-        action = ui.take_user_input(delay, [UiCodes.QUIT, UiCodes.TOGGLE_SLOW])
+        action = ui.get_user_input(delay, [UiCodes.QUIT, UiCodes.TOGGLE_SLOW])
         if action == UiCodes.TOGGLE_SLOW:
             slow = not slow
             print(f"Slow mode {'enabled' if slow else 'disabled'}.")
