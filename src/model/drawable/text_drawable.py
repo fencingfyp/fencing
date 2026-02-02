@@ -2,7 +2,7 @@ from .drawable import Drawable
 
 
 class TextDrawable(Drawable):
-    def __init__(self, text, x, y, color=(0, 255, 0), font_size=12):
+    def __init__(self, text, x, y, color=(0, 255, 0), font_size=15):
         self.text = text
         self.x = x
         self.y = y

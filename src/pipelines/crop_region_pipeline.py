@@ -1,7 +1,10 @@
+import os
+
 import cv2
 import numpy as np
 
 from src.model import Quadrilateral, Ui, UiCodes
+from src.model.PysideUi2 import PysideUi2
 from src.model.tracker import OrbTracker
 from src.util.io import setup_output_video_io
 from src.util.utils import generate_select_quadrilateral_instructions
@@ -47,7 +50,7 @@ class CropRegionPipeline:
         self,
         cap,
         output_path: str | None,
-        ui: Ui,
+        ui: PysideUi2,
         region: str = "region",
     ):
 
@@ -67,6 +70,7 @@ class CropRegionPipeline:
         self.plane_id = "tracked_plane"
 
         self.ui.initialise(cap.get(cv2.CAP_PROP_FPS))
+        self.cancelled = False
 
     # ---- ENTRY POINT ----
 
@@ -113,14 +117,18 @@ class CropRegionPipeline:
         # Align number of frames with original video
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-        self.ui.run_loop(self.step, self.stop)
+        self.ui.schedule(self.advance)
 
     # ---- CALLBACK 2: Loop ----
 
-    def step(self) -> bool:
+    def advance(self):
+        if self.cancelled:
+            return
+
         ret, frame = self.cap.read()
         if not ret:
-            return False
+            self.stop()
+            return
 
         rectified, pts = self._process_frame(frame)
 
@@ -128,13 +136,13 @@ class CropRegionPipeline:
         self.ui.set_fresh_frame(frame)
         self.ui.plot_points(pts, (0, 255, 0))
         self.ui.show_frame()
-
         self.ui.show_additional("cropped_view", rectified)
 
         if self.writer:
             self.writer.write(rectified)
 
-        return True
+        # Schedule next frame
+        self._schedule(self.advance, 0)
 
     # ---- PROCESSING ----
 
@@ -154,17 +162,29 @@ class CropRegionPipeline:
         transform = cv2.getPerspectiveTransform(quad.numpy(), self.dst_corners)
         return cv2.warpPerspective(frame, transform, (width, height))
 
+    # ---- UTILITIES ----
+    def _schedule(self, fn, delay_ms):
+        if not self.cancelled:
+            self.ui.schedule(fn, delay_ms)
+
     # ---- CLEANUP ----
 
     def cancel(self):
-        self.ui.close()
+        self.cancelled = True
+        self.cleanup()
 
+        # delete video because it's incomplete
+        if self.output_path and os.path.exists(self.output_path):
+            os.remove(self.output_path)
+
+    def cleanup(self):
+        self.ui.close_additional_windows()
         if self.writer:
             self.writer.release()
         self.cap.release()
 
     def stop(self):
-        self.cancel()
+        self.cleanup()
         self.on_finished()
 
     def set_on_finished(self, fn=None):

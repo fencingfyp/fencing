@@ -17,7 +17,7 @@ class Ui(ABC):
         pass
 
     @abstractmethod
-    def close(self):
+    def close_additional_windows(self):
         """Close the UI."""
         pass
 
@@ -55,9 +55,4 @@ class Ui(ABC):
     @abstractmethod
     def show_additional(self, key: int | str, frame: np.ndarray):
         """Show the given frame in a separate top-level window."""
-        pass
-
-    @abstractmethod
-    def take_user_input(self):
-        """Take user input and return an action code."""
         pass

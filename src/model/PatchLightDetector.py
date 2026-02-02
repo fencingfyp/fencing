@@ -14,12 +14,12 @@ class Colour(enum.Enum):
 
 COLOURS_TO_LAB_DISTRIBUTIONS = {  # color_name -> (mu_ab, cov_inv)
     Colour.RED.value: (
-        np.array([165, 150]),
-        np.linalg.inv(np.diag([18**2, 8**2])),
+        np.array([160, 160]),
+        np.linalg.inv(np.diag([15**2, 15**2])),
     ),
     Colour.GREEN.value: (
-        np.array([80, 150]),
-        np.linalg.inv(np.diag([18**2, 15**2])),
+        np.array([90, 145]),
+        np.linalg.inv(np.diag([15**2, 15**2])),
     ),
     Colour.WHITE.value: (
         np.array([128, 128]),

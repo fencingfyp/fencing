@@ -15,7 +15,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
-from src.gui.inline_point_picker import InlinePointPicker
+from src.gui.inline_point_picker import NPointPicker
 from src.gui.util.conversion import np_to_pixmap, qlabel_to_np
 from src.model.OpenCvUi import calculate_centrepoint
 
@@ -49,7 +49,7 @@ class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
         self._additional_windows: dict[int | str, QWidget] = {}
 
         self.timer = QTimer(self)
-        QApplication.instance().aboutToQuit.connect(self.close)
+        QApplication.instance().aboutToQuit.connect(self.close_additional_windows)
         self.fps = None
 
     def _on_key_pressed(self, key):
@@ -160,7 +160,7 @@ class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
         def on_done(points):
             callback(points)
 
-        InlinePointPicker(
+        NPointPicker(
             video_label=self.video_label,
             text_label=self.text_label,
             frame=frame,
@@ -204,7 +204,7 @@ class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def close(self):
+    def close_additional_windows(self):
         for win in self._additional_windows.values():
             win.close()
         self._additional_windows.clear()

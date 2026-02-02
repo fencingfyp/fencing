@@ -570,7 +570,7 @@ class OpenCvUi(Ui):
             if not must_be_valid:
                 return None
 
-    def close(self) -> None:
+    def close_additional_windows(self) -> None:
         cv2.destroyWindow(self.window_name)
 
     def get_confirmation(self, prompt: str) -> bool:

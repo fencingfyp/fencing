@@ -7,12 +7,18 @@ from scripts.manual_track_fencers import (
     NUM_FRAMES_TO_SKIP,
     appears_in_future_detections,
     get_header_row,
+    reprocess_csv,
     row_mapper,
 )
 from src.gui.util.task_graph import HeatMapTasksToIds
-from src.model import FrameInfoManager, PysideUi, Ui
-from src.model.InputController import InputController
-from src.util.file_names import ORIGINAL_VIDEO_NAME, RAW_POSE_DATA_CSV_NAME
+from src.model import FrameInfoManager
+from src.model.PysideUi2 import PysideUi2
+from src.util.file_names import (
+    ORIGINAL_VIDEO_NAME,
+    PROCESSED_POSE_DATA_CSV_NAME,
+    RAW_POSE_DATA_CSV_NAME,
+)
+from src.util.io import setup_input_video_io
 
 from ..momentum_graph.base_task_widget import BaseTaskWidget
 
@@ -33,12 +39,22 @@ class TrackFencersWidget(BaseTaskWidget):
         self.run_started.emit(HeatMapTasksToIds.TRACK_FENCERS)
 
         input_video_path = os.path.join(self.working_dir, ORIGINAL_VIDEO_NAME)
+        input_csv_path = os.path.join(
+            self.working_dir,
+            RAW_POSE_DATA_CSV_NAME,
+        )
+        output_csv_path = os.path.join(self.working_dir, PROCESSED_POSE_DATA_CSV_NAME)
 
         # Create controller
-        self.controller = ObtainFencerIdsController(
-            ui=self.interactive_ui,
+        self.controller = FencerAssignmentController(
             video_path=input_video_path,
-            csv_path=os.path.join(self.working_dir, RAW_POSE_DATA_CSV_NAME),
+            input_csv_path=input_csv_path,
+            ui=PysideUi2(
+                video_label=self.interactive_ui.video_label,
+                text_label=self.interactive_ui.text_label,
+                parent=self,
+            ),
+            output_csv_path=output_csv_path,
         )
 
         # When finished → emit completion
@@ -52,146 +68,234 @@ class TrackFencersWidget(BaseTaskWidget):
         self.run_completed.emit(HeatMapTasksToIds.TRACK_FENCERS)
 
 
-class ObtainFencerIdsTask:
-    def __init__(
-        self,
-        ui: Ui,
-        input: InputController,
-        csv_path: str,
-        video_path: str,
-    ):
-        self.ui = ui
-        self.input = input
+class FencerAssignmentController:
+    def __init__(self, video_path, input_csv_path, ui: PysideUi2, output_csv_path):
+        self.input_csv_path = input_csv_path
+        self.output_csv_path = output_csv_path
 
-        self.cap = cv2.VideoCapture(video_path)
-        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
-        self.ms_per_frame = int(1000 / self.fps)
-
+        cap, fps, _, _, _ = setup_input_video_io(video_path)
+        self.cap = cap
+        self.frame_reader = SequentialFrameReader(cap)
         self.frame_manager = FrameInfoManager(
-            csv_path, self.fps, get_header_row(), row_mapper
+            csv_path=input_csv_path,
+            row_mapper=row_mapper,
+            fps=fps,
+            header_format=get_header_row(),
         )
 
-        # State
+        self.ui = ui
         self.frame_idx = 0
         self.internal_clock = 0
-        self.selection_in_progress = False
+        self.ms_per_frame = int(1000 / fps)
 
-        self.current_left = None
-        self.current_right = None
-
+        # Fencer tracking
+        self.current_left_id = None
+        self.current_right_id = None
         self.left_ids = set()
         self.right_ids = set()
-        self.not_left = set()
-        self.not_right = set()
+        self.not_left_ids = set()
+        self.not_right_ids = set()
 
         self.left_timer = -1e9
         self.right_timer = -1e9
 
-    # ---------------- Loop step ----------------
+        self.cancelled = False
 
-    def step(self) -> bool:
-        if self.selection_in_progress:
-            return True  # pause progression
+    def start(self):
+        self._schedule(self.advance)
 
-        ret, frame = self.cap.read()
+    def advance(self):
+        if self.cancelled:
+            return
+
+        ret, frame = self.frame_reader.read_at(self.frame_idx)
         if not ret:
-            return False
+            self.on_finish()
+            return
 
         detections = self.frame_manager.get_frame_and_advance(self.frame_idx)
-        self.frame_idx += 1
 
-        self.ui.set_frame(frame)
-        self.ui.draw_candidates(detections)
+        self.ui.set_fresh_frame(frame)
+        self.ui.video_renderer.render_detections(detections)
 
         self._invalidate_lost_fencers(detections)
 
         if self._needs_left_selection():
             self._request_selection(left=True, detections=detections)
-            return True
+            return
 
         if self._needs_right_selection():
             self._request_selection(left=False, detections=detections)
-            return True
-
-        self.internal_clock += self.ms_per_frame
-        return True
-
-    def _request_selection(self, *, left: bool, detections):
-        self.selection_in_progress = True
-
-        known = self.left_ids if left else self.right_ids
-        exclude = self.not_left if left else self.not_right
-
-        candidates = {i: d for i, d in detections.items() if i not in exclude}
-        if not candidates:
-            self.selection_in_progress = False
             return
 
-        self.input.request_fencer_selection(
-            candidates=candidates,
-            left=left,
-            callback=lambda result: self._on_selection(left, result),
-        )
+        self._advance_frame()
+        self._schedule(self.advance)
 
-    def _on_selection(self, left: bool, result: int | None):
-        self.selection_in_progress = False
-
-        if result is None:
-            delay = NUM_FRAMES_TO_SKIP * self.ms_per_frame
-            if left:
-                self.left_timer = self.internal_clock + delay
-            else:
-                self.right_timer = self.internal_clock + delay
-            return
-
-        if left:
-            self.current_left = result
-            self.left_ids.add(result)
-            self.not_right.add(result)
-        else:
-            self.current_right = result
-            self.right_ids.add(result)
-            self.not_left.add(result)
-
-    def _needs_left_selection(self) -> bool:
-        return self.current_left is None and self.left_timer < self.internal_clock
-
-    def _needs_right_selection(self) -> bool:
-        return self.current_right is None and self.right_timer < self.internal_clock
-
+    # --------------------------------------------------------
+    # State handlers
+    # --------------------------------------------------------
     def _invalidate_lost_fencers(self, detections: dict[int, dict]):
         if (
-            self.current_left is not None
-            and self.current_left not in detections
+            self.current_left_id is not None
+            and self.current_left_id not in detections
             and not appears_in_future_detections(
-                self.frame_manager, self.frame_idx, self.current_left
+                self.frame_manager, self.frame_idx, self.current_left_id
             )
         ):
-            self.current_left = None
+            self.current_left_id = None
 
         if (
-            self.current_right is not None
-            and self.current_right not in detections
+            self.current_right_id is not None
+            and self.current_right_id not in detections
             and not appears_in_future_detections(
-                self.frame_manager, self.frame_idx, self.current_right
+                self.frame_manager, self.frame_idx, self.current_right_id
             )
         ):
-            self.current_right = None
+            self.current_right_id = None
 
-    def cleanup(self):
-        self.input.cancel()
-        if self.cap:
+    def _request_selection(self, left: bool, detections: dict):
+        candidates = {
+            det_id: det
+            for det_id, det in detections.items()
+            if det_id not in (self.not_left_ids if left else self.not_right_ids)
+        }
+
+        if not candidates:
+            self._apply_skip(left)
+            self._advance_frame()
+            self._schedule(self.advance)
+            return
+
+        self.ui.get_fencer_id(
+            candidates,
+            left,
+            on_done=lambda result: self._on_selection_done(left, result),
+        )
+
+    def _on_selection_done(self, left: bool, result):
+        if result is None:
+            self._apply_skip(left)
+        else:
+            if left:
+                self.current_left_id = result
+                self.left_ids.add(result)
+                self.not_right_ids.add(result)
+            else:
+                self.current_right_id = result
+                self.right_ids.add(result)
+                self.not_left_ids.add(result)
+
+        self._schedule(self.advance)
+
+    # --------------------------------------------------------
+    # Helpers
+    # --------------------------------------------------------
+    def _needs_left_selection(self):
+        return self.current_left_id is None and self.left_timer < self.internal_clock
+
+    def _needs_right_selection(self):
+        return self.current_right_id is None and self.right_timer < self.internal_clock
+
+    def _apply_skip(self, left: bool):
+        timer = self.internal_clock + NUM_FRAMES_TO_SKIP * self.ms_per_frame
+        if left:
+            self.left_timer = timer
+        else:
+            self.right_timer = timer
+
+    def _advance_frame(self):
+        self.frame_idx += 1
+        self.internal_clock += self.ms_per_frame
+
+    def _schedule(self, callback, delay_ms=0):
+        if self.cancelled:
+            return
+        self.ui.schedule(callback, delay_ms)
+
+    # ------------------------------------------------------------------
+    # Finish / quit
+    # ------------------------------------------------------------------
+
+    def on_finish(self):
+        self.cancel()
+
+        if self._on_finished_callback:
+            self._on_finished_callback()
+
+        # write to output
+        reprocess_csv(
+            input_csv=self.input_csv_path,
+            left_fencer_ids=self.left_ids,
+            right_fencer_ids=self.right_ids,
+            output_csv_path=self.output_csv_path,
+        )
+
+    def set_on_finished(self, callback):
+        self._on_finished_callback = callback
+
+    def cancel(self):
+        self.cancelled = True
+        if self.cap is not None:
             self.cap.release()
-        self.ui.close()
+
+
+import cv2
+
+
+class SequentialFrameReader:
+    def __init__(self, cap: cv2.VideoCapture):
+        self.cap = cap
+        self.cur_idx = 0
+
+        self._cached_idx = None
+        self._cached_frame = None
+
+    def read_at(self, frame_idx: int):
+        # Re-read current frame (cheap)
+        if frame_idx == self._cached_idx:
+            return True, self._cached_frame
+
+        # Next frame (fast path)
+        if frame_idx == self.cur_idx:
+            ret, frame = self.cap.read()
+            if not ret:
+                return False, None
+
+            self._cached_idx = frame_idx
+            self._cached_frame = frame
+            self.cur_idx += 1
+            return True, frame
+
+        # Forward skip (rare but allowed)
+        if frame_idx > self.cur_idx:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ret, frame = self.cap.read()
+            if not ret:
+                return False, None
+
+            self.cur_idx = frame_idx + 1
+            self._cached_idx = frame_idx
+            self._cached_frame = frame
+            return True, frame
+
+        # Backwards access is forbidden
+        raise RuntimeError(
+            f"Frame rewind not allowed: requested {frame_idx}, "
+            f"current is {self.cur_idx}"
+        )
 
 
 if __name__ == "__main__":
+    import cProfile
     import sys
 
     from PySide6.QtWidgets import QApplication
 
-    app = QApplication(sys.argv)
-    widget = TrackFencersWidget()
-    widget.set_working_directory("matches_data/sabre_2")
-    widget.show()
-    sys.exit(app.exec())
+    def main():
+        app = QApplication(sys.argv)
+        widget = TrackFencersWidget()
+        widget.set_working_directory("matches_data/sabre_2")
+        widget.show()
+        sys.exit(app.exec())
+
+    cProfile.run("main()", sort="tottime")

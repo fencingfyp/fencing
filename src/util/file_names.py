@@ -6,6 +6,8 @@ OCR_OUTPUT_CSV_NAME = "raw_scores.csv"
 DETECT_LIGHTS_OUTPUT_CSV_NAME = "raw_lights.csv"
 START_TIME_JSON_NAME = "start_time.json"
 MOMENTUM_DATA_CSV_NAME = "momentum_data.csv"
+MOMENTUM_GRAPH_IMAGE_NAME = "momentum_graph.png"
 
 # Heat map
 RAW_POSE_DATA_CSV_NAME = "raw_pose_data.csv"
+PROCESSED_POSE_DATA_CSV_NAME = "processed_pose_data.csv"

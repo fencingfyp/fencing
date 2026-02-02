@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QLabel
 from src.gui.util.conversion import np_to_pixmap
 
 
-class InlinePointPicker(QObject):
+class NPointPicker(QObject):
     """
     Click → confirm pattern for picking multiple points on a QLabel.
     """
@@ -18,6 +18,7 @@ class InlinePointPicker(QObject):
         frame: np.ndarray,
         prompts: list[str],
         on_done,
+        w_shortcut: QShortcut | None = None,
     ):
         super().__init__(video_label)
 
@@ -37,7 +38,10 @@ class InlinePointPicker(QObject):
         video_label.mousePressEvent = self._on_mouse_press
 
         # setup confirm shortcut (W key)
-        self._shortcut = QShortcut(QKeySequence(Qt.Key.Key_W), video_label)
+        if w_shortcut is not None:
+            self._shortcut = w_shortcut
+        else:
+            self._shortcut = QShortcut(QKeySequence(Qt.Key.Key_W), video_label)
         self._shortcut.activated.connect(self.confirm_point)
 
         # show first prompt
@@ -120,3 +124,4 @@ class InlinePointPicker(QObject):
         self._shortcut.deleteLater()
 
         self.text_label.setText("")
+        self._shortcut.activated.disconnect(self.confirm_point)

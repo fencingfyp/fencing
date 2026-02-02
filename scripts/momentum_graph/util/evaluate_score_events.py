@@ -262,7 +262,7 @@ def main():
         writer.release()
 
     cap.release()
-    ui.close()
+    ui.close_additional_windows()
 
 
 def check_for_score(

@@ -53,7 +53,7 @@ class MainWindow(QMainWindow):
 
         self.momentum_graph_widget = MomentumGraphMainWidget()
         self.stack.addWidget(self.momentum_graph_widget)
-        self.momentum_graph_widget.navigate_to_manage_match.connect(
+        self.momentum_graph_widget.exit_requested.connect(
             lambda: self.stack.setCurrentWidget(self.manage_match_widget)
         )
         self.manage_match_widget.navigate_to_momentum_graph.connect(

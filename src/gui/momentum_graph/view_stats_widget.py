@@ -15,6 +15,7 @@ from src.gui.util.conversion import pixmap_to_np
 from src.gui.util.task_graph import MomentumGraphTasksToIds
 from src.util.file_names import (
     MOMENTUM_DATA_CSV_NAME,
+    MOMENTUM_GRAPH_IMAGE_NAME,
     ORIGINAL_VIDEO_NAME,
     START_TIME_JSON_NAME,
 )
@@ -88,6 +89,10 @@ class ViewStatsWidget(BaseTaskWidget):
         # Show table as image
         pixmap = dataframe_to_pixmap(timing_df)
         self.interactive_ui.show_additional("data", pixmap_to_np(pixmap))
+
+        # write data to image file
+        output_path = os.path.join(self.working_dir, MOMENTUM_GRAPH_IMAGE_NAME)
+        pixmap.save(output_path)
 
 
 def load_momentum_df(working_dir: str) -> pd.DataFrame:

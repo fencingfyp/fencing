@@ -139,7 +139,7 @@ def get_exclude_regions(
 
         transformed_exclude_regions.append(Quadrilateral(orig_corners))
 
-    obtain_exclude_regions_ui.close()
+    obtain_exclude_regions_ui.close_additional_windows()
     return transformed_exclude_regions
 
 
@@ -255,7 +255,7 @@ def crop_region(
         writer.release()
         print(f"Saved video to: {output_path}")
     cap.release()
-    ui.close()
+    ui.close_additional_windows()
 
 
 if __name__ == "__main__":

@@ -151,7 +151,7 @@ def obtain_fencer_ids(csv_path: str, video_path: str) -> None:
             break
 
     cap.release()
-    ui.close()
+    ui.close_additional_windows()
     return left_fencer_ids, right_fencer_ids, early_exit
 
 

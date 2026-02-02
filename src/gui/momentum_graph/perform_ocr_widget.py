@@ -248,8 +248,16 @@ class OcrController(QObject):
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
-
     def cancel(self):
+        """Cancel processing and cleanup resources."""
+        self.cleanup()
+        # delete video because it's incomplete
+        if self.output_video:
+            output_video_path = os.path.join(self.working_dir, OUTPUT_VIDEO_NAME)
+            if os.path.exists(output_video_path):
+                os.remove(output_video_path)
+
+    def cleanup(self):
         if self.timer.isActive():
             self.timer.stop()
 
@@ -271,7 +279,7 @@ class OcrController(QObject):
 
     def stop(self):
         """Stop the timer and release resources."""
-        self.cancel()
+        self.cleanup()
         self.finished.emit()
 
     # ------------------------------------------------------------------
@@ -294,19 +302,33 @@ class OcrController(QObject):
         original_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         cap.release()
 
-        if cropped_frames != original_frames:
-            raise ValueError(
-                f"Cropped video frames ({cropped_frames}) do not match original ({original_frames})"
-            )
+        # if cropped_frames != original_frames:
+        #     raise ValueError(
+        #         f"Cropped video frames ({cropped_frames}) do not match original ({original_frames})"
+        #     )
 
 
 if __name__ == "__main__":
+    import cProfile
+    import pstats
     import sys
 
     from PySide6.QtWidgets import QApplication
 
-    app = QApplication(sys.argv)
-    widget = PerformOcrWidget()
-    widget.set_working_directory("matches_data/sabre_1")
-    widget.show()
-    sys.exit(app.exec())
+    def main():
+        app = QApplication(sys.argv)
+        widget = PerformOcrWidget()
+        widget.set_working_directory("matches_data/sabre_2")
+        widget.show()
+        sys.exit(app.exec())
+
+    # Run the profiler and save stats to a file
+    cProfile.run("main()", "profile.stats")
+
+    # Load stats
+    stats = pstats.Stats("profile.stats")
+    stats.strip_dirs()  # remove extraneous path info
+    stats.sort_stats("tottime")  # sort by total time
+
+    # Print only top 10 functions
+    stats.print_stats(10)

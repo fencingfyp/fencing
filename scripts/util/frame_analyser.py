@@ -90,7 +90,7 @@ def main():
             break
 
     cap.release()
-    ui.close()
+    ui.close_additional_windows()
 
 
 if __name__ == "__main__":

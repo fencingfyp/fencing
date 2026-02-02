@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication
 
 from scripts.momentum_graph.perform_ocr import validate_input_video
 from src.gui.util.task_graph import MomentumGraphTasksToIds
-from src.model import NORMAL_UI_FUNCTIONS, PysideUi, Quadrilateral, UiCodes
+from src.model import NORMAL_UI_FUNCTIONS, PysideUi, PysideUi2, Quadrilateral, UiCodes
 from src.model.PatchLightDetector import Colour, PatchLightDetector
 from src.util.file_names import (
     CROPPED_SCORE_LIGHTS_VIDEO_NAME,
@@ -51,7 +51,11 @@ class DetectScoreLightsWidget(BaseTaskWidget):
 
         # Create controller
         self.controller = ScoreLightsController(
-            ui=self.interactive_ui,
+            ui=PysideUi2(
+                video_label=self.interactive_ui.video_label,
+                text_label=self.interactive_ui.text_label,
+                parent=self,
+            ),
             working_dir=self.working_dir,
         )
 
@@ -218,13 +222,21 @@ class ScoreLightsController(QObject):
         # Handle interactive actions
         action = self.ui.get_user_input()
         if action == UiCodes.QUIT:
-            self.cancel()
+            self.cleanup()
 
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
-
     def cancel(self):
+        self.cleanup()
+        if not self.demo_mode:
+            output_csv_path = os.path.join(
+                self.working_dir, DETECT_LIGHTS_OUTPUT_CSV_NAME
+            )
+            if os.path.exists(output_csv_path):
+                os.remove(output_csv_path)
+
+    def cleanup(self):
         if self.timer.isActive():
             self.timer.stop()
         if self.cap:
@@ -235,7 +247,7 @@ class ScoreLightsController(QObject):
             self.csv_file = None
 
     def stop(self):
-        self.cancel()
+        self.cleanup()
         self.finished.emit()
 
 

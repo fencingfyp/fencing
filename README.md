@@ -44,3 +44,4 @@ pyside6
 
 ### Pip
 ???
+graphviz

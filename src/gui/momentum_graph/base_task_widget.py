@@ -11,7 +11,6 @@ from .ui_base_task_widget import Ui_BaseTaskWidget
 
 
 class BaseTaskWidget(QWidget):
-    back_button_clicked = Signal()
     run_started = Signal(object)
     run_completed = Signal(object)
 
@@ -25,19 +24,17 @@ class BaseTaskWidget(QWidget):
         self.working_dir = None
         self.controller = None
 
-        self.ui.backButton.clicked.connect(self.on_back_button_clicked)
-
         self.interactive_ui = PysideUi(
             video_label=self.ui.videoLabel,
             text_label=self.ui.uiTextLabel,
             parent=self,
         )
 
-    def on_back_button_clicked(self):
-        if self.controller:
+    def cancel(self):
+        if self.controller and hasattr(self.controller, "cancel"):
             self.controller.cancel()
-        self.interactive_ui.close()
-        self.back_button_clicked.emit()
+            self.controller = None
+        self.interactive_ui.close_additional_windows()
 
     @Slot(str)
     def set_working_directory(self, working_dir: str):

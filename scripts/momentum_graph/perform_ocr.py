@@ -385,7 +385,7 @@ def main():
             ocr_window_r_writer.release()
 
         cap.release()
-        ui.close()
+        ui.close_additional_windows()
         cv2.destroyWindow(ocr_window_l)
         cv2.destroyWindow(ocr_window_r)
 

@@ -129,7 +129,6 @@ class FrameInfoManager:
                     f"CSV has {len(header)} columns, expected {len(self.header_format)}"
                 )
 
-            last_seen: Dict[int, dict] = {}
             batch: Dict[int, dict] = {}
             current_frame: int | None = None
 
@@ -148,29 +147,28 @@ class FrameInfoManager:
 
                 # New frame encountered → flush previous frame
                 if frame_id != current_frame:
-                    yield current_frame, copy.deepcopy(last_seen if ffill else batch)
+                    yield current_frame, copy.deepcopy(batch)
 
                     # Forward-fill missing frames
                     if ffill:
                         for missing in range(current_frame + 1, frame_id):
-                            yield missing, copy.deepcopy(last_seen)
+                            yield missing, {}
 
                     batch = {}
                     current_frame = frame_id
 
                 # Update current frame
                 batch[obj_id] = obj
-                last_seen[obj_id] = obj
 
                 try:
                     current_row = next(reader)
                 except StopIteration:
-                    yield current_frame, copy.deepcopy(last_seen if ffill else batch)
+                    yield current_frame, copy.deepcopy(batch)
                     break
 
             # After EOF, forward-fill forever
             if current_frame is not None and ffill:
-                frozen = copy.deepcopy(last_seen)
+                frozen = copy.deepcopy(batch)
                 while True:
                     current_frame += 1
                     yield current_frame, frozen

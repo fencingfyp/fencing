@@ -10,6 +10,7 @@ from src.gui.momentum_graph.base_task_widget import BaseTaskWidget
 from src.gui.util.task_graph import HeatMapTasksToIds
 from src.model import Ui
 from src.util.file_names import ORIGINAL_VIDEO_NAME, RAW_POSE_DATA_CSV_NAME
+from src.util.gpu import get_device
 from src.util.io import setup_output_video_io
 
 
@@ -78,6 +79,7 @@ class PoseToCsvController:
 
         self.cap: cv2.VideoCapture | None = None
         self.model: YOLO | None = None
+        self.device = get_device()
         self.writer = None
         self.csv_file = None
 
@@ -152,12 +154,26 @@ class PoseToCsvController:
 
 
 if __name__ == "__main__":
+    import cProfile
+    import pstats
     import sys
 
     from PySide6.QtWidgets import QApplication
 
-    app = QApplication(sys.argv)
-    widget = TrackPosesWidget()
-    widget.set_working_directory("matches_data/sabre_2")
-    widget.show()
-    sys.exit(app.exec())
+    def main():
+        app = QApplication(sys.argv)
+        widget = TrackPosesWidget()
+        widget.set_working_directory("matches_data/foil_1")
+        widget.show()
+        sys.exit(app.exec())
+
+    # Run the profiler and save stats to a file
+    cProfile.run("main()", "profile.stats")
+
+    # Load stats
+    stats = pstats.Stats("profile.stats")
+    stats.strip_dirs()  # remove extraneous path info
+    stats.sort_stats("tottime")  # sort by total time
+
+    # Print only top 10 functions
+    stats.print_stats(10)

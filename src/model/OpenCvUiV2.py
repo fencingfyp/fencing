@@ -467,7 +467,7 @@ class OpenCvUiV2(Ui):
             if not must_be_valid:
                 return None
 
-    def close(self) -> None:
+    def close_additional_windows(self) -> None:
         cv2.destroyWindow(self.window_name)
         for key in self._additional_windows:
             window_name = self._make_additional_window_name(key)

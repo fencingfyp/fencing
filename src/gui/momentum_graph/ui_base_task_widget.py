@@ -23,9 +23,6 @@ class Ui_BaseTaskWidget(object):
         if not BaseTaskWidget.objectName():
             BaseTaskWidget.setObjectName(u"BaseTaskWidget")
         BaseTaskWidget.resize(897, 726)
-        self.backButton = QPushButton(BaseTaskWidget)
-        self.backButton.setObjectName(u"backButton")
-        self.backButton.setGeometry(QRect(10, 10, 100, 32))
         self.runButton = QPushButton(BaseTaskWidget)
         self.runButton.setObjectName(u"runButton")
         self.runButton.setGeometry(QRect(0, 660, 100, 32))
@@ -34,7 +31,7 @@ class Ui_BaseTaskWidget(object):
         self.uiTextLabel.setGeometry(QRect(10, 610, 871, 41))
         self.videoLabel = QLabel(BaseTaskWidget)
         self.videoLabel.setObjectName(u"videoLabel")
-        self.videoLabel.setGeometry(QRect(10, 50, 861, 561))
+        self.videoLabel.setGeometry(QRect(10, 10, 861, 601))
 
         self.retranslateUi(BaseTaskWidget)
 
@@ -43,7 +40,6 @@ class Ui_BaseTaskWidget(object):
 
     def retranslateUi(self, BaseTaskWidget):
         BaseTaskWidget.setWindowTitle(QCoreApplication.translate("BaseTaskWidget", u"Form", None))
-        self.backButton.setText(QCoreApplication.translate("BaseTaskWidget", u"Back", None))
         self.runButton.setText(QCoreApplication.translate("BaseTaskWidget", u"Run", None))
         self.uiTextLabel.setText(QCoreApplication.translate("BaseTaskWidget", u"Press \"Run\" to start the task", None))
         self.videoLabel.setText("")

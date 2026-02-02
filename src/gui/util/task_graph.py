@@ -37,6 +37,7 @@ Notes
 """
 
 from collections import defaultdict
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
@@ -44,13 +45,13 @@ from PySide6.QtCore import QObject, Signal
 
 
 class MomentumGraphTasksToIds(Enum):
-    CROP_SCOREBOARD = "crop_scoreboard"
-    CROP_SCORE_LIGHTS = "crop_score_lights"
-    PERFORM_OCR = "perform_ocr"
-    DETECT_SCORE_LIGHTS = "detect_score_lights"
-    GENERATE_MOMENTUM_GRAPH = "generate_momentum_graph"
-    GET_START_TIME = "get_start_time"
-    VIEW_STATS = "view_stats"
+    CROP_SCOREBOARD = "Crop Scoreboard"
+    CROP_SCORE_LIGHTS = "Crop Score Lights"
+    PERFORM_OCR = "Perform OCR"
+    DETECT_SCORE_LIGHTS = "Detect Score Lights"
+    GENERATE_MOMENTUM_GRAPH = "Generate Momentum Graph"
+    GET_START_TIME = "Get Start Time"
+    VIEW_STATS = "View Stats"
 
 
 class HeatMapTasksToIds(Enum):
@@ -62,6 +63,20 @@ class TaskState(Enum):
     LOCKED = 0
     READY = 1
     DONE = 2
+
+
+@dataclass
+class GraphNode:
+    id: str
+    state: TaskState
+    deps: list[str]
+    children: list[str]
+
+
+@dataclass
+class GraphLayout:
+    layers: list[list[str]]  # left → right columns
+    edges: list[tuple[str, str]]  # (from, to)
 
 
 class Task:
@@ -114,6 +129,15 @@ class TaskGraph(QObject):
         self.working_dir = Path(working_dir)
         self._initial_scan()
         self.graph_changed.emit()
+
+    def get_task_states(self) -> dict[str, str]:
+        """Get mapping of task ID → state name."""
+        return {tid: task.state.name for tid, task in self.tasks.items()}
+
+    def get_index_map(self) -> dict[str, int]:
+        """Get mapping of task ID → topological index (1-based)."""
+        topo_order = self.topological_order()
+        return {tid: i + 1 for i, tid in enumerate(topo_order)}  # 1-based
 
     # ---------- core logic ----------
 
@@ -168,3 +192,46 @@ class TaskGraph(QObject):
                 child.state = TaskState.LOCKED
                 self.task_changed.emit(child_id)
                 self._invalidate_downstream(child_id)
+
+    def snapshot(self) -> GraphLayout:
+        layers = self._topological_layers()
+        edges = [(t.id, c) for t in self.tasks.values() for c in t.children]
+        return GraphLayout(layers, edges)
+
+    def _topological_layers(self) -> list[list[str]]:
+        depth: dict[str, int] = {}
+
+        def compute_depth(tid: str) -> int:
+            if tid in depth:
+                return depth[tid]
+            if not self.tasks[tid].deps:
+                depth[tid] = 0
+            else:
+                depth[tid] = 1 + max(compute_depth(d) for d in self.tasks[tid].deps)
+            return depth[tid]
+
+        for tid in self.tasks:
+            compute_depth(tid)
+
+        layers: dict[int, list[str]] = defaultdict(list)
+        for tid, d in depth.items():
+            layers[d].append(tid)
+
+        return [layers[i] for i in sorted(layers)]
+
+    def topological_order(self) -> list[str]:
+        visited = set()
+        order = []
+
+        def dfs(tid: str):
+            if tid in visited:
+                return
+            visited.add(tid)
+            for child in self.tasks[tid].children:
+                dfs(child)
+            order.append(tid)
+
+        for tid in self.tasks:
+            dfs(tid)
+
+        return list(reversed(order))
