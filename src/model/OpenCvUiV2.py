@@ -1,5 +1,6 @@
 import enum
 import textwrap
+import threading
 
 import cv2
 import numpy as np
@@ -353,6 +354,24 @@ class OpenCvUiV2(Ui):
 
     def get_n_points_async(self, frame, instructions, callback) -> None:
         callback(self.get_n_points(frame, instructions))
+
+    def schedule(self, callback, delay_ms=0):
+        # Save the original schedule
+        orig_schedule = self.schedule
+        self.schedule = lambda callback, delay_ms=0: None  # ignore any schedule calls
+
+        try:
+            while True:
+                callback()
+                # exit if the callback has a natural stopping condition
+                if getattr(self, "cancelled", False):
+                    break
+                action = self.get_user_input(1)
+                if action == UiCodes.QUIT:
+                    break
+        finally:
+            # restore original schedule
+            self.schedule = orig_schedule
 
     def show_updated_point_selection_frame(
         self, positions, instructions, current_idx

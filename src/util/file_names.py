@@ -2,9 +2,10 @@
 ORIGINAL_VIDEO_NAME = "original.mp4"
 CROPPED_SCOREBOARD_VIDEO_NAME = "cropped_scoreboard.mp4"
 CROPPED_SCORE_LIGHTS_VIDEO_NAME = "cropped_score_lights.mp4"
+CROPPED_TIMER_VIDEO_NAME = "cropped_timer.mp4"
 OCR_OUTPUT_CSV_NAME = "raw_scores.csv"
 DETECT_LIGHTS_OUTPUT_CSV_NAME = "raw_lights.csv"
-START_TIME_JSON_NAME = "start_time.json"
+PERIODS_JSON_NAME = "periods.json"
 MOMENTUM_DATA_CSV_NAME = "momentum_data.csv"
 MOMENTUM_GRAPH_IMAGE_NAME = "momentum_graph.png"
 

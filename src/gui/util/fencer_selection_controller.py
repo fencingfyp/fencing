@@ -1,42 +1,35 @@
 from PySide6.QtCore import QObject, Qt
+from PySide6.QtGui import QKeySequence, QShortcut
 
 from src.model.OpenCvUi import calculate_centrepoint
 
 
 class FencerSelectionController(QObject):
     """
-    Manages interactive fencer selection.
-    UI just calls `start` and receives a callback when done.
+    Self-contained interactive fencer selector.
+    Short-lived: shortcuts and mouse are created on activate, removed on deactivate.
     """
 
-    def __init__(
-        self,
-        *,
-        ui,  # PysideUi
-        video_label,
-        w_shortcut,
-        s_shortcut,
-        on_done: callable,
-    ):
+    def __init__(self, *, ui, video_label, on_done: callable):
         super().__init__()
         self.ui = ui
         self.video_label = video_label
-        self.w_shortcut = w_shortcut
-        self.s_shortcut = s_shortcut
         self.on_done = on_done
 
         # state
         self.candidates: dict[int, dict] = {}
         self.selected_id: int | None = None
         self.left: bool = True
+        self._active = False
 
         # save original mouse handler
         self._orig_mouse_handler = video_label.mousePressEvent
-        video_label.setMouseTracking(True)
-        video_label.mousePressEvent = self._on_mouse_click
 
-    # ---------- public API ----------
+        # shortcuts (initialized on activate)
+        self._w_shortcut: QShortcut | None = None
+        self._s_shortcut: QShortcut | None = None
 
+    # ----------------------- lifecycle -----------------------
     def start(self, candidates: dict[int, dict], left: bool):
         if not candidates:
             self.on_done(None)
@@ -46,54 +39,66 @@ class FencerSelectionController(QObject):
         self.left = left
         self.selected_id = None
 
-        self._connect_inputs()
+        self.activate()
         self._render()
 
     def stop(self):
-        self._disconnect_inputs()
+        self.deactivate()
         self.candidates = {}
         self.selected_id = None
 
-    # ---------- input wiring ----------
+    def activate(self):
+        if self._active:
+            return
+        self._active = True
 
-    def _connect_inputs(self):
-        self.w_shortcut.activated.connect(self._confirm)
-        self.w_shortcut.setEnabled(True)
+        # create shortcuts fresh
+        self._w_shortcut = QShortcut(QKeySequence(Qt.Key.Key_W), self.video_label)
+        self._w_shortcut.activated.connect(self._confirm)
 
-        self.s_shortcut.activated.connect(self._skip)
-        self.s_shortcut.setEnabled(True)
+        self._s_shortcut = QShortcut(QKeySequence(Qt.Key.Key_S), self.video_label)
+        self._s_shortcut.activated.connect(self._skip)
 
+        # mouse
+        self.video_label.setMouseTracking(True)
         self.video_label.mousePressEvent = self._on_mouse_click
 
-    def _disconnect_inputs(self):
-        self.w_shortcut.activated.disconnect(self._confirm)
-        self.w_shortcut.setEnabled(False)
+    def deactivate(self):
+        if not self._active:
+            return
+        self._active = False
 
-        self.s_shortcut.activated.disconnect(self._skip)
-        self.s_shortcut.setEnabled(False)
+        # remove shortcuts
+        if self._w_shortcut:
+            self._w_shortcut.activated.disconnect(self._confirm)
+            self._w_shortcut.setParent(None)
+            self._w_shortcut = None
 
+        if self._s_shortcut:
+            self._s_shortcut.activated.disconnect(self._skip)
+            self._s_shortcut.setParent(None)
+            self._s_shortcut = None
+
+        # restore mouse
         self.video_label.mousePressEvent = self._orig_mouse_handler
 
-    # ---------- handlers ----------
-
+    # ----------------------- input handlers -----------------------
     def _on_mouse_click(self, event):
-        if event.button() != Qt.LeftButton:  # Left click
+        if event.button() != Qt.LeftButton:
             return
 
-        label_w = self.video_label.width()
-        label_h = self.video_label.height()
+        label_w, label_h = self.video_label.width(), self.video_label.height()
         frame = self.ui.get_current_frame()
         if frame is None:
             return
 
         fh, fw = frame.shape[:2]
-        scale_x = fw / label_w
-        scale_y = fh / label_h
+        scale_x, scale_y = fw / label_w, fh / label_h
 
         x = event.position().x() * scale_x
         y = event.position().y() * scale_y
 
-        # Find closest candidate centrepoint
+        # Closest candidate
         closest_candidate = min(
             self.candidates.values(),
             key=lambda c: (calculate_centrepoint(c)[0] - x) ** 2
@@ -113,8 +118,7 @@ class FencerSelectionController(QObject):
         self.on_done(None)
         self.stop()
 
-    # ---------- rendering ----------
-
+    # ----------------------- rendering -----------------------
     def _render(self):
         side = "Left" if self.left else "Right"
 

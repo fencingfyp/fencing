@@ -1,22 +1,10 @@
 import argparse
 import os
 
-import cv2
-import numpy as np
-
-from src.model import (
-    OpenCvUiV2,
-    OrbTracker,
-    Quadrilateral,
-    SiftTracker,
-    TargetTracker,
-    Ui,
-    UiCodes,
-)
-from src.pipelines.crop_region_pipeline import CropRegionPipeline
+from src.model import OpenCvUiV2
+from src.pipelines.multi_region_crop_pipeline import MultiRegionCropPipeline
 from src.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME, ORIGINAL_VIDEO_NAME
-from src.util.io import setup_input_video_io, setup_output_file, setup_output_video_io
-from src.util.utils import generate_select_quadrilateral_instructions
+from src.util.io import setup_input_video_io, setup_output_file
 
 
 def parse_arguments():
@@ -46,9 +34,23 @@ def main():
     cap, _, width, height, _ = setup_input_video_io(input_video)
     ui = OpenCvUiV2("Scoreboard Cropping", width=width, height=height)
 
-    controller = CropRegionPipeline(cap, output_path, ui, region="scoreboard")
+    controller = MultiRegionCropPipeline(
+        cap, ui, output_paths={"scoreboard": output_path}
+    )
     controller.start()
 
 
 if __name__ == "__main__":
-    main()
+    import cProfile
+    import pstats
+
+    # Run the profiler and save stats to a file
+    cProfile.run("main()", "profile.stats")
+
+    # Load stats
+    stats = pstats.Stats("profile.stats")
+    stats.strip_dirs()  # remove extraneous path info
+    stats.sort_stats("tottime")  # sort by total time
+
+    # Print only top 10 functions
+    stats.print_stats(10)

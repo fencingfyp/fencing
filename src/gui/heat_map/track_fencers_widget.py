@@ -1,8 +1,6 @@
 import os
 from typing import override
 
-import cv2
-
 from scripts.manual_track_fencers import (
     NUM_FRAMES_TO_SKIP,
     appears_in_future_detections,
@@ -12,13 +10,14 @@ from scripts.manual_track_fencers import (
 )
 from src.gui.util.task_graph import HeatMapTasksToIds
 from src.model import FrameInfoManager
-from src.model.PysideUi2 import PysideUi2
+from src.model.PysideUi import PysideUi
 from src.util.file_names import (
     ORIGINAL_VIDEO_NAME,
     PROCESSED_POSE_DATA_CSV_NAME,
     RAW_POSE_DATA_CSV_NAME,
 )
 from src.util.io import setup_input_video_io
+from src.util.lru_frame_reader import LruFrameReader
 
 from ..momentum_graph.base_task_widget import BaseTaskWidget
 
@@ -26,13 +25,18 @@ from ..momentum_graph.base_task_widget import BaseTaskWidget
 class TrackFencersWidget(BaseTaskWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.ui.runButton.hide()
 
     @override
     def setup(self):
         self.interactive_ui.write("Press 'Run' to start tracking fencers.")
+        self.run_task()
 
     @override
     def on_runButton_clicked(self):
+        self.run_task()
+
+    def run_task(self):
         if not self.working_dir:
             return
 
@@ -49,11 +53,7 @@ class TrackFencersWidget(BaseTaskWidget):
         self.controller = FencerAssignmentController(
             video_path=input_video_path,
             input_csv_path=input_csv_path,
-            ui=PysideUi2(
-                video_label=self.interactive_ui.video_label,
-                text_label=self.interactive_ui.text_label,
-                parent=self,
-            ),
+            ui=self.interactive_ui,
             output_csv_path=output_csv_path,
         )
 
@@ -67,15 +67,21 @@ class TrackFencersWidget(BaseTaskWidget):
         self.interactive_ui.write("Fencer tracking completed.")
         self.run_completed.emit(HeatMapTasksToIds.TRACK_FENCERS)
 
+    def cancel(self):
+        self.interactive_ui.cancel_running_subtasks()
+        return super().cancel()
+
 
 class FencerAssignmentController:
-    def __init__(self, video_path, input_csv_path, ui: PysideUi2, output_csv_path):
+    def __init__(self, video_path, input_csv_path, ui: PysideUi, output_csv_path):
         self.input_csv_path = input_csv_path
         self.output_csv_path = output_csv_path
 
         cap, fps, _, _, _ = setup_input_video_io(video_path)
         self.cap = cap
-        self.frame_reader = SequentialFrameReader(cap)
+        self.frame_reader = LruFrameReader(
+            cap, max_cache_bytes=1 * 1024 * 1024 * 1024
+        )  # 1 GB cache
         self.frame_manager = FrameInfoManager(
             csv_path=input_csv_path,
             row_mapper=row_mapper,
@@ -237,52 +243,6 @@ class FencerAssignmentController:
         self.cancelled = True
         if self.cap is not None:
             self.cap.release()
-
-
-import cv2
-
-
-class SequentialFrameReader:
-    def __init__(self, cap: cv2.VideoCapture):
-        self.cap = cap
-        self.cur_idx = 0
-
-        self._cached_idx = None
-        self._cached_frame = None
-
-    def read_at(self, frame_idx: int):
-        # Re-read current frame (cheap)
-        if frame_idx == self._cached_idx:
-            return True, self._cached_frame
-
-        # Next frame (fast path)
-        if frame_idx == self.cur_idx:
-            ret, frame = self.cap.read()
-            if not ret:
-                return False, None
-
-            self._cached_idx = frame_idx
-            self._cached_frame = frame
-            self.cur_idx += 1
-            return True, frame
-
-        # Forward skip (rare but allowed)
-        if frame_idx > self.cur_idx:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-            ret, frame = self.cap.read()
-            if not ret:
-                return False, None
-
-            self.cur_idx = frame_idx + 1
-            self._cached_idx = frame_idx
-            self._cached_frame = frame
-            return True, frame
-
-        # Backwards access is forbidden
-        raise RuntimeError(
-            f"Frame rewind not allowed: requested {frame_idx}, "
-            f"current is {self.cur_idx}"
-        )
 
 
 if __name__ == "__main__":

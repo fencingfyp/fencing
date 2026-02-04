@@ -4,10 +4,9 @@ from os import path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from scripts.momentum_graph.util.file_names import PROCESSED_LIGHTS_CSV
 from src.util.file_names import DETECT_LIGHTS_OUTPUT_CSV_NAME, ORIGINAL_VIDEO_NAME
 from src.util.io import setup_input_video_io
-
-OUTPUT_CSV_NAME = "processed_lights.csv"
 
 
 def parse_arguments():
@@ -79,11 +78,11 @@ def remove_false_positives(series, min_on_len=5):
 
 def process_score_lights(df: pd.DataFrame, fps: int) -> pd.DataFrame:
     df = df.copy()
-    df["left_light"] = remove_false_negatives(df["left_light"], min_off_len=fps // 2)
-    df["right_light"] = remove_false_negatives(df["right_light"], min_off_len=fps // 2)
+    # df["left_light"] = remove_false_negatives(df["left_light"], min_off_len=fps // 2)
+    # df["right_light"] = remove_false_negatives(df["right_light"], min_off_len=fps // 2)
 
-    df["left_light"] = remove_false_positives(df["left_light"], min_on_len=fps // 2)
-    df["right_light"] = remove_false_positives(df["right_light"], min_on_len=fps // 2)
+    # df["left_light"] = remove_false_positives(df["left_light"], min_on_len=fps // 2)
+    # df["right_light"] = remove_false_positives(df["right_light"], min_on_len=fps // 2)
     return df
 
 
@@ -122,7 +121,7 @@ def main():
     # print(changes)
     # Optional: save to CSV
     if not demo_mode:
-        changes.to_csv(path.join(folder, OUTPUT_CSV_NAME), index=False)
+        changes.to_csv(path.join(folder, PROCESSED_LIGHTS_CSV), index=False)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,7 @@
-import os
-
-import cv2
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import QWidget
 
-from src.model import PysideUi
-from src.util.file_names import ORIGINAL_VIDEO_NAME
+from src.model.PysideUi import PysideUi
 
 from .ui_base_task_widget import Ui_BaseTaskWidget
 
@@ -23,6 +19,7 @@ class BaseTaskWidget(QWidget):
         self.cap = None
         self.working_dir = None
         self.controller = None
+        self.is_running = False
 
         self.interactive_ui = PysideUi(
             video_label=self.ui.videoLabel,
@@ -35,6 +32,7 @@ class BaseTaskWidget(QWidget):
             self.controller.cancel()
             self.controller = None
         self.interactive_ui.close_additional_windows()
+        self.interactive_ui.cancel_running_subtasks()
 
     @Slot(str)
     def set_working_directory(self, working_dir: str):
@@ -66,3 +64,10 @@ class BaseTaskWidget(QWidget):
     @Slot()
     def on_runButton_clicked(self):
         pass
+
+    def run_task(self):
+        self.is_running = True
+
+    def closeEvent(self, event):
+        self.cancel()
+        return super().closeEvent(event)

@@ -54,7 +54,7 @@ class MainWindow(QMainWindow):
         self.momentum_graph_widget = MomentumGraphMainWidget()
         self.stack.addWidget(self.momentum_graph_widget)
         self.momentum_graph_widget.exit_requested.connect(
-            lambda: self.stack.setCurrentWidget(self.manage_match_widget)
+            self.on_navigate_to_manage_match
         )
         self.manage_match_widget.navigate_to_momentum_graph.connect(
             lambda: self.stack.setCurrentWidget(self.momentum_graph_widget)
@@ -62,18 +62,39 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(self.stack)
 
+    @Slot()
+    def on_navigate_to_manage_match(self):
+        self.stack.setCurrentWidget(self.manage_match_widget)
+        self.manage_match_widget.initialise()
+
     @Slot(str)
     def on_match_selected(self, match_name: str):
         self.status.showMessage(f"Selected match: {match_name}")
         self.manage_match_widget.set_match(match_name)
-        self.stack.setCurrentWidget(self.manage_match_widget)
         self.momentum_graph_widget.set_match(
             match_name,
         )
+        self.on_navigate_to_manage_match()
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())
+    import cProfile
+
+    def main():
+        app = QApplication(sys.argv)
+        window = MainWindow()
+        window.show()
+        sys.exit(app.exec())
+
+    # Run the profiler and save stats to a file
+    cProfile.run("main()", "profile.stats")
+    # Load stats
+    import pstats
+
+    # Load stats
+    stats = pstats.Stats("profile.stats")
+    stats.strip_dirs()  # remove extraneous path info
+    stats.sort_stats("tottime")  # sort by total time
+
+    # Print only top 10 functions
+    stats.print_stats(10)

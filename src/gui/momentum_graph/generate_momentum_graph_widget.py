@@ -41,6 +41,10 @@ class GenerateMomentumGraphWidget(BaseTaskWidget):
     def setup(self):
         self.interactive_ui.write("Press 'Run' to start generating the momentum graph.")
 
+        # Temporarily hide run button until we implement run options
+        self.ui.runButton.hide()
+        self.run_task()
+
     def _on_finished(self):
         self.interactive_ui.write("Momentum graph generated.")
         self.run_completed.emit(MomentumGraphTasksToIds.GENERATE_MOMENTUM_GRAPH)
@@ -48,6 +52,9 @@ class GenerateMomentumGraphWidget(BaseTaskWidget):
     @override
     @Slot()
     def on_runButton_clicked(self):
+        self.run_task()
+
+    def run_task(self):
         if not self.working_dir:
             return
 

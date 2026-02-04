@@ -39,20 +39,31 @@ class PerformOcrWidget(BaseTaskWidget):
     def setup(self):
         video_path = os.path.join(self.working_dir, CROPPED_SCOREBOARD_VIDEO_NAME)
         self.cap = cv2.VideoCapture(video_path)
+        ret, frame = self.cap.read()
+        if not ret:
+            raise RuntimeError("Cannot read first frame from video.")
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to start
         self.ui.videoLabel.setFixedSize(
             *self.get_new_video_label_size(
                 int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
                 int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
             )
         )
-        self.interactive_ui.show_single_frame(self.cap)
+        self.interactive_ui.set_fresh_frame(frame)
         self.interactive_ui.write("Press 'Run' to start OCR processing.")
+
+        # Temporarily hide run button until we implement run options
+        self.ui.runButton.hide()
+        self.run_task()
 
     def on_runButton_clicked(self):
         if not self.cap or not self.working_dir:
             return
+        self.run_task()
 
+    def run_task(self):
         self.run_started.emit(MomentumGraphTasksToIds.PERFORM_OCR)
+        self.is_running = True
 
         # Create controller
         self.controller = OcrController(
@@ -72,6 +83,7 @@ class PerformOcrWidget(BaseTaskWidget):
     def _on_finished(self):
         self.run_completed.emit(MomentumGraphTasksToIds.PERFORM_OCR)
         self.interactive_ui.write("OCR processing completed.")
+        self.is_running = False
 
 
 class OcrController(QObject):

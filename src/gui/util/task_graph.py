@@ -45,12 +45,11 @@ from PySide6.QtCore import QObject, Signal
 
 
 class MomentumGraphTasksToIds(Enum):
-    CROP_SCOREBOARD = "Crop Scoreboard"
-    CROP_SCORE_LIGHTS = "Crop Score Lights"
+    CROP_REGIONS = "Crop Regions"
     PERFORM_OCR = "Perform OCR"
     DETECT_SCORE_LIGHTS = "Detect Score Lights"
     GENERATE_MOMENTUM_GRAPH = "Generate Momentum Graph"
-    GET_START_TIME = "Get Start Time"
+    SELECT_PERIODS = "Select Periods"
     VIEW_STATS = "View Stats"
 
 

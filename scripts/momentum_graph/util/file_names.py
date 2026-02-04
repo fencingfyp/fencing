@@ -1,4 +1,5 @@
 PROCESSED_SCORES_CSV = "processed_scores.csv"
+PROCESSED_LIGHTS_CSV = "processed_lights.csv"
 LAB_VALUES_CSV = "score_light_lab_values.csv"
 LIGHTS_GT_CSV = "lights_gt.csv"
 SCORE_LIGHTS_VIDEO_NAME = "score_lights_detection_output.mp4"

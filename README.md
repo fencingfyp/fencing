@@ -45,3 +45,5 @@ pyside6
 ### Pip
 ???
 graphviz
+pygraphviz
+nx

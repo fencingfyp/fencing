@@ -3,8 +3,8 @@
 import argparse
 import os
 
+from pipelines.multi_region_crop_pipeline import MultiRegionCropPipeline
 from src.model import OpenCvUiV2
-from src.pipelines.crop_region_pipeline import CropRegionPipeline
 from src.util.file_names import CROPPED_SCORE_LIGHTS_VIDEO_NAME, ORIGINAL_VIDEO_NAME
 from src.util.io import setup_input_video_io, setup_output_file
 
@@ -34,7 +34,11 @@ def main():
     )
     cap, _, width, height, _ = setup_input_video_io(input_video_path)
     ui = OpenCvUiV2("Score Lights Cropping", width=width, height=height)
-    controller = CropRegionPipeline(cap, output_video_path, ui, region="score lights")
+    controller = MultiRegionCropPipeline(
+        cap,
+        ui,
+        output_paths={"score lights": output_video_path},
+    )
     controller.start()
 
 

@@ -7,9 +7,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from scripts.momentum_graph.process_score_lights import (
-    OUTPUT_CSV_NAME as LIGHTS_CSV_NAME,
-)
 from scripts.momentum_graph.process_scores import densify_frames
 from scripts.momentum_graph.util.evaluate_score_events import (
     refine_score_frames_with_lights,
@@ -18,7 +15,11 @@ from scripts.momentum_graph.util.extract_score_increases import extract_score_in
 from scripts.momentum_graph.util.file_names import (
     PROCESSED_SCORES_CSV as SCORES_CSV_NAME,
 )
-from src.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME, MOMENTUM_DATA_CSV_NAME
+from src.util.file_names import (
+    CROPPED_SCOREBOARD_VIDEO_NAME,
+    DETECT_LIGHTS_OUTPUT_CSV_NAME,
+    MOMENTUM_DATA_CSV_NAME,
+)
 from src.util.io import setup_input_video_io
 
 
@@ -96,7 +97,7 @@ def main():
 
     video_path = path.join(folder, CROPPED_SCOREBOARD_VIDEO_NAME)
     scores_path = path.join(folder, SCORES_CSV_NAME)
-    lights_path = path.join(folder, LIGHTS_CSV_NAME)
+    lights_path = path.join(folder, DETECT_LIGHTS_OUTPUT_CSV_NAME)
 
     # load video for fps
     cap, fps, _, _, n_frames = setup_input_video_io(video_path)

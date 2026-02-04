@@ -1,4 +1,6 @@
+import cProfile
 import os
+import pstats
 from enum import Enum
 
 from PySide6.QtCore import Signal, Slot
@@ -10,39 +12,40 @@ from src.gui.util.task_graph_navbar import TaskGraphNavbar
 from src.util.file_names import (
     CROPPED_SCORE_LIGHTS_VIDEO_NAME,
     CROPPED_SCOREBOARD_VIDEO_NAME,
+    CROPPED_TIMER_VIDEO_NAME,
     DETECT_LIGHTS_OUTPUT_CSV_NAME,
     MOMENTUM_DATA_CSV_NAME,
     MOMENTUM_GRAPH_IMAGE_NAME,
     OCR_OUTPUT_CSV_NAME,
-    START_TIME_JSON_NAME,
+    PERIODS_JSON_NAME,
 )
 
-from .crop_score_lights_widget import CropScoreLightsWidget
-from .crop_scoreboard_widget import CropScoreboardWidget
+from .crop_regions_widget import CropRegionsWidget
 from .detect_score_lights_widget import DetectScoreLightsWidget
 from .generate_momentum_graph_widget import GenerateMomentumGraphWidget
 from .momentum_graph_overview_widget import MomentumGraphOverviewWidget
 from .perform_ocr_widget import PerformOcrWidget
-from .select_start_time_widget import SelectStartTimeWidget
+from .select_periods_widget import SelectPeriodsWidget
 from .view_stats_widget import ViewStatsWidget
 
 TASK_DEPENDENCIES = [
     Task(
-        MomentumGraphTasksToIds.CROP_SCOREBOARD.value, [CROPPED_SCOREBOARD_VIDEO_NAME]
-    ),
-    Task(
-        MomentumGraphTasksToIds.CROP_SCORE_LIGHTS.value,
-        [CROPPED_SCORE_LIGHTS_VIDEO_NAME],
+        MomentumGraphTasksToIds.CROP_REGIONS.value,
+        [
+            CROPPED_SCOREBOARD_VIDEO_NAME,
+            CROPPED_SCORE_LIGHTS_VIDEO_NAME,
+            CROPPED_TIMER_VIDEO_NAME,
+        ],
     ),
     Task(
         MomentumGraphTasksToIds.PERFORM_OCR.value,
         [OCR_OUTPUT_CSV_NAME],
-        deps=[MomentumGraphTasksToIds.CROP_SCOREBOARD.value],
+        deps=[MomentumGraphTasksToIds.CROP_REGIONS.value],
     ),
     Task(
         MomentumGraphTasksToIds.DETECT_SCORE_LIGHTS.value,
         [DETECT_LIGHTS_OUTPUT_CSV_NAME],
-        deps=[MomentumGraphTasksToIds.CROP_SCORE_LIGHTS.value],
+        deps=[MomentumGraphTasksToIds.CROP_REGIONS.value],
     ),
     Task(
         MomentumGraphTasksToIds.GENERATE_MOMENTUM_GRAPH.value,
@@ -53,8 +56,8 @@ TASK_DEPENDENCIES = [
         ],
     ),
     Task(
-        MomentumGraphTasksToIds.GET_START_TIME.value,
-        [START_TIME_JSON_NAME],
+        MomentumGraphTasksToIds.SELECT_PERIODS.value,
+        [PERIODS_JSON_NAME],
         deps=[],
     ),
     Task(
@@ -62,7 +65,7 @@ TASK_DEPENDENCIES = [
         [MOMENTUM_GRAPH_IMAGE_NAME],
         deps=[
             MomentumGraphTasksToIds.GENERATE_MOMENTUM_GRAPH.value,
-            MomentumGraphTasksToIds.GET_START_TIME.value,
+            MomentumGraphTasksToIds.SELECT_PERIODS.value,
         ],
     ),
 ]
@@ -106,11 +109,8 @@ class MomentumGraphMainWidget(QWidget):
 
     def initialise_task_widgets(self):
         self.tasks_to_widgets = {}
-        self.tasks_to_widgets[MomentumGraphTasksToIds.CROP_SCOREBOARD.value] = (
-            CropScoreboardWidget()
-        )
-        self.tasks_to_widgets[MomentumGraphTasksToIds.CROP_SCORE_LIGHTS.value] = (
-            CropScoreLightsWidget()
+        self.tasks_to_widgets[MomentumGraphTasksToIds.CROP_REGIONS.value] = (
+            CropRegionsWidget()
         )
         self.tasks_to_widgets[MomentumGraphTasksToIds.PERFORM_OCR.value] = (
             PerformOcrWidget()
@@ -121,8 +121,8 @@ class MomentumGraphMainWidget(QWidget):
         self.tasks_to_widgets[MomentumGraphTasksToIds.GENERATE_MOMENTUM_GRAPH.value] = (
             GenerateMomentumGraphWidget()
         )
-        self.tasks_to_widgets[MomentumGraphTasksToIds.GET_START_TIME.value] = (
-            SelectStartTimeWidget()
+        self.tasks_to_widgets[MomentumGraphTasksToIds.SELECT_PERIODS.value] = (
+            SelectPeriodsWidget()
         )
         self.tasks_to_widgets[MomentumGraphTasksToIds.VIEW_STATS.value] = (
             ViewStatsWidget()
@@ -144,7 +144,12 @@ class MomentumGraphMainWidget(QWidget):
 
     def _on_exit_requested(self):
         current_widget = self.stack.currentWidget()
-        if current_widget and hasattr(current_widget, "cancel"):
+        if (
+            current_widget
+            and hasattr(current_widget, "cancel")
+            and hasattr(current_widget, "is_running")
+            and current_widget.is_running
+        ):
             current_widget.cancel()
         self.exit_requested.emit()
 
@@ -155,7 +160,12 @@ class MomentumGraphMainWidget(QWidget):
 
     def _switch_to(self, widget: QWidget):
         current = self.stack.currentWidget()
-        if current and hasattr(current, "cancel"):
+        if (
+            current
+            and hasattr(current, "cancel")
+            and hasattr(current, "is_running")
+            and current.is_running
+        ):
             current.cancel()
 
         self.stack.setCurrentWidget(widget)
@@ -166,14 +176,33 @@ class MomentumGraphMainWidget(QWidget):
             self._switch_to(self.tasks_to_widgets[task_id])
             self.tasks_to_widgets[task_id].set_working_directory(self.working_directory)
 
+    def closeEvent(self, event):
+        for widget in self.tasks_to_widgets.values():
+            if hasattr(widget, "cancel"):
+                widget.cancel()
+        return super().closeEvent(event)
+
 
 if __name__ == "__main__":
     import sys
 
     from PySide6.QtWidgets import QApplication
 
-    app = QApplication(sys.argv)
-    widget = MomentumGraphMainWidget()
-    widget.set_match("sabre_1")
-    widget.show()
-    sys.exit(app.exec())
+    def main():
+        app = QApplication(sys.argv)
+        widget = MomentumGraphMainWidget()
+        widget.set_match("epee_2")
+        widget.show()
+        sys.exit(app.exec())
+
+    # Run the profiler and save stats to a file
+
+    cProfile.run("main()", "profile.stats")
+
+    # Load stats
+    stats = pstats.Stats("profile.stats")
+    stats.strip_dirs()  # remove extraneous path info
+    stats.sort_stats("tottime")  # sort by total time
+
+    # Print only top 10 functions
+    stats.print_stats(10)

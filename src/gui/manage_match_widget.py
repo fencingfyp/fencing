@@ -32,12 +32,15 @@ class ManageMatchWidget(QWidget):
             os.path.join(MATCH_LIST_FOLDER, match_name, ORIGINAL_VIDEO_NAME),
         )
 
+    def initialise(self):
+        self.ui.videoPlayerWidget.activate()
+
     def on_back_button_clicked(self):
-        self.ui.videoPlayerWidget.cleanup()
+        self.ui.videoPlayerWidget.deactivate()
         self.navigate_to_select_match.emit()
 
     def on_momentum_graph_button_clicked(self):
-        self.ui.videoPlayerWidget.cleanup()
+        self.ui.videoPlayerWidget.deactivate()
         self.navigate_to_momentum_graph.emit()
 
 
