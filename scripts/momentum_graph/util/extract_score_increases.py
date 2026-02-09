@@ -10,43 +10,54 @@ from src.util.io import setup_input_video_io
 
 
 def _retroactive_flatten(scores: list[int]) -> list[int]:
-    """
-    Flatten transient bumps by retroactively reverting any segment whose value is
-    later decreased below that value.
-    Example: [1,2,2,2,1,2,3] -> [1,1,1,1,1,2,3]
-    """
     n = len(scores)
     if n == 0:
         return []
 
-    cleaned = scores[:]  # will be modified
+    result = [0] * n
     # stack of (value, start_index)
-    stack = [(scores[0], 0)]
+    stack: list[tuple[int, int]] = []
 
-    for i in range(1, n):
-        curr = scores[i]
-        top_val, _ = stack[-1]
+    for i, curr in enumerate(scores):
+        # pop higher segments
+        while stack and stack[-1][0] > curr:
+            val, start = stack.pop()
+            revert_to = stack[-1][0] if stack else curr
+            for k in range(start, i):
+                result[k] = revert_to
 
-        if curr > top_val:
-            # new higher segment starts here
+        # start new segment if needed
+        if not stack or stack[-1][0] != curr:
             stack.append((curr, i))
-        elif curr == top_val:
-            # continues current top segment
-            continue
-        else:  # curr < top_val: need to pop any segments above curr and revert them
-            while stack and stack[-1][0] > curr:
-                popped_val, popped_start = stack.pop()
-                # the value to revert to is the new top's value (if any), else curr
-                revert_to = stack[-1][0] if stack else curr
-                # revert the frames belonging to the popped segment up to i-1
-                for k in range(popped_start, i):
-                    cleaned[k] = revert_to
-            # now top == curr (or stack empty), if top != curr we need to push curr start
-            if not stack or stack[-1][0] != curr:
-                # Either we matched an existing lower value, or we start a new segment at i
-                stack.append((curr, i))
 
-    return cleaned
+    # finalise remaining segments
+    for val, start in stack:
+        for k in range(start, n):
+            result[k] = val
+
+    return result
+
+
+def extract_score_increases_np(
+    frames: np.ndarray, left_scores: np.ndarray, right_scores: np.ndarray
+) -> Dict[str, Dict[int, int]]:
+    """
+    Same logic as before, but operates on NumPy arrays directly.
+    """
+    result = {}
+    for side, scores in (("left", left_scores), ("right", right_scores)):
+        cleaned = _retroactive_flatten(scores.tolist())
+        seen = {}
+        if cleaned:
+            seen[cleaned[0]] = int(frames[0])
+            last_recorded = cleaned[0]
+            for i, s in enumerate(cleaned[1:], start=1):
+                if s > last_recorded:
+                    last_recorded = s
+                    if s not in seen:
+                        seen[s] = int(frames[i])
+        result[side] = seen
+    return result
 
 
 def extract_score_increases(df: pd.DataFrame) -> Dict[str, Dict[int, int | None]]:
@@ -106,10 +117,12 @@ def main():
     # Load both CSVs
     pred = pd.read_csv(f"{folder}/raw_scores.csv")
 
-    cap, fps, _, _, _ = setup_input_video_io(f"{folder}/cropped_scoreboard.mp4")
+    cap, fps, _, _, total_length = setup_input_video_io(
+        f"{folder}/cropped_scoreboard.mp4"
+    )
     cap.release()
 
-    pred = process_scores(pred, window_median=int(fps * 7))
+    pred = process_scores(pred, window_median=int(fps * 7), total_length=total_length)
 
     # retroactively flatten the prediction by columns and convert back to DataFrame
     smoothed_df = pd.DataFrame(

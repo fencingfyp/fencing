@@ -1,21 +1,17 @@
 import csv
 import os
-import sys
-from typing import Optional, override
+from enum import Enum, auto
+from typing import Dict, Optional, override
 
 import cv2
-import numpy as np
-from PySide6.QtCore import QObject, Qt, QTimer, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtCore import QObject, Signal
+from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
-from src.gui.util.task_graph import MomentumGraphTasksToIds
 from src.gui.video_player_widget import VideoPlayerWidget
 from src.model import Quadrilateral
 from src.model.AutoPatchLightDetector import SinglePatchAutoDetector
 from src.model.drawable import QuadrilateralDrawable
-from src.model.PatchLightDetector import Colour
-from src.model.PysideUi import PysideUi
+from src.pyside.PysideUi import PysideUi
 from src.util.file_names import (
     CROPPED_SCORE_LIGHTS_VIDEO_NAME,
     DETECT_LIGHTS_OUTPUT_CSV_NAME,
@@ -28,265 +24,79 @@ from .base_task_widget import BaseTaskWidget
 class DetectScoreLightsWidget(BaseTaskWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        # Temporarily hide run button until we implement run options
-        self.ui.runButton.hide()
+        self.video_with_instructions = VideoWithInstructions(self)
+        self.register_widget(self.video_with_instructions)
+
+        self.roi_stage = RoiSelectionStage(self.ui)
+        self.time_stage = TimeSelectionStage(self.video_with_instructions)
+        self.processing_stage = ProcessingStage(self.ui)
+
+        # Stage wiring
+        self.roi_stage.roi_selected_callback = self._on_roi_selected
+        self.time_stage.timestamps_selected_callback = self._on_timestamps_selected
 
     @override
     def setup(self):
+        # Show base UI first
+        self.show_default_ui()
+        self.processing_stage.set_working_directory(self.working_dir)
         video_path = os.path.join(self.working_dir, CROPPED_SCORE_LIGHTS_VIDEO_NAME)
-        self.cap = cv2.VideoCapture(video_path)
-        self.ui.videoLabel.setFixedSize(
-            *self.get_new_video_label_size(
-                int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-                int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-            )
-        )
-        ret, frame = self.cap.read()
-        if not ret:
-            raise ValueError(f"Failed to read video from {video_path}")
-        self.interactive_ui.set_fresh_frame(frame)
-        self.interactive_ui.show_frame()
-        self.cap.release()
-        self.cap = None
-        self.interactive_ui.write("Press 'Run' to start detecting the score lights.")
 
-        self.run_task()
-
-    def _on_finished(self):
-        self.run_completed.emit(MomentumGraphTasksToIds.DETECT_SCORE_LIGHTS)
-        self.interactive_ui.write("Score lights detection completed.")
-        self.is_running = False
-
-    def on_runButton_clicked(self):
-        if not self.working_dir:
-            return
-        self.run_task()
-
-    def run_task(self):
+        # Start ROI selection
         self.is_running = True
-        self.run_started.emit(MomentumGraphTasksToIds.DETECT_SCORE_LIGHTS)
-
-        # Create controller
-        self.controller = ScoreLightsController(
-            ui=self.interactive_ui,
-            working_dir=self.working_dir,
-        )
-
-        # When finished → emit completion
-        self.controller.finished.connect(self._on_finished)
-
-        # Start async pipeline
-        self.controller.start()
-
-
-def get_output_header_row(is_debug: bool = False) -> list[str]:
-    headers = ["frame_id", "left_light", "right_light"]
-    if is_debug:
-        headers.extend(["left_debug_info", "right_debug_info"])
-    return headers
-
-
-class ScoreLightsController(QObject):
-    """Widget-friendly score light detection controller."""
-
-    finished = Signal()
-
-    def __init__(
-        self,
-        ui: PysideUi,
-        working_dir: str,
-        demo_mode: bool = False,
-        debug_mode: bool = False,
-    ):
-        super().__init__()
-        self.ui = ui
-        self.working_dir = working_dir
-        self.demo_mode = demo_mode
-        self.debug_mode = True
-
-        self.cap: Optional[cv2.VideoCapture] = None
-        self.frame_count: int = 0
-        self.fps: float = 0
-        self.current_frame_id: int = 0
-
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self._process_frame)
-        # self.timer.setInterval(30)  # as fast as possible
-        self.waiting_for_user = False
-
-        self.csv_file = None
-        self.csv_writer = None
-
-        self.left_score_positions = None
-        self.right_score_positions = None
-        self.left_detector: Optional[SinglePatchAutoDetector] = None
-        self.right_detector: Optional[SinglePatchAutoDetector] = None
-
-    # ------------------------------------------------------------------
-    # Initialization
-    # ------------------------------------------------------------------
-
-    def start(self):
-        # 1. ROI selection
-        self.cap = cv2.VideoCapture(
-            os.path.join(self.working_dir, CROPPED_SCORE_LIGHTS_VIDEO_NAME)
-        )
-        self.csv_file = open(
-            os.path.join(self.working_dir, DETECT_LIGHTS_OUTPUT_CSV_NAME),
-            "w",
-            newline="",
-        )
-        self.csv_writer = csv.writer(self.csv_file)
-        self.csv_writer.writerow(get_output_header_row(is_debug=self.debug_mode))
-        ret, frame = self.cap.read()
-        if not ret:
-            raise RuntimeError("Cannot read first frame.")
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        self.roi_selector = ScoreLightROISelector(ui=self.ui, frame=frame)
-        self.roi_selector.finished.connect(self._on_roi_selected)
-        self.roi_selector.start()
+        self.roi_stage.start(frame=cv2.VideoCapture(video_path).read()[1])
 
     def _on_roi_selected(self, left_quad, right_quad):
-        self.ui.video_label.hide()
-        self.left_score_positions = left_quad
-        self.right_score_positions = right_quad
-
-        # 2. Time selection
+        self.processing_stage.set_positions(left_quad, right_quad)
         video_path = os.path.join(self.working_dir, CROPPED_SCORE_LIGHTS_VIDEO_NAME)
-        self.time_selector = ScoreLightQuadSelector(
-            video_path,
-            container=self.ui.parent,
-        )
-        self.time_selector.finished.connect(self._on_timestamps_selected)
+        self.show_widget(self.video_with_instructions)
+        self.time_stage.activate(video_path)
 
     def _on_timestamps_selected(self, timestamps):
-        self.timestamps = timestamps
-        self.time_selector.deactivate()
-        self.time_selector = None
+        self.time_stage.deactivate()
+        self.processing_stage.init_detectors(timestamps)
+        self.show_default_ui()
+        self.processing_stage.start_processing()
 
-        # Now run autopatch detection on all timestamps
-        self._run_autopatch_detection()
-
-    # ------------------------------------------------------------------
-    # Frame processing
-    # ------------------------------------------------------------------
-    def _build_frame_map(self):
-        self.cap = cv2.VideoCapture(
-            os.path.join(self.working_dir, CROPPED_SCORE_LIGHTS_VIDEO_NAME)
-        )
-        if not self.cap.isOpened():
-            raise RuntimeError("Cannot open video for autopatch detection.")
-        out = {}
-        for key in self.timestamps:
-            frame_id = self.timestamps[key]
-            if frame_id < 0 or frame_id >= self.cap.get(cv2.CAP_PROP_FRAME_COUNT):
-                raise ValueError(f"Invalid frame id {frame_id} for label {key}.")
-            frame = self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id)
-            ret, frame = self.cap.read()
-            if not ret:
-                raise RuntimeError(f"Cannot read frame {frame_id} for label {key}.")
-            out[key] = frame
-        return out
-
-    def _run_autopatch_detection(self):
-        # obtain patches of interest
-        frame_map = self._build_frame_map()
-        self.left_detector = SinglePatchAutoDetector(
-            frame_map["left_pos"],
-            self.left_score_positions,
-            frame_map["left_neg"],
-            self.left_score_positions,
-        )
-        self.right_detector = SinglePatchAutoDetector(
-            frame_map["right_pos"],
-            self.right_score_positions,
-            frame_map["right_neg"],
-            self.right_score_positions,
-        )
-        self.ui.video_label.show()
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        self.ui.schedule(self._process_frame)
-
-    def _process_frame(self):
-        if self.waiting_for_user:
-            return
-
-        ret, frame = self.cap.read()
-        if not ret:
-            self.stop()
-            return
-
-        self.ui.set_fresh_frame(frame)
-
-        # Detect lights
-        is_left_red = self.left_detector.classify(frame, self.left_score_positions)
-        is_right_green = self.right_detector.classify(frame, self.right_score_positions)
-
-        # Draw quadrilaterals
-        self.ui.draw_objects(
-            [
-                QuadrilateralDrawable(self.left_score_positions, color=(255, 0, 0)),
-                QuadrilateralDrawable(self.right_score_positions, color=(0, 255, 0)),
-            ]
-        )
-
-        # Write CSV
-        if not self.demo_mode:
-            row = [self.current_frame_id, int(is_left_red), int(is_right_green)]
-            if self.debug_mode:
-                left_debug = self.left_detector.get_debug_info()
-                right_debug = self.right_detector.get_debug_info()
-                row.extend([left_debug, right_debug])
-            self.csv_writer.writerow(row)
-
-        # Update UI
-        self.ui.write(f"left light on: {is_left_red}, right light on: {is_right_green}")
-        self.ui.show_frame()
-
-        self.current_frame_id += 1
-        self.ui.schedule(self._process_frame)
-
-    # ------------------------------------------------------------------
-    # Cleanup
-    # ------------------------------------------------------------------
     def cancel(self):
-        self.cleanup()
-        if not self.demo_mode:
-            output_csv_path = os.path.join(
-                self.working_dir, DETECT_LIGHTS_OUTPUT_CSV_NAME
-            )
-            # if os.path.exists(output_csv_path):
-            #     os.remove(output_csv_path)
-
-    def cleanup(self):
-        if self.timer.isActive():
-            self.timer.stop()
-        if self.cap:
-            self.cap.release()
-            self.cap = None
-        if self.csv_file:
-            self.csv_file.close()
-            self.csv_file = None
-        if hasattr(self, "time_selector") and self.time_selector:
-            self.time_selector.deactivate()
-            self.time_selector = None
-
-    def stop(self):
-        self.cleanup()
-        self.finished.emit()
+        self.time_stage.deactivate()
+        self.processing_stage.cancel()
 
 
-class ScoreLightROISelector(QObject):
-    finished = Signal(Quadrilateral, Quadrilateral)
-
-    def __init__(self, ui: PysideUi, frame: np.ndarray, parent=None):
+class VideoWithInstructions(QWidget):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.ui = ui
-        self.frame = frame
+        self.player = VideoPlayerWidget(self)
+        self.label = QLabel(self)
+        self.label.setStyleSheet(
+            "color: white; background: rgba(0,0,0,128); padding: 4px;"
+        )
+        self.label.setWordWrap(True)
 
-    def start(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.player)
+        layout.addWidget(self.label)
+        self.setLayout(layout)
+
+    def set_instructions(self, text: str):
+        self.label.setText(text)
+
+
+class RoiSelectionStage:
+    def __init__(self, ui: PysideUi):
+        self.ui = ui
+        self.left_quad = None
+        self.right_quad = None
+        self.roi_selected_callback = None
+        self.frame = None
+
+    def start(self, frame):
+        # Use base UI to ask for points
+        self.frame = frame
         self.ui.get_n_points_async(
-            self.frame,
+            frame,
             generate_select_quadrilateral_instructions("left fencer score light"),
             self._on_left_done,
         )
@@ -301,84 +111,146 @@ class ScoreLightROISelector(QObject):
 
     def _on_right_done(self, right_pts):
         self.right_quad = Quadrilateral(right_pts)
-        self.finished.emit(self.left_quad, self.right_quad)
+        if self.roi_selected_callback:
+            self.roi_selected_callback(self.left_quad, self.right_quad)
 
 
-class ScoreLightQuadSelector(QObject):
-    """
-    Allows user to select four timestamps in order:
-    left_neg, left_pos, right_neg, right_pos
-    """
-
-    finished = Signal(dict)  # Map of label -> frame number
-
-    def __init__(self, video_path: str, container: QWidget | None = None):
-        super().__init__(container)
-        self.container = container or QWidget()
-        self.layout = QVBoxLayout(self.container)
-
-        # Video player
-        self.player = VideoPlayerWidget(self.container)
-        self.player.set_video_source(video_path)
-        self.layout.addWidget(self.player)
-
-        # Info label
-        self.info = QLabel(self.container)
-        self.layout.addWidget(self.info)
-
-        # Finish button
-        self.finish_button = QPushButton("Finish selection", self.container)
-        self.finish_button.setEnabled(False)
-        self.finish_button.clicked.connect(self.finish)
-        self.layout.addWidget(self.finish_button)
-
-        self.container.setLayout(self.layout)
-        self.activate()
-
-    def activate(self):
-        self.player.activate()
+class TimeSelectionStage:
+    def __init__(self, video_with_instructions: VideoWithInstructions):
+        self.player = video_with_instructions.player
+        self.video_with_instructions = video_with_instructions
+        self.timestamps_selected_callback = None
         self.labels = ["left_neg", "left_pos", "right_neg", "right_pos"]
-        self.current_index = 0
-        self.timestamps: dict = {}
+        self.index = 0
+        self.timestamps = {}
 
-        # Use one key to advance through the labels
-        self.player.register_shortcut(QKeySequence(Qt.Key.Key_E), self.mark_next_frame)
-        self.update_info()
+        self.instructions = [
+            "Press E to select the OFF frame for the left fencer score light.",
+            "Press E to select the ON frame for the left fencer score light.",
+            "Press E to select the OFF frame for the right fencer score light.",
+            "Press E to select the ON frame for the right fencer score light.",
+        ]
 
-    def update_info(self):
-        if self.current_index < len(self.labels):
-            self.info.setText(
-                f"Press 'E' to mark {self.labels[self.current_index]} (frame {self.player.video_frame.get_current_frame_number()})"
-            )
-        else:
-            self.info.setText("All frames marked. Click Finish.")
+    def activate(self, video_path: str):
+        self.player.set_video_source(video_path)
+        self.player.activate()
+        self.player.register_shortcut("E", self.mark_frame)
+        self.index = 0
+        self.video_with_instructions.set_instructions(self.instructions[self.index])
+        self.timestamps.clear()
 
     def deactivate(self):
         self.player.deactivate()
-        self.player.hide()
-        self.finish_button.hide()
-        self.info.hide()
 
-    def mark_next_frame(self):
-        if self.current_index >= len(self.labels):
+    def mark_frame(self):
+        label = self.labels[self.index]
+        frame = self.player.video_frame.get_current_frame_number()
+        self.timestamps[label] = frame
+        self.index += 1
+        if self.index >= len(self.labels):
+            if self.timestamps_selected_callback:
+                self.timestamps_selected_callback(self.timestamps)
+                return
+        self.video_with_instructions.set_instructions(self.instructions[self.index])
+
+
+class ProcessingStage:
+    def __init__(self, ui: PysideUi):
+        self.ui = ui
+        self.working_dir = None
+        self.cap = None
+        self.left_detector = None
+        self.left_positions = None
+        self.right_detector = None
+        self.right_positions = None
+        self.csv_file = None
+        self.csv_writer = None
+        self.current_frame_id = 0
+
+    def set_working_directory(self, working_dir: str):
+        self.working_dir = working_dir
+
+    def init_detectors(self, timestamps):
+        cap = cv2.VideoCapture(
+            os.path.join(self.working_dir, CROPPED_SCORE_LIGHTS_VIDEO_NAME)
+        )
+
+        def grab(fid):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, fid)
+            ret, f = cap.read()
+            if not ret:
+                raise RuntimeError(f"Cannot read frame {fid}")
+            return f
+
+        frames = {k: grab(v) for k, v in timestamps.items()}
+        cap.release()
+
+        self.left_detector = SinglePatchAutoDetector(
+            frames["left_pos"],
+            self.left_positions,
+            frames["left_neg"],
+            self.left_positions,
+        )
+        self.right_detector = SinglePatchAutoDetector(
+            frames["right_pos"],
+            self.right_positions,
+            frames["right_neg"],
+            self.right_positions,
+        )
+
+    def set_positions(self, left_quad: Quadrilateral, right_quad: Quadrilateral):
+        self.left_positions = left_quad
+        self.right_positions = right_quad
+
+    def start_processing(self):
+        self.cap = cv2.VideoCapture(
+            os.path.join(self.working_dir, CROPPED_SCORE_LIGHTS_VIDEO_NAME)
+        )
+        self.csv_file = open(
+            os.path.join(self.working_dir, DETECT_LIGHTS_OUTPUT_CSV_NAME),
+            "w",
+            newline="",
+        )
+        self.csv_writer = csv.writer(self.csv_file)
+        self.csv_writer.writerow(["frame_id", "left_light", "right_light"])
+        self.ui.schedule(self._process_frame)
+
+    def _process_frame(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            self.finish()
             return
 
-        frame = self.player.video_frame.get_current_frame_number()
-        label = self.labels[self.current_index]
-        self.timestamps[label] = frame
-        self.current_index += 1
-        self.finish_button.setEnabled(self.current_index == len(self.labels))
-        self.update_info()
+        self.ui.set_fresh_frame(frame)
+        left_on = self.left_detector.classify(frame, self.left_positions)
+        right_on = self.right_detector.classify(frame, self.right_positions)
+
+        self.ui.draw_objects(
+            [
+                QuadrilateralDrawable(self.left_positions, (255, 0, 0)),
+                QuadrilateralDrawable(self.right_positions, (0, 255, 0)),
+            ]
+        )
+        self.csv_writer.writerow([self.current_frame_id, int(left_on), int(right_on)])
+        self.ui.show_frame()
+        self.current_frame_id += 1
+        self.ui.schedule(self._process_frame)
 
     def finish(self):
-        self.deactivate()
-        self.finished.emit(self.timestamps)
+        self.ui.write("Score lights detection completed.")
+        self.cancel()
+
+    def cancel(self):
+        if self.cap:
+            self.cap.release()
+        if self.csv_file:
+            self.csv_file.close()
 
 
 if __name__ == "__main__":
     app = QApplication([])
 
     widget = DetectScoreLightsWidget()
-    widget.set_working_directory("matches_data/foil_4")
+    widget.set_working_directory("matches_data/sabre_2")
     widget.show()
-    sys.exit(app.exec())
+    app.exec()

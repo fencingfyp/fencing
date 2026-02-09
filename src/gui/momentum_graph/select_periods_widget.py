@@ -4,8 +4,7 @@ from dataclasses import dataclass
 from typing import List, Optional, override
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 from src.gui.util.task_graph import MomentumGraphTasksToIds
 from src.gui.video_player_widget import VideoPlayerWidget
@@ -29,7 +28,6 @@ class PeriodSelectorController:
         self.periods: List[Period] = []
         self.current_start_ms: Optional[int] = None
 
-        # Finish callback
         self.on_finish: Optional[callable] = None
 
     def mark_start(self):
@@ -46,13 +44,16 @@ class PeriodSelectorController:
         self.periods.append(Period(self.current_start_ms, end_ms))
         self.current_start_ms = None
 
-        # Auto-finish if max periods reached
         if len(self.periods) >= self.max_periods:
             self.finish()
 
     def finish(self):
         if self.on_finish:
             self.on_finish()
+
+    def cancel(self):
+        self.periods = []
+        self.current_start_ms = None
 
 
 class SelectPeriodsWidget(BaseTaskWidget):
@@ -62,30 +63,26 @@ class SelectPeriodsWidget(BaseTaskWidget):
         super().__init__(parent)
         self.max_periods = max_periods
         self.save_path: Optional[str] = None
-        self.player = VideoPlayerWidget(self)
+        self.controller: Optional[PeriodSelectorController] = None
 
-        # Hide unused base task UI
-        self.ui.runButton.hide()
-        self.ui.uiTextLabel.hide()
-        self.ui.videoLabel.hide()
+        self._content = QWidget(self)
+        layout = QVBoxLayout(self._content)
 
-        # Layout
-        layout = QVBoxLayout(self)
+        self.player = VideoPlayerWidget(self._content)
         layout.addWidget(self.player)
 
-        self.info = QLabel(self)
+        self.info = QLabel(self._content)
         layout.addWidget(self.info)
 
-        self.finish_button = QPushButton("Finish selection", self)
+        self.finish_button = QPushButton("Finish selection", self._content)
         self.finish_button.clicked.connect(self._finish)
         layout.addWidget(self.finish_button)
-        self.setLayout(layout)
-
-        self.controller = None
+        self.register_widget(self._content)
 
     @override
     def setup(self):
         self.is_running = True
+
         video_path = os.path.join(self.working_dir, ORIGINAL_VIDEO_NAME)
         self.save_path = os.path.join(self.working_dir, PERIODS_JSON_NAME)
 
@@ -94,6 +91,7 @@ class SelectPeriodsWidget(BaseTaskWidget):
         self.controller = PeriodSelectorController(self.player, self.max_periods)
         self.controller.on_finish = self._finish
 
+        self.show_widget(self._content)
         self.activate()
         self._update_info()
 
@@ -113,6 +111,7 @@ class SelectPeriodsWidget(BaseTaskWidget):
     def deactivate(self):
         """Deactivate video player and shortcuts."""
         self.player.deactivate()
+        self.finish_button.setEnabled(False)
 
     # ------------------- controller wrappers -------------------
     def _mark_start(self):
@@ -126,9 +125,9 @@ class SelectPeriodsWidget(BaseTaskWidget):
         self._update_finish_button_state()
 
     def _finish(self):
-        if not self.controller.periods:
+        if not self.controller or not self.controller.periods:
             return
-        # Save periods
+
         with open(self.save_path, "w") as f:
             json.dump(
                 [
@@ -147,14 +146,17 @@ class SelectPeriodsWidget(BaseTaskWidget):
 
     # ------------------- UI helpers -------------------
     def _update_info(self):
+        if len(self.controller.periods) == self.max_periods:
+            self.info.setText(f"All {self.max_periods} periods selected.")
+            return
         if self.controller.current_start_ms is None:
             self.info.setText(
                 f"Periods: {len(self.controller.periods)}/{self.max_periods}\nS = mark start"
             )
-        else:
-            self.info.setText(
-                f"Periods: {len(self.controller.periods)}/{self.max_periods}\nE = mark end"
-            )
+            return
+        self.info.setText(
+            f"Periods: {len(self.controller.periods)}/{self.max_periods}\nE = mark end"
+        )
 
     def _update_finish_button_state(self):
         self.finish_button.setEnabled(
@@ -167,12 +169,12 @@ if __name__ == "__main__":
     import pstats
     import sys
 
-    from PySide6.QtWidgets import QApplication, QWidget
+    from PySide6.QtWidgets import QApplication
 
     def main():
         app = QApplication(sys.argv)
         widget = SelectPeriodsWidget()
-        widget.set_working_directory("matches_data/sabre_3")
+        widget.set_working_directory("matches_data/sabre_2")
         widget.show()
         sys.exit(app.exec())
 

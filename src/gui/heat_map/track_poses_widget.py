@@ -20,10 +20,14 @@ class TrackPosesWidget(BaseTaskWidget):
 
     @override
     def setup(self):
-        self.interactive_ui.write("Press 'Run' to run pose tracking.")
+        self.ui.write("Press 'Run' to run pose tracking.")
+        self.run_task()
 
     @override
     def on_runButton_clicked(self):
+        self.run_task()
+
+    def run_task(self):
         if not self.working_dir:
             return
 
@@ -34,7 +38,7 @@ class TrackPosesWidget(BaseTaskWidget):
 
         # Create controller
         self.controller = PoseToCsvController(
-            ui=self.interactive_ui,
+            ui=self.ui,
             input_path=input_video_path,
             output_folder=self.working_dir,
             model_path=model_path,
@@ -47,7 +51,7 @@ class TrackPosesWidget(BaseTaskWidget):
         self.controller.start()
 
     def _on_finished(self):
-        self.interactive_ui.write("Pose tracking completed.")
+        self.ui.write("Pose tracking completed.")
         self.run_completed.emit(HeatMapTasksToIds.TRACK_POSES)
 
 

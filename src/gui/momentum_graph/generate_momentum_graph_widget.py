@@ -13,15 +13,21 @@ from scripts.momentum_graph.plot_momentum import (
     get_momentum_data_points,
     plot_score_light_progression,
 )
-from scripts.momentum_graph.process_score_lights import process_score_lights
-from scripts.momentum_graph.process_scores import process_scores
+from scripts.momentum_graph.process_score_lights import (
+    process_score_lights,
+    process_score_lights_np,
+)
+from scripts.momentum_graph.process_scores import densify_frames_np, process_scores
 from scripts.momentum_graph.util.evaluate_score_events import (
     refine_score_frames_with_lights,
 )
-from scripts.momentum_graph.util.extract_score_increases import extract_score_increases
+from scripts.momentum_graph.util.extract_score_increases import (
+    extract_score_increases,
+    extract_score_increases_np,
+)
 from src.gui.util.conversion import pixmap_to_np
 from src.gui.util.task_graph import MomentumGraphTasksToIds
-from src.model import PysideUi
+from src.pyside.PysideUi import PysideUi
 from src.util.file_names import (
     DETECT_LIGHTS_OUTPUT_CSV_NAME,
     MOMENTUM_DATA_CSV_NAME,
@@ -39,14 +45,12 @@ class GenerateMomentumGraphWidget(BaseTaskWidget):
 
     @override
     def setup(self):
-        self.interactive_ui.write("Press 'Run' to start generating the momentum graph.")
+        self.ui.write("Press 'Run' to start generating the momentum graph.")
 
-        # Temporarily hide run button until we implement run options
-        self.ui.runButton.hide()
         self.run_task()
 
     def _on_finished(self):
-        self.interactive_ui.write("Momentum graph generated.")
+        self.ui.write("Momentum graph generated.")
         self.run_completed.emit(MomentumGraphTasksToIds.GENERATE_MOMENTUM_GRAPH)
 
     @override
@@ -63,7 +67,7 @@ class GenerateMomentumGraphWidget(BaseTaskWidget):
         # Create controller
         self.controller = MomentumGraphController(
             working_dir=self.working_dir,
-            ui=self.interactive_ui,
+            ui=self.ui,
             parent=self,
         )
 
@@ -85,7 +89,6 @@ class MomentumGraphController(QObject):
         super().__init__(parent)
         self.working_dir = working_dir
         self.ui = ui
-        self.parent = parent
         self.algorithm = "last_activation"
 
     def _obtain_score_increases(self, fps: float, total_length: int):
@@ -95,23 +98,36 @@ class MomentumGraphController(QObject):
         )
 
         frame_ids = np.arange(len(pred))
-        processed_scores_df = pd.DataFrame(
-            {"frame_id": frame_ids, "left_score": pred[:, 0], "right_score": pred[:, 1]}
-        )
-        return extract_score_increases(processed_scores_df)
+        return extract_score_increases_np(frame_ids, pred[:, 0], pred[:, 1])
 
     def _obtain_score_lights_occurrences(self, fps: float, total_length: int):
-        score_lights_df = pd.read_csv(
-            os.path.join(self.working_dir, DETECT_LIGHTS_OUTPUT_CSV_NAME)
-        )
-        score_lights_df = process_score_lights(score_lights_df, fps=fps)
-        changes = score_lights_df.loc[
-            (score_lights_df["left_light"].diff() != 0)
-            | (score_lights_df["right_light"].diff() != 0),
-            ["frame_id", "left_light", "right_light"],
-        ]
+        df = pd.read_csv(os.path.join(self.working_dir, DETECT_LIGHTS_OUTPUT_CSV_NAME))
 
-        return densify_lights_data(changes, total_length=total_length)
+        frame_ids = df["frame_id"].to_numpy(dtype=np.int32)
+        lights = np.column_stack(
+            (
+                df["left_light"].to_numpy(),
+                df["right_light"].to_numpy(),
+            )
+        )
+
+        # clean lights
+        lights = process_score_lights_np(lights, fps=int(fps))
+
+        # detect changes (vectorised)
+        diffs = np.any(lights[1:] != lights[:-1], axis=1)
+        change_idx = np.flatnonzero(diffs) + 1  # +1 because diff is shifted
+
+        change_frames = frame_ids[change_idx]
+        change_lights = lights[change_idx]
+
+        # densify
+        return densify_frames_np(
+            change_frames,
+            change_lights[:, 0],
+            change_lights[:, 1],
+            total_length=total_length,
+        )
 
     def start(self):
         self.ui.write("Generating momentum graph... (this may take a while)")
@@ -124,11 +140,12 @@ class MomentumGraphController(QObject):
         score_increases = self._obtain_score_increases(
             fps=fps, total_length=total_length
         )
-        lights = self._obtain_score_lights_occurrences(
+        frame_ids, left_lights, right_lights = self._obtain_score_lights_occurrences(
             fps=fps, total_length=total_length
         )
+        stacked_lights = np.column_stack((left_lights, right_lights))
         score_occurrences = refine_score_frames_with_lights(
-            lights, score_increases, fps, algorithm=self.algorithm
+            stacked_lights, score_increases, fps, algorithm=self.algorithm
         )
 
         frames, momenta = get_momentum_data_points(score_occurrences, fps)
@@ -148,7 +165,7 @@ class MomentumGraphController(QObject):
         self.finished.emit()
 
 
-def get_momentum_graph_pixmap(frames, momenta, fps):
+def get_momentum_graph_pixmap(frames, momenta, fps, periods=None):
     fig = Figure(figsize=(10, 5), dpi=300)
     canvas = FigureCanvasAgg(fig)
     ax = fig.add_subplot(111)
@@ -170,6 +187,31 @@ def get_momentum_graph_pixmap(frames, momenta, fps):
     ax.set_ylabel("Momentum (+ left / - right)")
     ax.grid(True, alpha=0.3)
     ax.legend()
+    # Overlay periods (in data coordinates)
+    if periods:
+        ymin, ymax = ax.get_ylim()
+        for i, p in enumerate(periods):
+            t_start = p["start_ms"] / 1000
+            t_end = p["end_ms"] / 1000
+            ax.axvspan(
+                t_start,
+                t_end,
+                color="red",
+                alpha=0.3,
+                zorder=0,
+            )
+
+            ax.text(
+                t_start,
+                ymax,
+                f"Period {i+1}",
+                va="top",
+                ha="left",
+                color="white",
+                fontsize=9,
+                zorder=1,
+            )
+
     fig.tight_layout()
     # Render to RGBA array
     canvas.draw()
@@ -188,12 +230,27 @@ def get_momentum_graph_pixmap(frames, momenta, fps):
 
 
 if __name__ == "__main__":
+    import cProfile
+    import pstats
     import sys
 
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QWidget
 
-    app = QApplication(sys.argv)
-    widget = GenerateMomentumGraphWidget()
-    widget.set_working_directory("matches_data/foil_3")
-    widget.show()
-    sys.exit(app.exec())
+    def main():
+        app = QApplication(sys.argv)
+        widget = GenerateMomentumGraphWidget()
+        widget.set_working_directory("matches_data/sabre_2")
+        widget.show()
+        sys.exit(app.exec())
+
+    # Run the profiler and save stats to a file
+
+    cProfile.run("main()", "profile.stats")
+
+    # Load stats
+    stats = pstats.Stats("profile.stats")
+    stats.strip_dirs()  # remove extraneous path info
+    stats.sort_stats("tottime")  # sort by total time
+
+    # Print only top 10 functions
+    stats.print_stats(10)

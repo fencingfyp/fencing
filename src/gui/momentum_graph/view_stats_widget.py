@@ -7,9 +7,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap, QStandardItem, QStandardItemModel
-from PySide6.QtWidgets import QLabel, QPushButton, QTableView, QVBoxLayout
+from PySide6.QtGui import QPixmap
 
 from src.gui.util.conversion import pixmap_to_np
 from src.gui.util.task_graph import MomentumGraphTasksToIds
@@ -78,47 +76,13 @@ def compute_average_delta_time(df: pd.DataFrame) -> float:
 def render_momentum_graph_with_periods(
     momentum_df: pd.DataFrame, fps: float, periods: list[dict]
 ) -> np.ndarray:
-    # Base graph
     pixmap = get_momentum_graph_pixmap(
-        momentum_df["frame_id"].to_numpy(), momentum_df["momentum"].to_numpy(), fps
+        momentum_df["frame_id"].to_numpy(),
+        momentum_df["momentum"].to_numpy(),
+        fps,
+        periods,
     )
-    graph_np = pixmap_to_np(pixmap)
-
-    # Overlay periods
-    overlay = graph_np.copy()
-    h, w, _ = overlay.shape
-
-    max_frame = momentum_df["frame_id"].max()
-    for i, p in enumerate(periods):
-        start_frac = p["start_ms"] / 1000 * fps / max_frame
-        end_frac = p["end_ms"] / 1000 * fps / max_frame
-        x_start = int(start_frac * w)
-        x_end = int(end_frac * w)
-
-        # Draw semi-transparent rectangle
-        cv2.rectangle(
-            overlay,
-            (x_start, 0),
-            (x_end, h),
-            color=(0, 0, 255),
-            thickness=-1,
-        )
-
-        # Label period
-        cv2.putText(
-            overlay,
-            f"Period {i+1}",
-            (x_start + 5, 25),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            (255, 255, 255),
-            2,
-        )
-
-    # Blend with original graph
-    alpha = 0.4
-    blended = cv2.addWeighted(overlay, alpha, graph_np, 1 - alpha, 0)
-    return blended
+    return pixmap_to_np(pixmap)
 
 
 class ViewStatsWidget(BaseTaskWidget):
@@ -128,13 +92,17 @@ class ViewStatsWidget(BaseTaskWidget):
 
     @override
     def setup(self):
-        self.interactive_ui.write("Press 'Run' to view the momentum graph statistics.")
+        self.ui.write("Press 'Run' to view the momentum graph statistics.")
         cap = cv2.VideoCapture(os.path.join(self.working_dir, ORIGINAL_VIDEO_NAME))
         self.fps = cap.get(cv2.CAP_PROP_FPS)
         cap.release()
+        self.run_task()
 
     @override
     def on_runButton_clicked(self):
+        self.run_task()
+
+    def run_task(self):
         if not self.working_dir:
             return
 
@@ -145,25 +113,25 @@ class ViewStatsWidget(BaseTaskWidget):
             momentum_df = load_momentum_df(self.working_dir)
             periods = load_periods(self.working_dir)
         except FileNotFoundError as e:
-            self.interactive_ui.write(str(e))
+            self.ui.write(str(e))
             self.is_running = False
             return
 
         # Show momentum graph with period overlays
         graph_np = render_momentum_graph_with_periods(momentum_df, self.fps, periods)
-        self.interactive_ui.set_fresh_frame(graph_np)
+        self.ui.set_fresh_frame(graph_np)
 
         # Compute timing table
         start_frame = int((periods[0]["start_ms"] / 1000) * self.fps)
         timing_df = compute_time_between_points(momentum_df, start_frame, self.fps)
         avg_time = compute_average_delta_time(timing_df)
-        self.interactive_ui.write(
+        self.ui.write(
             f"Average time between momentum data points: {avg_time:.2f} seconds"
         )
 
         # Show table as image
         pixmap = dataframe_to_pixmap(timing_df)
-        self.interactive_ui.show_additional("data", pixmap_to_np(pixmap))
+        self.ui.show_additional("data", pixmap_to_np(pixmap))
 
         # Save to file
         output_path = os.path.join(self.working_dir, MOMENTUM_GRAPH_IMAGE_NAME)

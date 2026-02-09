@@ -214,11 +214,15 @@ class TaskGraphScene(QGraphicsScene):
         pos = graphviz_layout(G, prog="dot", args="-Grankdir=LR")
 
         # Scale & offset positions
-        xs = [p[0] for p in pos.values()]
-        ys = [p[1] for p in pos.values()]
-        min_x, min_y = min(xs), min(ys)
-        x_scale, y_scale = 1, 2  # magic numbers to ensure the boxes dont overlap
-        x_offset, y_offset = -min_x * x_scale + 50, -min_y * y_scale + 50
+        if not pos:
+            x_offset, y_offset = 50, 50
+            x_scale, y_scale = 1, 1
+        else:
+            xs = [p[0] for p in pos.values()]
+            ys = [p[1] for p in pos.values()]
+            min_x, min_y = min(xs), min(ys)
+            x_scale, y_scale = 1, 2  # magic numbers to ensure the boxes dont overlap
+            x_offset, y_offset = -min_x * x_scale + 50, -min_y * y_scale + 50
 
         # --- create nodes ---
         for tid, (gx, gy) in pos.items():

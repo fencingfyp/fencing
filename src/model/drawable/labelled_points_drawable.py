@@ -5,17 +5,19 @@ import numpy as np
 from .drawable import Color, Drawable
 
 
-class PointsDrawable(Drawable):
+class LabelledPointsDrawable(Drawable):
     def __init__(
         self,
         points: Union[
             Iterable[Tuple[float, float]],
             np.ndarray,
         ],
+        labels: list[str],
         color: Color = (0, 255, 0),
         size: int = 2,
     ):
         self._points = self._normalise_points(points)
+        self._labels = labels
         self._color = color
         self._size = size
 
@@ -37,6 +39,11 @@ class PointsDrawable(Drawable):
 
     def primitives(self):
         yield ("points", self._points)
+        for i in range(len(self._points)):
+            yield (
+                "text",
+                ((self._points[i][0] + 5, self._points[i][1] + 5), self._labels[i]),
+            )
 
     def style(self):
         return {"color": self._color, "size": self._size}

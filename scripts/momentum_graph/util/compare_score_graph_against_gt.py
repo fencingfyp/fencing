@@ -14,11 +14,9 @@ import pandas as pd
 
 from scripts.momentum_graph.process_scores import densify_frames
 from scripts.momentum_graph.util.file_names import (
-    CROPPED_SCOREBOARD_VIDEO_NAME as CROPPED_SCOREBOARD_VIDEO_NAME,
-)
-from scripts.momentum_graph.util.file_names import (
     PROCESSED_SCORES_CSV as SCORES_CSV_NAME,
 )
+from src.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME
 from src.util.io import setup_input_video_io
 
 
@@ -26,7 +24,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Process and smooth score predictions."
     )
-    parser.add_argument("gt", type=str, help="Path to the ground truth CSV file.")
+    # parser.add_argument("gt", type=str, help="Path to the ground truth CSV file.")
     parser.add_argument("folder", type=str, help="Path to the working folder.")
     parser.add_argument(
         "--flatten",
@@ -59,7 +57,7 @@ def frame_diffs(gt, pred):
 def main():
     args = parse_arguments()
     folder = args.folder
-    gt = args.gt
+    gt = path.join(folder, "scores_gt.csv")
     flatten = args.flatten
 
     scoreboard_video_path = path.join(folder, CROPPED_SCOREBOARD_VIDEO_NAME)

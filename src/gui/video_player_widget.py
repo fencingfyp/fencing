@@ -6,6 +6,7 @@ https://github.com/BBC-Esq/Pyside6_PyQt6_video_audio_player/blob/main/media_play
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -63,6 +64,15 @@ class VideoPlayerWidget(QWidget):
         self.timelabel = QLabel("00:00 / 00:00")
         self.timelabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        # Playback speed
+        self.playback_rate = 1.0
+        self.base_delay: int | None = None
+
+        self.speedbox = QComboBox(self)
+        self.speedbox.addItems(["0.5x", "1x", "2x"])
+        self.speedbox.setCurrentText("1x")
+        self.speedbox.currentTextChanged.connect(self.set_playback_speed)
+
         # Playback buttons
         self.playbutton = QPushButton("Play")
         self.playbutton.clicked.connect(self.play_pause)
@@ -72,6 +82,8 @@ class VideoPlayerWidget(QWidget):
         hbox.addWidget(self.playbutton)
         # hbox.addWidget(self.stopbutton)
         hbox.addStretch(1)
+        hbox.addWidget(QLabel("Speed"))
+        hbox.addWidget(self.speedbox)
 
         # Layout
         vbox = QVBoxLayout(self)
@@ -91,17 +103,23 @@ class VideoPlayerWidget(QWidget):
         self.register_shortcut(Qt.Key.Key_Space, self.toggle_pause)
         self.register_shortcut(Qt.Key.Key_Left, self.step_backward)
         self.register_shortcut(Qt.Key.Key_Right, self.step_forward)
+        self.playbutton.setEnabled(True)
 
     def deactivate(self):
         """Stop timer and optionally remove shortcuts."""
         self._active = False
         if self.timer.isActive():
             self.timer.stop()
+        self.playbutton.setEnabled(False)
         # Disconnect and remove any task-specific shortcuts
         for sc in self._shortcuts.values():
             sc.activated.disconnect()
             sc.setParent(None)
         self._shortcuts.clear()
+
+    def closeEvent(self, event):
+        self.deactivate()
+        return super().closeEvent(event)
 
     def register_shortcut(self, key_sequence: str, callback):
         """Add a temporary shortcut for the lifetime of this player activation."""
@@ -117,13 +135,16 @@ class VideoPlayerWidget(QWidget):
         if self._active and self.delay:
             self.timer.start(self.delay)
 
+    def pause(self):
+        self.playbutton.setText("Play")
+        self.is_paused = True
+        self.timer.stop()
+
     def play_pause(self):
         if self.is_paused:
             self.play()
         else:
-            self.playbutton.setText("Play")
-            self.is_paused = True
-            self.timer.stop()
+            self.pause()
 
     def stop(self):
         self.playbutton.setText("Play")
@@ -157,13 +178,30 @@ class VideoPlayerWidget(QWidget):
         """Reset player state and load a new video."""
         self.stop()
         self.video_frame.set_video_source(video_path)
-        self.delay = self.video_frame.get_delay()
+
+        self.base_delay = self.video_frame.get_delay()
+        self.update_timer_delay()
+
         self.positionslider.setValue(0)
         self.timelabel.setText("00:00 / 00:00")
 
     def skip(self, milliseconds: int):
         if self.video_frame.has_video():
             self.video_frame.skip_milliseconds(milliseconds)
+
+    # ----------------------------- Playback Speed -----------------------------
+    def set_playback_speed(self, text: str):
+        self.playback_rate = float(text.replace("x", ""))
+        self.update_timer_delay()
+
+    def update_timer_delay(self):
+        if self.base_delay is None:
+            return
+
+        self.delay = int(self.base_delay / self.playback_rate)
+
+        if not self.is_paused and self._active:
+            self.timer.start(self.delay)
 
     # ----------------------------- UI Updates -----------------------------
     def set_position(self):

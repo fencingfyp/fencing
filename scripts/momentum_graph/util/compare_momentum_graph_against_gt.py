@@ -16,19 +16,19 @@ from scripts.momentum_graph.plot_momentum import (
     get_momentum_data_points,
     plot_momentum,
 )
-from scripts.momentum_graph.process_score_lights import (
-    OUTPUT_CSV_NAME as LIGHTS_CSV_NAME,
-)
 from scripts.momentum_graph.util.evaluate_score_events import (
-    extract_score_increases,
     refine_score_frames_with_lights,
 )
+from scripts.momentum_graph.util.extract_score_increases import (
+    extract_score_increases_np,
+)
 from scripts.momentum_graph.util.file_names import (
-    CROPPED_SCOREBOARD_VIDEO_NAME as CROPPED_SCOREBOARD_VIDEO_NAME,
+    PROCESSED_LIGHTS_CSV as LIGHTS_CSV_NAME,
 )
 from scripts.momentum_graph.util.file_names import (
     PROCESSED_SCORES_CSV as SCORES_CSV_NAME,
 )
+from src.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME
 from src.util.io import setup_input_video_io
 
 MOMENTUM_GT_CSV_NAME = "momentum_gt.csv"
@@ -76,9 +76,11 @@ def main():
     lights_df = pd.read_csv(lights_path)
 
     # Overlay score increases on light activation plot
-    refined_scores = extract_score_increases(scores_df)
+    scores = scores_df["frame_id"].to_numpy()
+    left_scores = scores_df["left_score"].to_numpy()
+    right_scores = scores_df["right_score"].to_numpy()
+    refined_scores = extract_score_increases_np(scores, left_scores, right_scores)
     lights = densify_lights_data(lights_df, total_length=n_frames)
-    # plot_score_light_progression(refined_scores, lights, fps, frame_ids=scores_df["frame_id"].to_numpy())
 
     # Refine score occurrences using lights data
     score_occurrences = refine_score_frames_with_lights(

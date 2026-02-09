@@ -4,6 +4,7 @@ from PySide6.QtCore import Slot
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 
+from src.gui.heat_map.heat_map_main_widget import HeatMapMainWidget
 from src.gui.momentum_graph.momentum_graph_main_widget import MomentumGraphMainWidget
 
 from .manage_match_widget import ManageMatchWidget
@@ -58,6 +59,13 @@ class MainWindow(QMainWindow):
         )
         self.manage_match_widget.navigate_to_momentum_graph.connect(
             lambda: self.stack.setCurrentWidget(self.momentum_graph_widget)
+        )
+
+        self.heat_map_widget = HeatMapMainWidget()
+        self.stack.addWidget(self.heat_map_widget)
+        self.heat_map_widget.exit_requested.connect(self.on_navigate_to_manage_match)
+        self.manage_match_widget.navigate_to_heat_map.connect(
+            lambda: self.stack.setCurrentWidget(self.heat_map_widget)
         )
 
         self.setCentralWidget(self.stack)

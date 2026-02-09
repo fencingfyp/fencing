@@ -10,7 +10,7 @@ from scripts.manual_track_fencers import (
 )
 from src.gui.util.task_graph import HeatMapTasksToIds
 from src.model import FrameInfoManager
-from src.model.PysideUi import PysideUi
+from src.pyside.PysideUi import PysideUi
 from src.util.file_names import (
     ORIGINAL_VIDEO_NAME,
     PROCESSED_POSE_DATA_CSV_NAME,
@@ -25,11 +25,10 @@ from ..momentum_graph.base_task_widget import BaseTaskWidget
 class TrackFencersWidget(BaseTaskWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.ui.runButton.hide()
 
     @override
     def setup(self):
-        self.interactive_ui.write("Press 'Run' to start tracking fencers.")
+        self.ui.write("Press 'Run' to start tracking fencers.")
         self.run_task()
 
     @override
@@ -53,7 +52,7 @@ class TrackFencersWidget(BaseTaskWidget):
         self.controller = FencerAssignmentController(
             video_path=input_video_path,
             input_csv_path=input_csv_path,
-            ui=self.interactive_ui,
+            ui=self.ui,
             output_csv_path=output_csv_path,
         )
 
@@ -64,11 +63,11 @@ class TrackFencersWidget(BaseTaskWidget):
         self.controller.start()
 
     def _on_finished(self):
-        self.interactive_ui.write("Fencer tracking completed.")
+        self.ui.write("Fencer tracking completed.")
         self.run_completed.emit(HeatMapTasksToIds.TRACK_FENCERS)
 
     def cancel(self):
-        self.interactive_ui.cancel_running_subtasks()
+        self.ui.cancel_running_subtasks()
         return super().cancel()
 
 

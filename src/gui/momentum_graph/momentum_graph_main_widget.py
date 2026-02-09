@@ -191,7 +191,7 @@ if __name__ == "__main__":
     def main():
         app = QApplication(sys.argv)
         widget = MomentumGraphMainWidget()
-        widget.set_match("epee_2")
+        widget.set_match("sabre_2")
         widget.show()
         sys.exit(app.exec())
 

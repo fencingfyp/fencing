@@ -4,7 +4,9 @@ import numpy as np
 import pandas as pd
 
 from scripts.momentum_graph.process_scores import densify_frames
-from scripts.momentum_graph.util.extract_score_increases import extract_score_increases
+from scripts.momentum_graph.util.extract_score_increases import (
+    extract_score_increases_np,
+)
 from src.model.OpenCvUi import OpenCvUi, UiCodes
 from src.util.io import setup_input_video_io, setup_output_video_io
 
@@ -180,7 +182,10 @@ def main():
         f"{input_folder}/processed_scores.csv",
         usecols=["frame_id", "left_score", "right_score"],
     )
-    scores_map = extract_score_increases(scores_df)
+    frames = scores_df["frame_id"].to_numpy()
+    left_scores = scores_df["left_score"].to_numpy()
+    right_scores = scores_df["right_score"].to_numpy()
+    scores_map = extract_score_increases_np(frames, left_scores, right_scores)
 
     # extract lights info into a np array
     lights_df = pd.read_csv(csv_path)
@@ -188,7 +193,7 @@ def main():
     lights_df.rename(
         columns={"left_light": "left_score", "right_light": "right_score"}, inplace=True
     )
-    lights = densify_frames(lights, total_frames).to_numpy()
+    lights = densify_frames(lights_df, total_frames).to_numpy()
 
     score_occurrences = refine_score_frames_with_lights(
         lights, scores_map, fps, algorithm=algorithm

@@ -392,6 +392,7 @@ def main():
 
 def extract_score_frame_from_frame(frame, score_positions):
     x, y, w, h = convert_from_box_to_rect(score_positions)
+    x, y, w, h = int(x), int(y), int(w), int(h)
     out = frame[y : y + h, x : x + w]
     return out
 

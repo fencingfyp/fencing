@@ -1,3 +1,8 @@
+"""
+This isn't really needed, but keeping it because I integrated some code with it already.
+Ideally, stick to the OpenCvUi class unless there's a good reason not to.
+"""
+
 import enum
 import textwrap
 import threading

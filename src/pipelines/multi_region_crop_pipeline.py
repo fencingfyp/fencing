@@ -4,8 +4,8 @@ import cv2
 import numpy as np
 
 from src.model import Quadrilateral, Ui, UiCodes
-from src.model.PysideUi import PysideUi
 from src.model.tracker import OrbTracker
+from src.pyside.PysideUi import PysideUi
 from src.util.io import setup_output_video_io
 from src.util.utils import generate_select_quadrilateral_instructions
 
@@ -127,6 +127,7 @@ class MultiRegionCropPipeline:
             return
 
         updated_quads = self.tracker.update_all(frame)
+        points = []
 
         for label, data in self.region_data.items():
             quad = updated_quads.get(label) or self.tracker.get_previous_quad(label)
@@ -136,11 +137,12 @@ class MultiRegionCropPipeline:
                 data["dimensions"],
             )
             pts = self.tracker.get_target_pts(label)
-
+            points.extend(pts.tolist() if pts is not None else [])
             self.ui.show_additional(label, rectified)
-            self.ui.plot_points(pts, (0, 255, 0))
             if data["writer"]:
                 data["writer"].write(rectified)
+
+        self.ui.plot_points(points, (0, 255, 0))
 
         self.ui.set_fresh_frame(frame)
         self.ui.show_frame()

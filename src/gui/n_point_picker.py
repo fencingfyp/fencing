@@ -1,30 +1,26 @@
-import numpy as np
 from PySide6.QtCore import QObject, Qt
-from PySide6.QtGui import QKeySequence, QPainter, QPen, QShortcut
-from PySide6.QtWidgets import QLabel
+from PySide6.QtGui import QKeySequence, QShortcut
 
-from src.gui.util.conversion import np_to_pixmap
+from src.model.drawable.labelled_points_drawable import LabelledPointsDrawable
+
+LABELS = ["TL", "TR", "BR", "BL"]
 
 
 class NPointPicker(QObject):
     """
-    Click → confirm pattern for picking multiple points on a QLabel.
-    Short-lived: activate when picking, deactivate when done.
+    Picks N points on a video frame using VideoRenderer.
     """
 
-    def __init__(
-        self,
-        video_label: QLabel,
-        text_label: QLabel,
-        frame: np.ndarray,
-        prompts: list[str],
-        on_done,
-    ):
-        super().__init__(video_label)
-
-        self.video_label = video_label
+    def __init__(self, renderer, text_label, prompts: list[str], on_done):
+        """
+        renderer: VideoRenderer instance
+        text_label: QLabel to show prompts
+        prompts: list of prompt strings per point
+        on_done: callback(points_list)
+        """
+        super().__init__(renderer.video_label)
+        self.renderer = renderer
         self.text_label = text_label
-        self.frame = frame
         self.prompts = prompts
         self.on_done = on_done
 
@@ -32,23 +28,24 @@ class NPointPicker(QObject):
         self.picked_points: list[tuple[float, float]] = []
         self.current_click: tuple[float, float] | None = None
 
-        self._shortcut: QShortcut | None = None
-        self._orig_mouse_handler = video_label.mousePressEvent
         self._active = False
+        self._shortcut: QShortcut | None = None
+
         self.activate()
 
-    # ----------------------- lifecycle -----------------------
+    # ----------------------- Lifecycle -----------------------
     def activate(self):
         if self._active:
             return
         self._active = True
 
-        # replace mouse handler
-        self.video_label.setMouseTracking(True)
-        self.video_label.mousePressEvent = self._on_mouse_press
+        # connect to renderer's mouse click signal
+        self.renderer.mouse_clicked.connect(self._on_mouse_click)
 
-        # setup confirm shortcut (W key)
-        self._shortcut = QShortcut(QKeySequence(Qt.Key.Key_W), self.video_label)
+        # shortcut for confirming points
+        self._shortcut = QShortcut(
+            QKeySequence(Qt.Key.Key_W), self.renderer.video_label
+        )
         self._shortcut.activated.connect(self.confirm_point)
 
         self.current_idx = 0
@@ -62,34 +59,23 @@ class NPointPicker(QObject):
             return
         self._active = False
 
-        # restore mouse handler
-        self.video_label.mousePressEvent = self._orig_mouse_handler
+        # disconnect signal
+        self.renderer.mouse_clicked.disconnect(self._on_mouse_click)
 
-        # remove shortcut
         if self._shortcut:
             self._shortcut.activated.disconnect(self.confirm_point)
             self._shortcut.setParent(None)
             self._shortcut = None
 
         self.text_label.setText("")
-        self.video_label.setPixmap(np_to_pixmap(self.frame))  # reset to original frame
 
-    # ----------------------- mouse -----------------------
-    def _on_mouse_press(self, event):
-        if event.button() != Qt.LeftButton:
-            return
-
-        fw, fh = self.frame.shape[1], self.frame.shape[0]
-        label_w, label_h = self.video_label.width(), self.video_label.height()
-        sx, sy = fw / label_w, fh / label_h
-
-        x = int(event.position().x() * sx)
-        y = int(event.position().y() * sy)
-
-        self.current_click = (x, y)
+    # ----------------------- Mouse -----------------------
+    def _on_mouse_click(self, fx: float, fy: float):
+        """Handle frame coordinates emitted by VideoRenderer."""
+        self.current_click = (fx, fy)
         self._redraw_preview()
 
-    # ----------------------- confirm -----------------------
+    # ----------------------- Confirm -----------------------
     def confirm_point(self):
         if self.current_click is None:
             return
@@ -104,39 +90,23 @@ class NPointPicker(QObject):
             self._update_prompt()
             self._redraw_preview()
 
-    # ----------------------- helpers -----------------------
+    # ----------------------- Helpers -----------------------
     def _update_prompt(self):
         self.text_label.setText(self.prompts[self.current_idx])
 
     def _redraw_preview(self):
-        pixmap = np_to_pixmap(self.frame).scaled(
-            self.video_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
-        )
-
-        painter = QPainter(pixmap)
-        pen = QPen(Qt.red)
-        pen.setWidth(5)
-        painter.setPen(pen)
-
-        fh, fw = self.frame.shape[:2]
-        label_w, label_h = self.video_label.width(), self.video_label.height()
-        ratio = min(label_w / fw, label_h / fh)
-        x_offset = (label_w - fw * ratio) / 2
-        y_offset = (label_h - fh * ratio) / 2
-
-        for nx, ny in self.picked_points:
-            x = int(nx * ratio + x_offset)
-            y = int(ny * ratio + y_offset)
-            painter.drawPoint(x, y)
-
+        # draw picked points + current click
+        points = self.picked_points.copy()
         if self.current_click:
-            x, y = self.current_click
-            x = int(x * ratio + x_offset)
-            y = int(y * ratio + y_offset)
-            painter.drawPoint(x, y)
+            points.append(self.current_click)
 
-        painter.end()
-        self.video_label.setPixmap(pixmap)
+        self.renderer.render(
+            [
+                LabelledPointsDrawable(
+                    points, labels=LABELS[: len(points)], color=(255, 0, 0), size=5
+                )
+            ]
+        )
 
     def finish(self):
         self.deactivate()

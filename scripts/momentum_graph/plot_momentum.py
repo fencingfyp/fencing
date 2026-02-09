@@ -7,11 +7,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from scripts.momentum_graph.process_scores import densify_frames
+from scripts.momentum_graph.process_scores import densify_frames, densify_frames_np
 from scripts.momentum_graph.util.evaluate_score_events import (
     refine_score_frames_with_lights,
 )
-from scripts.momentum_graph.util.extract_score_increases import extract_score_increases
+from scripts.momentum_graph.util.extract_score_increases import (
+    extract_score_increases_np,
+)
 from scripts.momentum_graph.util.file_names import (
     PROCESSED_SCORES_CSV as SCORES_CSV_NAME,
 )
@@ -76,6 +78,15 @@ def densify_lights_data(lights: pd.DataFrame, total_length: int) -> np.ndarray:
     return lights.to_numpy()
 
 
+def densify_lights_data_np(
+    frame_ids: np.ndarray,
+    left_lights: np.ndarray,
+    right_lights: np.ndarray,
+    total_length: int,
+) -> np.ndarray:
+    return densify_frames_np(frame_ids, left_lights, right_lights, total_length)
+
+
 def get_arguments():
     parser = argparse.ArgumentParser(
         description="Plot momentum graph from refined score increases."
@@ -106,36 +117,54 @@ def main():
     scores_df = pd.read_csv(
         scores_path, usecols=["frame_id", "left_score", "right_score"]
     )
-    lights_df = pd.read_csv(lights_path)
 
     # Overlay score increases on light activation plot
-    refined_scores = extract_score_increases(scores_df)
-    lights = densify_lights_data(lights_df, total_length=n_frames)
+    score_frame_ids = scores_df["frame_id"].to_numpy()
+    left_scores = scores_df["left_score"].to_numpy()
+    right_scores = scores_df["right_score"].to_numpy()
+    refined_scores = extract_score_increases_np(
+        score_frame_ids, left_scores, right_scores
+    )
+
+    lights_df = pd.read_csv(lights_path)
+    left_lights_sparse = lights_df["left_light"].to_numpy()
+    right_lights_sparse = lights_df["right_light"].to_numpy()
+    light_frame_ids_sparse = lights_df["frame_id"].to_numpy()
+    frame_ids_dense, left_lights_dense, right_lights_dense = densify_lights_data_np(
+        light_frame_ids_sparse,
+        left_lights_sparse,
+        right_lights_sparse,
+        total_length=n_frames,
+    )
+    stacked_lights_dense = np.column_stack((left_lights_dense, right_lights_dense))
     plot_score_light_progression(
-        refined_scores, lights, fps, frame_ids=scores_df["frame_id"].to_numpy()
+        refined_scores,
+        stacked_lights_dense,
+        fps,
+        frame_ids=frame_ids_dense,
     )
 
     # Refine score occurrences using lights data
     score_occurrences = refine_score_frames_with_lights(
-        lights, refined_scores, fps, algorithm=algorithm
+        stacked_lights_dense, refined_scores, fps, algorithm=algorithm
     )
     print("Refined Score Occurrences:", score_occurrences)
 
     # Plot momentum graph
-    frames, momenta = get_momentum_data_points(score_occurrences, fps)
-    plot_momentum(frames, momenta, fps)
+    score_frame_ids, momenta = get_momentum_data_points(score_occurrences, fps)
+    plot_momentum(score_frame_ids, momenta, fps)
 
     # Show all plots
     plt.show()
 
     # save momentum data points to csv
-    momentum_df = pd.DataFrame({"frame_id": frames, "momentum": momenta})
+    momentum_df = pd.DataFrame({"frame_id": score_frame_ids, "momentum": momenta})
     momentum_df.to_csv(path.join(folder, MOMENTUM_DATA_CSV_NAME), index=False)
 
 
 def plot_score_light_progression(
     refined_scores: dict[str, dict[int, int]],
-    lights: pd.DataFrame,
+    lights: np.ndarray,
     fps: int,
     frame_ids: np.ndarray,
 ):

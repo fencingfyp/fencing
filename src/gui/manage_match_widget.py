@@ -13,6 +13,7 @@ from .ui_manage_match_widget import Ui_ManageMatchWidget
 class ManageMatchWidget(QWidget):
     navigate_to_select_match = Signal()
     navigate_to_momentum_graph = Signal()
+    navigate_to_heat_map = Signal()
 
     def __init__(self):
         super().__init__()
@@ -23,7 +24,7 @@ class ManageMatchWidget(QWidget):
         self.ui.momentumGraphButton.clicked.connect(
             self.on_momentum_graph_button_clicked
         )
-        self.ui.heatMapButton.setEnabled(False)  # Not implemented yet
+        self.ui.heatMapButton.clicked.connect(self.on_heat_map_button_clicked)
         self.ui.actionMapButton.setEnabled(False)  # Not implemented yet
 
     def set_match(self, match_name: str):
@@ -42,6 +43,10 @@ class ManageMatchWidget(QWidget):
     def on_momentum_graph_button_clicked(self):
         self.ui.videoPlayerWidget.deactivate()
         self.navigate_to_momentum_graph.emit()
+
+    def on_heat_map_button_clicked(self):
+        self.ui.videoPlayerWidget.deactivate()
+        self.navigate_to_heat_map.emit()
 
 
 if __name__ == "__main__":

@@ -1,7 +1,9 @@
 import argparse
 from os import path
+from typing import Tuple
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 from scripts.momentum_graph.util.file_names import PROCESSED_LIGHTS_CSV
@@ -22,16 +24,19 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def remove_false_negatives(series, min_off_len=5):
+import numpy as np
+
+
+def remove_false_negatives(arr: np.ndarray, min_off_len: int = 5) -> np.ndarray:
     """
-    Remove false negatives in a binary Series (0=inactive, 1=active).
+    Remove false negatives in a binary array (0=inactive, 1=active).
     If there's a run of 0s shorter than min_off_len between 1s,
     set those 0s to 1s.
     """
-    s = series.to_numpy().copy()
-    n = len(s)
+    s = arr.copy()
+    n = s.size
     if n == 0:
-        return series.copy()
+        return s
 
     i = 0
     while i < n:
@@ -40,13 +45,14 @@ def remove_false_negatives(series, min_off_len=5):
             while i < n and s[i] == 0:
                 i += 1
             end = i  # first non-zero after the run
-            # Check if the 0-run is between two 1s
+
+            # run of 0s strictly between 1s
             if start > 0 and end < n and (end - start) < min_off_len:
                 s[start:end] = 1
         else:
             i += 1
 
-    return pd.Series(s, index=series.index)
+    return s
 
 
 def remove_false_positives(series, min_on_len=5):
@@ -55,7 +61,7 @@ def remove_false_positives(series, min_on_len=5):
     If there's a run of 1s shorter than min_on_len between 0s,
     set those 1s to 0s.
     """
-    s = series.to_numpy().copy()
+    s = series.copy()
     n = len(s)
     if n == 0:
         return series.copy()
@@ -73,16 +79,31 @@ def remove_false_positives(series, min_on_len=5):
         else:
             i += 1
 
-    return pd.Series(s, index=series.index)
+    return s
+
+
+def process_score_lights_np(lights: np.ndarray, fps: int) -> np.ndarray:
+    """
+    lights: shape (N, 2) -> [:, 0] left, [:, 1] right
+    """
+    min_len = fps // 2
+
+    left = remove_false_negatives(lights[:, 0], min_off_len=min_len)
+    right = remove_false_negatives(lights[:, 1], min_off_len=min_len)
+
+    left = remove_false_positives(left, min_on_len=min_len)
+    right = remove_false_positives(right, min_on_len=min_len)
+
+    return np.column_stack((left, right))
 
 
 def process_score_lights(df: pd.DataFrame, fps: int) -> pd.DataFrame:
     df = df.copy()
-    # df["left_light"] = remove_false_negatives(df["left_light"], min_off_len=fps // 2)
-    # df["right_light"] = remove_false_negatives(df["right_light"], min_off_len=fps // 2)
+    df["left_light"] = remove_false_negatives(df["left_light"], min_off_len=fps // 2)
+    df["right_light"] = remove_false_negatives(df["right_light"], min_off_len=fps // 2)
 
-    # df["left_light"] = remove_false_positives(df["left_light"], min_on_len=fps // 2)
-    # df["right_light"] = remove_false_positives(df["right_light"], min_on_len=fps // 2)
+    df["left_light"] = remove_false_positives(df["left_light"], min_on_len=fps // 2)
+    df["right_light"] = remove_false_positives(df["right_light"], min_on_len=fps // 2)
     return df
 
 
