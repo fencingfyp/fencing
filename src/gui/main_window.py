@@ -4,6 +4,7 @@ from PySide6.QtCore import Slot
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QFrame,
     QHBoxLayout,
     QMainWindow,
     QStackedWidget,
@@ -102,6 +103,11 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
 
         layout.addWidget(self.navbar)
+        separator = QFrame()
+        separator.setFrameShape(QFrame.VLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(separator)
+
         layout.addWidget(self.stack, 1)
 
         self.setCentralWidget(central)
