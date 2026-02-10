@@ -1,101 +1,64 @@
-import os
-import shutil
 import sys
+from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QApplication,
+    QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QPushButton,
+    QVBoxLayout,
     QWidget,
 )
 
-from src.gui.util.io import load_ui_dynamic
-from src.util.file_names import ORIGINAL_VIDEO_NAME
+from src.model.FileManager import FileManager
 
-from .add_match_dialog import AddMatchDialog
-
-MATCH_LIST_FOLDER = "matches_data/"
+from .select_match_dialog import SelectMatchDialog
 
 
 class SelectMatchWidget(QWidget):
-    selected = Signal(str)  # match_name
+    selected = Signal(str)  # emits full video file path
 
     def __init__(self):
         super().__init__()
+        self.setWindowTitle("Select Match")
 
-        # Load .ui
-        self.ui_file = "src/gui/select_match_widget.ui"
-        self.ui = load_ui_dynamic(self.ui_file, self)
+        # --- widgets ---
+        self.label = QLabel("Select a video file to open:")
+        # self.input_line = QLineEdit()
+        # self.input_line.setReadOnly(True)
+        # self.input_line.setPlaceholderText("No file selected")
 
-        self.list_widget = self.ui.findChild(QListWidget, "listWidget")
-        self.add_button = self.ui.findChild(QPushButton, "pushButton")
-        self.input_line = self.ui.findChild(QLineEdit, "lineEdit")
+        self.select_button = QPushButton("Select Match")
 
-        self.add_button.clicked.connect(self._add_item)
-        self.list_widget.itemDoubleClicked.connect(self._on_item_clicked)
-        self.update()
+        # --- layout ---
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.select_button)
+        # layout.addStretch()
 
-    def _add_item(self):
-        dialog = AddMatchDialog(self)
-        dialog.submitted.connect(self._on_match_submitted)
+        # --- signals ---
+        self.select_button.clicked.connect(self._select_file)
+
+    def _select_file(self):
+        dialog = SelectMatchDialog(self)
+        dialog.submitted.connect(self._on_file_selected)
         dialog.open()
 
-    def _on_item_clicked(self, item: QListWidgetItem):
-        match_name = item.text()
-        print("Selected match:", match_name)
-        self.selected.emit(match_name)
+    def _on_file_selected(self, file_path: str):
+        """
+        Emits the selected video file path.
+        The main app / context can handle sidecar folder logic.
+        """
 
-    def _add_to_match_list(self, name: str):
-        item = QListWidgetItem(name)
-        item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.list_widget.addItem(item)
+        # Example integration scaffolding with FileManager:
+        # 1. Ensure sidecar exists
+        FileManager.create_sidecar(file_path)
 
-    def _on_match_submitted(self, name: str, file_path: str):
-        self._create_new_match(name, file_path)
-        self.update()
+        # 2. Construct a FileManager instance (raises if metadata missing)
+        # fm = FileManager(file_path)
 
-    def _create_new_match(self, name: str, file_path: str):
-        match_folder = os.path.join(MATCH_LIST_FOLDER, name)
-        os.makedirs(match_folder, exist_ok=True)
-        dest_path = os.path.join(match_folder, ORIGINAL_VIDEO_NAME)
-        shutil.copy(file_path, dest_path)
-
-    def update(self):
-        super().update()
-        folder_names = self._get_eligible_folders()
-        self.list_widget.clear()
-        for folder_name in folder_names:
-            self._add_to_match_list(folder_name)
-
-    @staticmethod
-    def _get_eligible_folders():
-        folder_names = []
-        if os.path.exists(MATCH_LIST_FOLDER):
-            folder_names = [
-                name
-                for name in os.listdir(MATCH_LIST_FOLDER)
-                if SelectMatchWidget._is_eligible_folder(name)
-            ]
-        # Sort by last modified time, newest first
-        folder_names.sort(
-            key=lambda name: os.path.getmtime(os.path.join(MATCH_LIST_FOLDER, name)),
-            reverse=True,
-        )
-        return folder_names
-
-    @staticmethod
-    def _is_eligible_folder(name: str) -> bool:
-        full_path = os.path.join(MATCH_LIST_FOLDER, name)
-        if (
-            not os.path.exists(full_path)
-            or not os.path.isdir(full_path)
-            or ORIGINAL_VIDEO_NAME not in os.listdir(full_path)
-        ):
-            return False
-        return True
+        # 3. Emit the video path for the app / match context
+        self.selected.emit(file_path)
 
 
 if __name__ == "__main__":

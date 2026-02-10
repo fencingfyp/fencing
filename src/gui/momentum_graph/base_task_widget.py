@@ -1,14 +1,9 @@
-from PySide6.QtCore import Signal, Slot
-from PySide6.QtWidgets import (
-    QApplication,
-    QLabel,
-    QPushButton,
-    QStackedWidget,
-    QVBoxLayout,
-    QWidget,
-)
+from typing import override
 
-from src.gui.util.task_graph import MomentumGraphTasksToIds
+from PySide6.QtCore import Signal, Slot
+from PySide6.QtWidgets import QLabel, QPushButton, QStackedWidget, QVBoxLayout, QWidget
+
+from src.pyside.MatchContext import MatchContext
 from src.pyside.PysideUi import PysideUi
 
 
@@ -16,8 +11,9 @@ class BaseTaskWidget(QWidget):
     run_started = Signal(object)
     run_completed = Signal(object)
 
-    def __init__(self, parent=None):
+    def __init__(self, match_context: MatchContext, parent=None):
         super().__init__(parent)
+        self.match_context = match_context
         self._content_stack = QStackedWidget(self)
         # self._content_stack.setStyleSheet("border: 2px solid red;")
 
@@ -59,12 +55,11 @@ class BaseTaskWidget(QWidget):
         # ==================================================
         self.video_label_original_size = self.videoLabel.size()
         self.cap = None
-        self.working_dir = None
         self.controller = None
         self.is_running = False
 
         # ==================================================
-        # Interactive UI adapter (unchanged)
+        # Interactive UI adapter
         # ==================================================
         self.ui = PysideUi(
             video_label=self.videoLabel,
@@ -76,6 +71,7 @@ class BaseTaskWidget(QWidget):
         # Signals
         # ==================================================
         self.runButton.clicked.connect(self.on_runButton_clicked)
+        self.match_context.match_changed.connect(self.on_match_context_changed)
 
     # --------------------------------------------------
     # Content management (NEW, extensible API)
@@ -107,13 +103,29 @@ class BaseTaskWidget(QWidget):
                 self.controller.deleteLater()
             self.controller = None
 
-        self.ui.close_additional_windows()
         self.ui.cancel_running_subtasks()
 
-    @Slot(str)
-    def set_working_directory(self, working_dir: str):
-        self.working_dir = working_dir
-        self.setup()
+    def cleanup(self):
+        self.ui.close_additional_windows()
+
+    @Slot()
+    def on_match_context_changed(self):
+        self._setup_done = False
+
+    @override
+    def showEvent(self, event):
+        if not getattr(self, "_setup_done", False):
+            self.setup()
+            self._setup_done = True
+        return super().showEvent(event)
+
+    @override
+    def hideEvent(self, event):
+        self._setup_done = False
+        if self.is_running:
+            self.cancel()
+        self.cleanup()
+        return super().hideEvent(event)
 
     def setup(self):
         """Override in subclasses."""
@@ -144,5 +156,7 @@ class BaseTaskWidget(QWidget):
     # --------------------------------------------------
 
     def closeEvent(self, event):
-        self.cancel()
+        if self.is_running:
+            self.cancel()
+        self.cleanup()
         return super().closeEvent(event)

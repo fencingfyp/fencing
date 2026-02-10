@@ -96,6 +96,7 @@ class VideoPlayerWidget(QWidget):
     # ----------------------------- Lifecycle -----------------------------
     def activate(self):
         """Start timer if a video is loaded."""
+        # print("Activating VideoPlayerWidget")
         if not self._active and self.video_frame.has_video():
             self._active = True
             if self.delay is not None and not self.timer.isActive():
@@ -107,6 +108,7 @@ class VideoPlayerWidget(QWidget):
 
     def deactivate(self):
         """Stop timer and optionally remove shortcuts."""
+        # print("Deactivating VideoPlayerWidget")
         self._active = False
         if self.timer.isActive():
             self.timer.stop()
@@ -116,6 +118,14 @@ class VideoPlayerWidget(QWidget):
             sc.activated.disconnect()
             sc.setParent(None)
         self._shortcuts.clear()
+
+    def showEvent(self, event):
+        self.activate()
+        return super().showEvent(event)
+
+    def hideEvent(self, event):
+        self.deactivate()
+        return super().hideEvent(event)
 
     def closeEvent(self, event):
         self.deactivate()
@@ -130,12 +140,16 @@ class VideoPlayerWidget(QWidget):
 
     # ----------------------------- Controls -----------------------------
     def play(self):
+        if not self.is_paused:
+            return
         self.playbutton.setText("Pause")
         self.is_paused = False
         if self._active and self.delay:
             self.timer.start(self.delay)
 
     def pause(self):
+        if self.is_paused:
+            return
         self.playbutton.setText("Play")
         self.is_paused = True
         self.timer.stop()

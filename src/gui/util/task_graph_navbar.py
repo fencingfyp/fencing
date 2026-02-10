@@ -5,48 +5,48 @@ from src.gui.util.task_graph import TaskState
 from src.gui.util.task_graph_view import TASK_STATE_CSS
 
 
-class TaskGraphNavbar(QWidget):
-    back_clicked = Signal()
-    overview_clicked = Signal()
-    task_clicked = Signal(str)
+class TaskGraphLocalNav(QWidget):
+    back_requested = Signal()
+    overview_requested = Signal()
+    task_requested = Signal(str)
 
     def __init__(self, ordered_task_ids: list[str], parent=None):
         super().__init__(parent)
 
-        self.setFixedWidth(240)
+        self._task_buttons: dict[str, QPushButton] = {}
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
-        self.back_button = QPushButton("← Back")
+        # self.back_button = QPushButton("← Back")
         self.overview_button = QPushButton("Overview")
 
-        layout.addWidget(self.back_button)
+        # layout.addWidget(self.back_button)
         layout.addWidget(self.overview_button)
         layout.addSpacing(12)
 
-        self.task_buttons: dict[str, QPushButton] = {}
-
+        # ---- task buttons ----
         for index, tid in enumerate(ordered_task_ids, start=1):
-            label = self.create_task_label(tid, index)
-            btn = QPushButton(label)
-            btn.setEnabled(False)  # initial state
+            btn = QPushButton(self._task_label(tid, index))
+            btn.setEnabled(False)
             layout.addWidget(btn)
 
-            self.task_buttons[tid] = btn
-            btn.clicked.connect(lambda _, t=tid: self.task_clicked.emit(t))
+            btn.clicked.connect(lambda _, t=tid: self.task_requested.emit(t))
+            self._task_buttons[tid] = btn
 
         layout.addStretch()
 
-        self.back_button.clicked.connect(self.back_clicked)
-        self.overview_button.clicked.connect(self.overview_clicked)
+        # ---- signals ----
+        # self.back_button.clicked.connect(self.back_requested)
+        self.overview_button.clicked.connect(self.overview_requested)
 
-    def create_task_label(self, tid: str, index: int) -> QPushButton:
-        return f"{index}. {tid.replace('_', ' ').title()}"
+    # ---------- public API ----------
 
-    def update_task_state(self, tid: str, state: TaskState):
-        btn = self.task_buttons[tid]
+    def update_task_state(self, task_id: str, state: TaskState):
+        btn = self._task_buttons.get(task_id)
+        if not btn:
+            return
 
         if state == TaskState.LOCKED:
             btn.setEnabled(False)
@@ -54,6 +54,12 @@ class TaskGraphNavbar(QWidget):
         elif state == TaskState.READY:
             btn.setEnabled(True)
             btn.setStyleSheet(TASK_STATE_CSS["READY"])
-        else:
+        elif state == TaskState.DONE:
             btn.setEnabled(True)
             btn.setStyleSheet(TASK_STATE_CSS["DONE"])
+
+    # ---------- helpers ----------
+
+    @staticmethod
+    def _task_label(task_id: str, index: int) -> str:
+        return f"{index}. {task_id.replace('_', ' ').title()}"

@@ -1,5 +1,4 @@
 import json
-import os
 from dataclasses import dataclass
 from typing import List, Optional, override
 
@@ -8,7 +7,8 @@ from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 from src.gui.util.task_graph import MomentumGraphTasksToIds
 from src.gui.video_player_widget import VideoPlayerWidget
-from src.util.file_names import ORIGINAL_VIDEO_NAME, PERIODS_JSON_NAME
+from src.model.FileManager import FileRole
+from src.pyside.MatchContext import MatchContext
 
 from .base_task_widget import BaseTaskWidget
 
@@ -59,8 +59,8 @@ class PeriodSelectorController:
 class SelectPeriodsWidget(BaseTaskWidget):
     """UI wrapper for periods selection."""
 
-    def __init__(self, parent=None, *, max_periods: int = 3):
-        super().__init__(parent)
+    def __init__(self, match_context, parent=None, *, max_periods: int = 3):
+        super().__init__(match_context, parent)
         self.max_periods = max_periods
         self.save_path: Optional[str] = None
         self.controller: Optional[PeriodSelectorController] = None
@@ -81,10 +81,12 @@ class SelectPeriodsWidget(BaseTaskWidget):
 
     @override
     def setup(self):
+        if not self.match_context.file_manager.get_working_directory():
+            return
         self.is_running = True
 
-        video_path = os.path.join(self.working_dir, ORIGINAL_VIDEO_NAME)
-        self.save_path = os.path.join(self.working_dir, PERIODS_JSON_NAME)
+        video_path = self.match_context.file_manager.get_original_video()
+        self.save_path = self.match_context.file_manager.get_path(FileRole.PERIODS)
 
         self.player.set_video_source(video_path)
 
@@ -98,11 +100,12 @@ class SelectPeriodsWidget(BaseTaskWidget):
     @override
     def cancel(self):
         self.deactivate()
+        super().cancel()
 
     # ------------------- lifecycle -------------------
     def activate(self):
         """Activate video player and shortcuts."""
-        self.player.activate()
+        self.player.play()
         self.finish_button.setEnabled(False)
 
         self.player.register_shortcut(Qt.Key.Key_S, self._mark_start)
@@ -110,8 +113,8 @@ class SelectPeriodsWidget(BaseTaskWidget):
 
     def deactivate(self):
         """Deactivate video player and shortcuts."""
-        self.player.deactivate()
         self.finish_button.setEnabled(False)
+        self.player.pause()
 
     # ------------------- controller wrappers -------------------
     def _mark_start(self):
@@ -173,8 +176,9 @@ if __name__ == "__main__":
 
     def main():
         app = QApplication(sys.argv)
-        widget = SelectPeriodsWidget()
-        widget.set_working_directory("matches_data/sabre_2")
+        match_context = MatchContext()
+        widget = SelectPeriodsWidget(match_context)
+        match_context.set_file("matches_data/epee_3/epee_3.mp4")
         widget.show()
         sys.exit(app.exec())
 

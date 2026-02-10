@@ -1,14 +1,12 @@
 import cProfile
-import os
 import pstats
-from enum import Enum
 
 from PySide6.QtCore import Signal, Slot
-from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QWidget
 
-from src.gui.select_match_widget import MATCH_LIST_FOLDER
 from src.gui.util.task_graph import MomentumGraphTasksToIds, Task, TaskGraph, TaskState
-from src.gui.util.task_graph_navbar import TaskGraphNavbar
+from src.gui.util.task_graph_navbar import TaskGraphLocalNav
+from src.pyside.MatchContext import MatchContext
 from src.util.file_names import (
     CROPPED_SCORE_LIGHTS_VIDEO_NAME,
     CROPPED_SCOREBOARD_VIDEO_NAME,
@@ -74,21 +72,21 @@ TASK_DEPENDENCIES = [
 class MomentumGraphMainWidget(QWidget):
     exit_requested = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, match_context: MatchContext, parent=None):
         super().__init__(parent)
-        self.working_directory = None
+        self.match_context = match_context
 
-        self.task_graph: TaskGraph = TaskGraph(TASK_DEPENDENCIES)
+        self.task_graph: TaskGraph = TaskGraph(TASK_DEPENDENCIES, match_context)
         self.task_graph.graph_changed.connect(self._update_navbar_states)
 
-        self.navbar = self.initialise_navbar()
+        self.local_navbar = self.initialise_navbar()
 
         self.stack = QStackedWidget()
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        root.addWidget(self.navbar)
+        # root.addWidget(self.local_navbar)
         root.addWidget(self.stack, 1)
         self.setLayout(root)
 
@@ -99,33 +97,35 @@ class MomentumGraphMainWidget(QWidget):
         self.initialise_task_widgets()
         self._update_navbar_states()
 
+        self.match_context.match_changed.connect(self._on_match_changed)
+
     def initialise_navbar(self):
         ordered_tasks = self.task_graph.topological_order()
-        navbar = TaskGraphNavbar(ordered_tasks)
-        navbar.task_clicked.connect(self._open_task)
-        navbar.overview_clicked.connect(lambda: self._switch_to(self.overview_widget))
-        navbar.back_clicked.connect(self._on_exit_requested)
+        navbar = TaskGraphLocalNav(ordered_tasks)
+        navbar.task_requested.connect(self._open_task)
+        navbar.overview_requested.connect(lambda: self._switch_to(self.overview_widget))
+        navbar.back_requested.connect(self._on_exit_requested)
         return navbar
 
     def initialise_task_widgets(self):
         self.tasks_to_widgets = {}
         self.tasks_to_widgets[MomentumGraphTasksToIds.CROP_REGIONS.value] = (
-            CropRegionsWidget()
+            CropRegionsWidget(self.match_context)
         )
         self.tasks_to_widgets[MomentumGraphTasksToIds.PERFORM_OCR.value] = (
-            PerformOcrWidget()
+            PerformOcrWidget(self.match_context)
         )
         self.tasks_to_widgets[MomentumGraphTasksToIds.DETECT_SCORE_LIGHTS.value] = (
-            DetectScoreLightsWidget()
+            DetectScoreLightsWidget(self.match_context)
         )
         self.tasks_to_widgets[MomentumGraphTasksToIds.GENERATE_MOMENTUM_GRAPH.value] = (
-            GenerateMomentumGraphWidget()
+            GenerateMomentumGraphWidget(self.match_context)
         )
         self.tasks_to_widgets[MomentumGraphTasksToIds.SELECT_PERIODS.value] = (
-            SelectPeriodsWidget()
+            SelectPeriodsWidget(self.match_context)
         )
         self.tasks_to_widgets[MomentumGraphTasksToIds.VIEW_STATS.value] = (
-            ViewStatsWidget()
+            ViewStatsWidget(self.match_context)
         )
 
         for task_id, widget in self.tasks_to_widgets.items():
@@ -140,47 +140,26 @@ class MomentumGraphMainWidget(QWidget):
     def _update_navbar_states(self):
         for tid in self.tasks_to_widgets:
             state = self.task_graph.state(tid)
-            self.navbar.update_task_state(tid, state)
+            self.local_navbar.update_task_state(tid, state)
 
     def _on_exit_requested(self):
-        current_widget = self.stack.currentWidget()
-        if (
-            current_widget
-            and hasattr(current_widget, "cancel")
-            and hasattr(current_widget, "is_running")
-            and current_widget.is_running
-        ):
-            current_widget.cancel()
         self.exit_requested.emit()
 
-    def set_match(self, match_name: str):
-        self.match_name = match_name
-        self.working_directory = os.path.join(MATCH_LIST_FOLDER, match_name)
-        self.task_graph.set_working_directory(self.working_directory)
+    @Slot()
+    def _on_match_changed(self):
+        self.match_name = self.match_context.file_manager.get_match_name()
 
     def _switch_to(self, widget: QWidget):
-        current = self.stack.currentWidget()
-        if (
-            current
-            and hasattr(current, "cancel")
-            and hasattr(current, "is_running")
-            and current.is_running
-        ):
-            current.cancel()
-
         self.stack.setCurrentWidget(widget)
 
     @Slot(str)
     def _open_task(self, task_id: str):
         if self.task_graph.state(task_id) != TaskState.LOCKED:
             self._switch_to(self.tasks_to_widgets[task_id])
-            self.tasks_to_widgets[task_id].set_working_directory(self.working_directory)
 
-    def closeEvent(self, event):
-        for widget in self.tasks_to_widgets.values():
-            if hasattr(widget, "cancel"):
-                widget.cancel()
-        return super().closeEvent(event)
+    def showEvent(self, event):
+        self._switch_to(self.overview_widget)
+        return super().showEvent(event)
 
 
 if __name__ == "__main__":
@@ -190,8 +169,10 @@ if __name__ == "__main__":
 
     def main():
         app = QApplication(sys.argv)
-        widget = MomentumGraphMainWidget()
-        widget.set_match("sabre_2")
+        match_context = MatchContext()
+
+        widget = MomentumGraphMainWidget(match_context)
+        match_context.set_file("matches_data/sabre_2.mp4")
         widget.show()
         sys.exit(app.exec())
 

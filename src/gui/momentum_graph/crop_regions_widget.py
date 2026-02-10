@@ -1,4 +1,3 @@
-import os
 from typing import override
 
 import cv2
@@ -6,55 +5,49 @@ from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QApplication
 
 from src.gui.util.task_graph import MomentumGraphTasksToIds
+from src.model.FileManager import FileRole
 from src.pipelines.multi_region_crop_pipeline import MultiRegionCropPipeline
-from src.pyside.PysideUi import PysideUi
-from src.util.file_names import (
-    CROPPED_SCORE_LIGHTS_VIDEO_NAME,
-    CROPPED_SCOREBOARD_VIDEO_NAME,
-    CROPPED_TIMER_VIDEO_NAME,
-    ORIGINAL_VIDEO_NAME,
-)
+from src.pyside.MatchContext import MatchContext
 
 from .base_task_widget import BaseTaskWidget
 
 
 class CropRegionsWidget(BaseTaskWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, match_context: MatchContext, parent=None):
+        super().__init__(match_context, parent)
 
     @override
     def setup(self):
-        if not self.working_dir:
+        if not self.match_context.file_manager.get_working_directory():
             return
 
-        video_path = os.path.join(self.working_dir, ORIGINAL_VIDEO_NAME)
-        self.cap = cv2.VideoCapture(video_path)
+        video_path = self.match_context.file_manager.get_original_video()
+        self.cap = cv2.VideoCapture(str(video_path))
 
         ret, frame = self.cap.read()
         if not ret:
             raise ValueError(f"Failed to read video from {video_path}")
 
-        # Display first frame
         self.ui.set_fresh_frame(frame)
-        self.ui.show_frame()
-
         self.ui.write("Press 'Run' to start cropping the regions of interest.")
 
         self.run_task()
 
     def run_task(self):
-        if not self.cap or not self.working_dir:
+        if not self.cap:
             return
         self.is_running = True
 
         self.run_started.emit(MomentumGraphTasksToIds.CROP_REGIONS)
 
         labels_to_output_paths = {
-            "scoreboard": os.path.join(self.working_dir, CROPPED_SCOREBOARD_VIDEO_NAME),
-            "score lights": os.path.join(
-                self.working_dir, CROPPED_SCORE_LIGHTS_VIDEO_NAME
+            "scoreboard": self.match_context.file_manager.get_path(
+                FileRole.CROPPED_SCOREBOARD
             ),
-            "timer": os.path.join(self.working_dir, CROPPED_TIMER_VIDEO_NAME),
+            "score lights": self.match_context.file_manager.get_path(
+                FileRole.CROPPED_SCORE_LIGHTS
+            ),
+            "timer": self.match_context.file_manager.get_path(FileRole.CROPPED_TIMER),
         }
 
         self.controller = MultiRegionCropPipeline(
@@ -87,8 +80,9 @@ if __name__ == "__main__":
 
     def main():
         app = QApplication(sys.argv)
-        widget = CropRegionsWidget()
-        widget.set_working_directory("matches_data/sabre_1")
+        match_context = MatchContext()
+        widget = CropRegionsWidget(match_context)
+        match_context.set_file("matches_data/epee_3/epee_3.mp4")
         widget.show()
         sys.exit(app.exec())
 

@@ -43,6 +43,8 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
+from src.pyside.MatchContext import MatchContext
+
 
 class MomentumGraphTasksToIds(Enum):
     CROP_REGIONS = "Crop Regions"
@@ -91,19 +93,23 @@ class TaskGraph(QObject):
     task_changed = Signal(str)
     graph_changed = Signal()
 
-    def __init__(self, tasks: list[Task], working_dir: str | None = None):
-        super().__init__()
+    def __init__(
+        self,
+        tasks: list[Task],
+        match_context: MatchContext,
+        parent=None,
+    ):
+        super().__init__(parent)
 
         self.tasks: dict[str, Task] = {t.id: t for t in tasks}
-        self.working_dir = Path(working_dir) if working_dir else None
+        self.match_context = match_context
 
         # build children adjacency
         for t in tasks:
             for dep in t.deps:
                 self.tasks[dep].children.append(t.id)
 
-        # initial evaluation from filesystem
-        self._initial_scan()
+        self.match_context.match_changed.connect(self._on_match_changed)
 
     # ---------- public API ----------
 
@@ -140,6 +146,10 @@ class TaskGraph(QObject):
 
     # ---------- core logic ----------
 
+    def _on_match_changed(self):
+        self._initial_scan()
+        self.graph_changed.emit()
+
     def _initial_scan(self):
         """Initial pass: check only each node + direct deps."""
         for tid in self.tasks:
@@ -150,10 +160,7 @@ class TaskGraph(QObject):
             self._recompute_children(tid)
 
     def _outputs_exist(self, task: Task) -> bool:
-        if self.working_dir is None:
-            return all(p.exists() for p in task.outputs)
-        # [print(self.working_dir / p) for p in task.outputs]
-        return all((self.working_dir / p).exists() for p in task.outputs)
+        return all(self.match_context.file_manager.file_exists(p) for p in task.outputs)
 
     def _deps_done(self, task: Task) -> bool:
         return all(self.tasks[d].state == TaskState.DONE for d in task.deps)

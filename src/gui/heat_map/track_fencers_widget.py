@@ -1,4 +1,3 @@
-import os
 from typing import override
 
 from scripts.manual_track_fencers import (
@@ -10,12 +9,9 @@ from scripts.manual_track_fencers import (
 )
 from src.gui.util.task_graph import HeatMapTasksToIds
 from src.model import FrameInfoManager
+from src.model.FileManager import FileRole
+from src.pyside.MatchContext import MatchContext
 from src.pyside.PysideUi import PysideUi
-from src.util.file_names import (
-    ORIGINAL_VIDEO_NAME,
-    PROCESSED_POSE_DATA_CSV_NAME,
-    RAW_POSE_DATA_CSV_NAME,
-)
 from src.util.io import setup_input_video_io
 from src.util.lru_frame_reader import LruFrameReader
 
@@ -23,8 +19,8 @@ from ..momentum_graph.base_task_widget import BaseTaskWidget
 
 
 class TrackFencersWidget(BaseTaskWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, match_context, parent=None):
+        super().__init__(match_context, parent)
 
     @override
     def setup(self):
@@ -36,17 +32,16 @@ class TrackFencersWidget(BaseTaskWidget):
         self.run_task()
 
     def run_task(self):
-        if not self.working_dir:
+        if not self.match_context.file_manager:
             return
 
         self.run_started.emit(HeatMapTasksToIds.TRACK_FENCERS)
 
-        input_video_path = os.path.join(self.working_dir, ORIGINAL_VIDEO_NAME)
-        input_csv_path = os.path.join(
-            self.working_dir,
-            RAW_POSE_DATA_CSV_NAME,
+        input_video_path = self.match_context.file_manager.get_original_video()
+        input_csv_path = self.match_context.file_manager.get_path(FileRole.RAW_POSE)
+        output_csv_path = self.match_context.file_manager.get_path(
+            FileRole.PROCESSED_POSE
         )
-        output_csv_path = os.path.join(self.working_dir, PROCESSED_POSE_DATA_CSV_NAME)
 
         # Create controller
         self.controller = FencerAssignmentController(
@@ -252,8 +247,9 @@ if __name__ == "__main__":
 
     def main():
         app = QApplication(sys.argv)
-        widget = TrackFencersWidget()
-        widget.set_working_directory("matches_data/sabre_2")
+        match_context = MatchContext()
+        widget = TrackFencersWidget(match_context)
+        match_context.set_file("matches_data/sabre_2.mp4")
         widget.show()
         sys.exit(app.exec())
 

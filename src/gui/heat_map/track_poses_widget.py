@@ -9,14 +9,14 @@ from scripts.estimate_poses import extract_rows, get_header_row
 from src.gui.momentum_graph.base_task_widget import BaseTaskWidget
 from src.gui.util.task_graph import HeatMapTasksToIds
 from src.model import Ui
-from src.util.file_names import ORIGINAL_VIDEO_NAME, RAW_POSE_DATA_CSV_NAME
+from src.model.FileManager import FileRole
+from src.pyside.MatchContext import MatchContext
 from src.util.gpu import get_device
-from src.util.io import setup_output_video_io
 
 
 class TrackPosesWidget(BaseTaskWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, match_context, parent=None):
+        super().__init__(match_context, parent)
 
     @override
     def setup(self):
@@ -28,19 +28,19 @@ class TrackPosesWidget(BaseTaskWidget):
         self.run_task()
 
     def run_task(self):
-        if not self.working_dir:
+        if not self.match_context.file_manager:
             return
 
         self.run_started.emit(HeatMapTasksToIds.TRACK_POSES)
 
-        input_video_path = os.path.join(self.working_dir, ORIGINAL_VIDEO_NAME)
+        input_video_path = self.match_context.file_manager.get_original_video()
         model_path = os.path.join("models", "yolo", "yolo11l-pose.pt")
 
         # Create controller
         self.controller = PoseToCsvController(
             ui=self.ui,
             input_path=input_video_path,
-            output_folder=self.working_dir,
+            output_path=self.match_context.file_manager.get_path(FileRole.RAW_POSE),
             model_path=model_path,
         )
 
@@ -73,12 +73,12 @@ class PoseToCsvController:
         self,
         ui,
         input_path: str,
-        output_folder: str,
+        output_path: str,
         model_path: str,
     ):
         self.ui: Ui = ui
         self.input_path = input_path
-        self.output_folder = output_folder
+        self.output_path = output_path
         self.model_path = model_path
 
         self.cap: cv2.VideoCapture | None = None
@@ -106,8 +106,7 @@ class PoseToCsvController:
             self.ui.write(f"Error opening video file: {self.input_path}")
             return
 
-        csv_path = os.path.join(self.output_folder, RAW_POSE_DATA_CSV_NAME)
-        self.csv_file = open(csv_path, "w", newline="")
+        self.csv_file = open(self.output_path, "w", newline="")
         self.writer = csv.writer(self.csv_file)
 
         # Write header
@@ -166,8 +165,9 @@ if __name__ == "__main__":
 
     def main():
         app = QApplication(sys.argv)
-        widget = TrackPosesWidget()
-        widget.set_working_directory("matches_data/foil_1")
+        match_context = MatchContext()
+        widget = TrackPosesWidget(match_context)
+        match_context.set_file("matches_data/sabre_2.mp4")
         widget.show()
         sys.exit(app.exec())
 

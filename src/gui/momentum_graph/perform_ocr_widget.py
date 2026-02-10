@@ -4,13 +4,9 @@ from typing import Optional, override
 
 import cv2
 from PySide6.QtCore import QObject, QTimer, Signal
-from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout
 
 from scripts.momentum_graph.perform_ocr import (
     DO_OCR_EVERY_N_FRAMES,
-    OUTPUT_OCR_L_WINDOW,
-    OUTPUT_OCR_R_WINDOW,
-    OUTPUT_VIDEO_NAME,
     extract_score_frame_from_frame,
     process_image,
     regularise_rectangle,
@@ -20,30 +16,25 @@ from src.gui.util.task_graph import MomentumGraphTasksToIds
 from src.model import Quadrilateral
 from src.model.drawable.quadrilateral_drawable import QuadrilateralDrawable
 from src.model.EasyOcrReader import EasyOcrReader
+from src.model.FileManager import FileRole
+from src.pyside.MatchContext import MatchContext
 from src.pyside.PysideUi import PysideUi
-from src.util.file_names import (
-    CROPPED_SCOREBOARD_VIDEO_NAME,
-    OCR_OUTPUT_CSV_NAME,
-    ORIGINAL_VIDEO_NAME,
-)
 from src.util.gpu import get_device
-from src.util.io import setup_input_video_io, setup_output_file, setup_output_video_io
-from src.util.utils import (
-    convert_from_box_to_rect,
-    generate_select_quadrilateral_instructions,
-)
+from src.util.io import setup_input_video_io, setup_output_file
+from src.util.utils import generate_select_quadrilateral_instructions
 
 
 class PerformOcrWidget(BaseTaskWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, match_context, parent=None):
+        super().__init__(match_context, parent)
 
-        # Replace runButton and labels if you want specific initial UI
         self.uiTextLabel.setText("Press 'Run' to start OCR processing.")
 
     @override
     def setup(self):
-        video_path = os.path.join(self.working_dir, CROPPED_SCOREBOARD_VIDEO_NAME)
+        video_path = self.match_context.file_manager.get_path(
+            FileRole.CROPPED_SCOREBOARD
+        )
         self.cap = cv2.VideoCapture(video_path)
         ret, frame = self.cap.read()
         if not ret:
@@ -56,12 +47,12 @@ class PerformOcrWidget(BaseTaskWidget):
 
     @override
     def on_runButton_clicked(self):
-        if not self.cap or not self.working_dir:
-            return
         self.run_task()
 
     @override
     def run_task(self):
+        if self.is_running or not self.match_context.file_manager:
+            return
         self.run_started.emit(MomentumGraphTasksToIds.PERFORM_OCR)
         self.is_running = True
 
@@ -70,7 +61,15 @@ class PerformOcrWidget(BaseTaskWidget):
             self.controller.deleteLater()
         self.controller = OcrController(
             ui=self.ui,
-            working_dir=self.working_dir,
+            file_paths={
+                "video": self.match_context.file_manager.get_original_video(),
+                "cropped_video": self.match_context.file_manager.get_path(
+                    FileRole.CROPPED_SCOREBOARD
+                ),
+                "output_csv": self.match_context.file_manager.get_path(
+                    FileRole.RAW_SCORES
+                ),
+            },
             threshold_boundary=120,
             use_seven_segment=False,
         )
@@ -89,13 +88,13 @@ class OcrController(QObject):
     def __init__(
         self,
         ui: PysideUi,
-        working_dir: str,
+        file_paths: str,
         threshold_boundary: int = 120,
         use_seven_segment: bool = False,
     ):
         super().__init__()
         self.ui = ui
-        self.working_dir = working_dir
+        self.file_paths = file_paths
         self.threshold_boundary = threshold_boundary
         self.seven_segment = use_seven_segment
 
@@ -116,8 +115,8 @@ class OcrController(QObject):
 
     def start(self):
         """Initialize video and request score positions."""
-        input_video_path = os.path.join(self.working_dir, CROPPED_SCOREBOARD_VIDEO_NAME)
-        original_video_path = os.path.join(self.working_dir, ORIGINAL_VIDEO_NAME)
+        input_video_path = self.file_paths["cropped_video"]
+        original_video_path = self.file_paths["video"]
         self._validate_input_video(original_video_path, input_video_path)
 
         self.cap, self.fps, _, _, self.frame_count = setup_input_video_io(
@@ -151,7 +150,7 @@ class OcrController(QObject):
 
         self.ocr_reader = EasyOcrReader(get_device(), seven_segment=self.seven_segment)
 
-        output_csv_path = setup_output_file(self.working_dir, OCR_OUTPUT_CSV_NAME)
+        output_csv_path = setup_output_file(self.file_paths["output_csv"])
         self.csv_file = open(output_csv_path, "w", newline="")
         self.csv_writer = csv.writer(self.csv_file)
         self.csv_writer.writerow(
@@ -257,8 +256,9 @@ if __name__ == "__main__":
 
     def main():
         app = QApplication(sys.argv)
-        widget = PerformOcrWidget()
-        widget.set_working_directory("matches_data/sabre_2")
+        match_context = MatchContext()
+        widget = PerformOcrWidget(match_context)
+        match_context.set_file("matches_data/sabre_2.mp4")
         widget.show()
         sys.exit(app.exec())
 

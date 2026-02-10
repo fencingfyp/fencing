@@ -8,25 +8,19 @@ from matplotlib.figure import Figure
 from PySide6.QtCore import QObject, Signal, Slot
 from PySide6.QtGui import QImage, QPixmap
 
-from scripts.momentum_graph.plot_momentum import (
-    densify_lights_data,
-    get_momentum_data_points,
-    plot_score_light_progression,
-)
-from scripts.momentum_graph.process_score_lights import (
-    process_score_lights,
-    process_score_lights_np,
-)
+from scripts.momentum_graph.plot_momentum import get_momentum_data_points
+from scripts.momentum_graph.process_score_lights import process_score_lights_np
 from scripts.momentum_graph.process_scores import densify_frames_np, process_scores
 from scripts.momentum_graph.util.evaluate_score_events import (
     refine_score_frames_with_lights,
 )
 from scripts.momentum_graph.util.extract_score_increases import (
-    extract_score_increases,
     extract_score_increases_np,
 )
 from src.gui.util.conversion import pixmap_to_np
 from src.gui.util.task_graph import MomentumGraphTasksToIds
+from src.model.FileManager import FileRole
+from src.pyside.MatchContext import MatchContext
 from src.pyside.PysideUi import PysideUi
 from src.util.file_names import (
     DETECT_LIGHTS_OUTPUT_CSV_NAME,
@@ -40,8 +34,8 @@ from .base_task_widget import BaseTaskWidget
 
 
 class GenerateMomentumGraphWidget(BaseTaskWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, match_context, parent=None):
+        super().__init__(match_context, parent)
 
     @override
     def setup(self):
@@ -59,14 +53,21 @@ class GenerateMomentumGraphWidget(BaseTaskWidget):
         self.run_task()
 
     def run_task(self):
-        if not self.working_dir:
+        if not self.match_context.file_manager:
             return
+
+        file_manager = self.match_context.file_manager
 
         self.run_started.emit(MomentumGraphTasksToIds.GENERATE_MOMENTUM_GRAPH)
 
         # Create controller
         self.controller = MomentumGraphController(
-            working_dir=self.working_dir,
+            file_paths={
+                "ocr_csv": file_manager.get_path(FileRole.RAW_SCORES),
+                "score_lights_csv": file_manager.get_path(FileRole.RAW_LIGHTS),
+                "video": file_manager.get_original_video(),
+                "output_csv": file_manager.get_path(FileRole.MOMENTUM_DATA),
+            },
             ui=self.ui,
             parent=self,
         )
@@ -85,14 +86,14 @@ class MomentumGraphController(QObject):
         """Required to match BaseTaskWidget; no-op here."""
         pass
 
-    def __init__(self, working_dir, ui: PysideUi, parent=None):
+    def __init__(self, file_paths, ui: PysideUi, parent=None):
         super().__init__(parent)
-        self.working_dir = working_dir
+        self.file_paths = file_paths
         self.ui = ui
         self.algorithm = "last_activation"
 
     def _obtain_score_increases(self, fps: float, total_length: int):
-        scores_df = pd.read_csv(os.path.join(self.working_dir, OCR_OUTPUT_CSV_NAME))
+        scores_df = pd.read_csv(self.file_paths["ocr_csv"])
         pred = process_scores(
             scores_df, total_length=total_length, window_median=int(fps * 6)
         )
@@ -101,7 +102,7 @@ class MomentumGraphController(QObject):
         return extract_score_increases_np(frame_ids, pred[:, 0], pred[:, 1])
 
     def _obtain_score_lights_occurrences(self, fps: float, total_length: int):
-        df = pd.read_csv(os.path.join(self.working_dir, DETECT_LIGHTS_OUTPUT_CSV_NAME))
+        df = pd.read_csv(self.file_paths["score_lights_csv"])
 
         frame_ids = df["frame_id"].to_numpy(dtype=np.int32)
         lights = np.column_stack(
@@ -132,9 +133,7 @@ class MomentumGraphController(QObject):
     def start(self):
         self.ui.write("Generating momentum graph... (this may take a while)")
 
-        cap, fps, _, _, total_length = setup_input_video_io(
-            os.path.join(self.working_dir, ORIGINAL_VIDEO_NAME)
-        )
+        cap, fps, _, _, total_length = setup_input_video_io(self.file_paths["video"])
         cap.release()
 
         score_increases = self._obtain_score_increases(
@@ -151,9 +150,7 @@ class MomentumGraphController(QObject):
         frames, momenta = get_momentum_data_points(score_occurrences, fps)
 
         momentum_df = pd.DataFrame({"frame_id": frames, "momentum": momenta})
-        momentum_df.to_csv(
-            os.path.join(self.working_dir, MOMENTUM_DATA_CSV_NAME), index=False
-        )
+        momentum_df.to_csv(self.file_paths["output_csv"], index=False)
 
         self.plot_momentum_on_label(frames, momenta, fps)
 
@@ -238,8 +235,9 @@ if __name__ == "__main__":
 
     def main():
         app = QApplication(sys.argv)
+        match_context = MatchContext()
         widget = GenerateMomentumGraphWidget()
-        widget.set_working_directory("matches_data/sabre_2")
+        match_context.set_file("matches_data/sabre_2.mp4")
         widget.show()
         sys.exit(app.exec())
 

@@ -1,29 +1,24 @@
 import csv
-import os
-from enum import Enum, auto
-from typing import Dict, Optional, override
+from typing import override
 
 import cv2
-from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
 from src.gui.video_player_widget import VideoPlayerWidget
 from src.model import Quadrilateral
 from src.model.AutoPatchLightDetector import SinglePatchAutoDetector
 from src.model.drawable import QuadrilateralDrawable
+from src.model.FileManager import FileRole
+from src.pyside import MatchContext
 from src.pyside.PysideUi import PysideUi
-from src.util.file_names import (
-    CROPPED_SCORE_LIGHTS_VIDEO_NAME,
-    DETECT_LIGHTS_OUTPUT_CSV_NAME,
-)
 from src.util.utils import generate_select_quadrilateral_instructions
 
 from .base_task_widget import BaseTaskWidget
 
 
 class DetectScoreLightsWidget(BaseTaskWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, match_context, parent=None):
+        super().__init__(match_context, parent)
         self.video_with_instructions = VideoWithInstructions(self)
         self.register_widget(self.video_with_instructions)
 
@@ -34,13 +29,19 @@ class DetectScoreLightsWidget(BaseTaskWidget):
         # Stage wiring
         self.roi_stage.roi_selected_callback = self._on_roi_selected
         self.time_stage.timestamps_selected_callback = self._on_timestamps_selected
+        self.processing_stage.completed_callback = self._on_processing_completed
 
     @override
     def setup(self):
         # Show base UI first
         self.show_default_ui()
-        self.processing_stage.set_working_directory(self.working_dir)
-        video_path = os.path.join(self.working_dir, CROPPED_SCORE_LIGHTS_VIDEO_NAME)
+        self.processing_stage.set_paths(
+            self.match_context.file_manager.get_path(FileRole.CROPPED_SCORE_LIGHTS),
+            self.match_context.file_manager.get_path(FileRole.RAW_LIGHTS),
+        )
+        video_path = self.match_context.file_manager.get_path(
+            FileRole.CROPPED_SCORE_LIGHTS
+        )
 
         # Start ROI selection
         self.is_running = True
@@ -48,15 +49,21 @@ class DetectScoreLightsWidget(BaseTaskWidget):
 
     def _on_roi_selected(self, left_quad, right_quad):
         self.processing_stage.set_positions(left_quad, right_quad)
-        video_path = os.path.join(self.working_dir, CROPPED_SCORE_LIGHTS_VIDEO_NAME)
-        self.show_widget(self.video_with_instructions)
+        video_path = self.match_context.file_manager.get_path(
+            FileRole.CROPPED_SCORE_LIGHTS
+        )
         self.time_stage.activate(video_path)
+        self.show_widget(self.video_with_instructions)
 
     def _on_timestamps_selected(self, timestamps):
         self.time_stage.deactivate()
         self.processing_stage.init_detectors(timestamps)
         self.show_default_ui()
         self.processing_stage.start_processing()
+
+    def _on_processing_completed(self):
+        self.ui.write("Score lights detection completed.")
+        self.is_running = False
 
     def cancel(self):
         self.time_stage.deactivate()
@@ -133,14 +140,13 @@ class TimeSelectionStage:
 
     def activate(self, video_path: str):
         self.player.set_video_source(video_path)
-        self.player.activate()
         self.player.register_shortcut("E", self.mark_frame)
         self.index = 0
         self.video_with_instructions.set_instructions(self.instructions[self.index])
         self.timestamps.clear()
 
     def deactivate(self):
-        self.player.deactivate()
+        pass
 
     def mark_frame(self):
         label = self.labels[self.index]
@@ -157,7 +163,8 @@ class TimeSelectionStage:
 class ProcessingStage:
     def __init__(self, ui: PysideUi):
         self.ui = ui
-        self.working_dir = None
+        self.cropped_lights_video_path = None
+        self.output_csv_path = None
         self.cap = None
         self.left_detector = None
         self.left_positions = None
@@ -166,14 +173,14 @@ class ProcessingStage:
         self.csv_file = None
         self.csv_writer = None
         self.current_frame_id = 0
+        self.completed_callback = None
 
-    def set_working_directory(self, working_dir: str):
-        self.working_dir = working_dir
+    def set_paths(self, cropped_lights_video_path: str, output_csv_path: str):
+        self.cropped_lights_video_path = cropped_lights_video_path
+        self.output_csv_path = output_csv_path
 
     def init_detectors(self, timestamps):
-        cap = cv2.VideoCapture(
-            os.path.join(self.working_dir, CROPPED_SCORE_LIGHTS_VIDEO_NAME)
-        )
+        cap = cv2.VideoCapture(self.cropped_lights_video_path)
 
         def grab(fid):
             cap.set(cv2.CAP_PROP_POS_FRAMES, fid)
@@ -203,11 +210,9 @@ class ProcessingStage:
         self.right_positions = right_quad
 
     def start_processing(self):
-        self.cap = cv2.VideoCapture(
-            os.path.join(self.working_dir, CROPPED_SCORE_LIGHTS_VIDEO_NAME)
-        )
+        self.cap = cv2.VideoCapture(self.cropped_lights_video_path)
         self.csv_file = open(
-            os.path.join(self.working_dir, DETECT_LIGHTS_OUTPUT_CSV_NAME),
+            self.output_csv_path,
             "w",
             newline="",
         )
@@ -237,8 +242,8 @@ class ProcessingStage:
         self.ui.schedule(self._process_frame)
 
     def finish(self):
-        self.ui.write("Score lights detection completed.")
         self.cancel()
+        self.completed_callback()
 
     def cancel(self):
         if self.cap:
@@ -249,8 +254,8 @@ class ProcessingStage:
 
 if __name__ == "__main__":
     app = QApplication([])
-
+    match_context = MatchContext()
+    match_context.set_file("matches_data/sabre_2/sabre_2.mp4")
     widget = DetectScoreLightsWidget()
-    widget.set_working_directory("matches_data/sabre_2")
     widget.show()
     app.exec()
