@@ -1,7 +1,6 @@
 import sys
 
 from PySide6.QtCore import Slot
-from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -11,92 +10,69 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from src.gui.heat_map.heat_map_main_widget import HeatMapMainWidget
-from src.gui.momentum_graph.momentum_graph_main_widget import MomentumGraphMainWidget
+from src.gui.heat_map.heat_map_main_widget import navigation as heatmap_nav_register
+from src.gui.home_widget import navigation as select_nav_register
+from src.gui.manage_match_widget import navigation as manage_nav_register
+from src.gui.momentum_graph.momentum_graph_main_widget import (
+    navigation as momentum_nav_register,
+)
+from src.gui.multi_momentum_graph_widget import (
+    navigation as multi_momentum_nav_register,
+)
+from src.gui.navbar.app_navigator import AppNavigator
 from src.gui.navbar.global_navbar import GlobalNavbar
-from src.gui.navbar.navigation_controller import NavigationController, NavNode, View
+from src.gui.navbar.navigation_controller import View
 from src.pyside.MatchContext import MatchContext
-
-from .manage_match_widget import ManageMatchWidget
-from .select_match_widget import SelectMatchWidget
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        # ---- window setup ----
         self.setWindowTitle("Fencing Analysis Tool")
         geometry = self.screen().availableGeometry()
         self.setGeometry(0, 0, geometry.width() * 0.8, geometry.height() * 0.9)
+        self.statusBar()
 
-        # ---- context ----
+        # ---- domain context ----
         self.match_ctx = MatchContext()
 
-        # ---- menu ----
-        file_menu = self.menuBar().addMenu("File")
-        exit_action = QAction("Exit", self)
-        exit_action.setShortcut(QKeySequence.Quit)
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
-
-        # ---- widgets ----
-        self.select_match_widget = SelectMatchWidget()
-        self.manage_match_widget = ManageMatchWidget(self.match_ctx)
-        self.momentum_graph_widget = MomentumGraphMainWidget(self.match_ctx)
-        self.heat_map_widget = HeatMapMainWidget(self.match_ctx)
-
-        # ---- stack ----
+        # ---- navigation ----
         self.stack = QStackedWidget()
-        for w in (
-            self.select_match_widget,
-            self.manage_match_widget,
-            self.momentum_graph_widget,
-            self.heat_map_widget,
-        ):
-            self.stack.addWidget(w)
+        self.nav = AppNavigator(self.stack)  # router/hashmap
 
-        # ---- navigation tree ----
-        self.nav_root = NavNode(None, "root")
+        # ---- feature registration ----
+        select_nav_register(self.nav, self.match_ctx)
+        manage_nav_register(self.nav, self.match_ctx)
+        momentum_nav_register(self.nav, self.match_ctx)
+        heatmap_nav_register(self.nav, self.match_ctx)
+        multi_momentum_nav_register(self.nav, self.match_ctx)
 
-        self.select_match_node = NavNode(
-            View.SELECT_MATCH, "Select Match", self.select_match_widget, self.nav_root
-        )
-
-        self.manage_match_node = NavNode(
-            View.MANAGE_MATCH,
-            "Manage Match",
-            self.manage_match_widget,
-            self.select_match_node,
-        )
-
-        self.momentum_node = NavNode(
-            View.MOMENTUM,
-            "Momentum Graph",
-            self.momentum_graph_widget,
-            self.manage_match_node,
-        )
-
-        self.heat_map_node = NavNode(
-            View.HEAT_MAP,
-            "Heat Map",
-            self.heat_map_widget,
-            self.manage_match_node,
-        )
-
-        self.nav_root.children = [self.select_match_node]
-        self.select_match_node.children = [self.manage_match_node]
-        self.manage_match_node.children = [
-            self.momentum_node,
-            self.heat_map_node,
-        ]
-
-        # ---- navigation controller + navbar ----
-        self.nav = NavigationController(self.nav_root)
+        # ---- navbar ----
         self.navbar = GlobalNavbar()
-
         self.nav.changed.connect(self.on_nav_changed)
-        self.navbar.navigate.connect(self.nav.navigate)
+        self.navbar.navigate.connect(lambda navnode: self.nav.navigate(navnode.view))
 
+        # ---- layout ----
+        self._setup_layout()
+
+        # ---- domain-level wiring ----
+        home_widget = self.nav.get_widget(View.HOME)
+        home_widget.single_selected.connect(self.on_video_file_path_selected)
+        home_widget.multiple_selected.connect(self.on_compare_video_file_paths_selected)
+
+        # ---- start ----
+        self.nav.navigate(View.HOME)
+
+    # -------------------------------------------------
+    # Navigation reaction
+    # -------------------------------------------------
+    def on_nav_changed(self, node):
+        self.navbar.set_node(node, self.nav)
+        self.stack.clearFocus()
+
+    def _setup_layout(self):
         # ---- layout ----
         central = QWidget(self)
         layout = QHBoxLayout(central)
@@ -112,46 +88,28 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(central)
 
-        # ---- signals from pages ----
-        self.select_match_widget.selected.connect(self.on_video_file_path_selected)
-
-        self.manage_match_widget.navigate_to_momentum_graph.connect(
-            lambda: self.nav.navigate(self.momentum_node)
-        )
-        self.manage_match_widget.navigate_to_heat_map.connect(
-            lambda: self.nav.navigate(self.heat_map_node)
-        )
-
-        self.momentum_graph_widget.exit_requested.connect(
-            lambda: self.nav.navigate(self.manage_match_node)
-        )
-        self.heat_map_widget.exit_requested.connect(
-            lambda: self.nav.navigate(self.manage_match_node)
-        )
-
-        # ---- start ----
-        self.nav.navigate(self.select_match_node)
-
-    # ---- navigation reaction ----
-    def on_nav_changed(self, node: NavNode):
-        if node.widget:
-            self.stack.setCurrentWidget(node.widget)
-        self.navbar.set_node(node, self.nav)
-        self.stack.clearFocus()
-
     # ---- domain logic ----
     @Slot(str)
     def on_video_file_path_selected(self, file_path: str):
         self.statusBar().showMessage(f"Selected match: {file_path}")
         self.match_ctx.set_file(file_path)
-        self.nav.navigate(self.manage_match_node)
+        self.nav.navigate(View.MANAGE_MATCH)
 
+    @Slot(list)
+    def on_compare_video_file_paths_selected(self, file_paths: list[str]):
+        self.statusBar().showMessage(f"Selected matches: {file_paths}")
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())
+        def create_match_context(file_path: str) -> MatchContext:
+            ctx = MatchContext()
+            ctx.set_file(file_path)
+            return ctx
+
+        match_contexts = [create_match_context(fp) for fp in file_paths]
+
+        multi_momentum_widget = self.nav.get_widget(View.COMPARE_MOMENTUM)
+        multi_momentum_widget.set_matches(match_contexts)
+
+        self.nav.navigate(View.COMPARE_MOMENTUM)
 
 
 if __name__ == "__main__":

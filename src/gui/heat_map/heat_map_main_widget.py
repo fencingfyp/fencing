@@ -1,6 +1,7 @@
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QStackedWidget, QWidget
 
+from src.gui.navbar.app_navigator import AppNavigator, View
 from src.gui.util.task_graph import HeatMapTasksToIds, Task, TaskGraph, TaskState
 from src.gui.util.task_graph_navbar import TaskGraphLocalNav
 from src.pyside.MatchContext import MatchContext
@@ -22,6 +23,15 @@ TASK_DEPENDENCIES = [
         deps=[HeatMapTasksToIds.TRACK_POSES.value],
     ),
 ]
+
+
+def navigation(nav: AppNavigator, match_ctx: MatchContext):
+    nav.register(
+        view=View.HEAT_MAP,
+        title="Heat Map",
+        widget=HeatMapMainWidget(match_ctx),
+        parent=View.MANAGE_MATCH,
+    )
 
 
 class HeatMapMainWidget(QWidget):

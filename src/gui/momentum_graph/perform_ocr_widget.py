@@ -150,8 +150,7 @@ class OcrController(QObject):
 
         self.ocr_reader = EasyOcrReader(get_device(), seven_segment=self.seven_segment)
 
-        output_csv_path = setup_output_file(self.file_paths["output_csv"])
-        self.csv_file = open(output_csv_path, "w", newline="")
+        self.csv_file = open(self.file_paths["output_csv"], "w", newline="")
         self.csv_writer = csv.writer(self.csv_file)
         self.csv_writer.writerow(
             [

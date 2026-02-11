@@ -117,3 +117,14 @@ class FileManager:
         Returns True if valid, False otherwise.
         """
         return (self.workspace_dir / METADATA_FILE_NAME).exists()
+
+    @staticmethod
+    def has_valid_sidecar(video_file_path: str) -> bool:
+        """
+        Check if the given video file has a valid sidecar folder with metadata.
+        Returns True if valid, False otherwise.
+        """
+        video_file = Path(video_file_path)
+        sidecar = video_file.parent / f"{video_file.stem}{FileManager.SIDECAR_SUFFIX}"
+        metadata_path = sidecar / METADATA_FILE_NAME
+        return sidecar.exists() and metadata_path.exists()

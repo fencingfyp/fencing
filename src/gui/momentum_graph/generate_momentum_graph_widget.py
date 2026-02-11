@@ -1,8 +1,8 @@
-import os
 from typing import override
 
 import numpy as np
 import pandas as pd
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvasAgg
 from matplotlib.figure import Figure
 from PySide6.QtCore import QObject, Signal, Slot
@@ -22,12 +22,6 @@ from src.gui.util.task_graph import MomentumGraphTasksToIds
 from src.model.FileManager import FileRole
 from src.pyside.MatchContext import MatchContext
 from src.pyside.PysideUi import PysideUi
-from src.util.file_names import (
-    DETECT_LIGHTS_OUTPUT_CSV_NAME,
-    MOMENTUM_DATA_CSV_NAME,
-    OCR_OUTPUT_CSV_NAME,
-    ORIGINAL_VIDEO_NAME,
-)
 from src.util.io import setup_input_video_io
 
 from .base_task_widget import BaseTaskWidget
@@ -155,75 +149,182 @@ class MomentumGraphController(QObject):
         self.plot_momentum_on_label(frames, momenta, fps)
 
     def plot_momentum_on_label(self, frames, momenta, fps):
-        pixmap = get_momentum_graph_pixmap(frames, momenta, fps)
+        seconds = frames / fps
+        pixmap = get_momentum_graph_pixmap(
+            overlays=[
+                {
+                    "seconds": seconds,
+                    "momenta": momenta,
+                    "label": "Momentum",
+                    "color": "tab:green",
+                }
+            ],
+        )
 
-        # Paint onto the label
         self.ui.set_fresh_frame(pixmap_to_np(pixmap))
         self.finished.emit()
 
 
-def get_momentum_graph_pixmap(frames, momenta, fps, periods=None):
+def draw_period_markers(ax, periods, color="tab:red"):
+    if not periods:
+        return
+
+    ylim_top = ax.get_ylim()[1]
+
+    for i, p in enumerate(periods):
+        ax.axvline(p["start_sec"], linestyle="--", color=color, alpha=0.7)
+        ax.axvline(p["end_sec"], linestyle="--", color=color, alpha=0.7)
+
+        ax.text(
+            p["start_sec"],
+            ylim_top,
+            f"P{i+1} Start",
+            rotation=90,
+            verticalalignment="top",
+            fontsize=8,
+            color=color,
+        )
+
+        ax.text(
+            p["end_sec"],
+            ylim_top,
+            f"P{i+1} End",
+            rotation=90,
+            verticalalignment="top",
+            fontsize=8,
+            color=color,
+        )
+
+
+def draw_momentum_curve(
+    ax,
+    frames,
+    momenta,
+    fps,
+    *,
+    label,
+    color,
+    linewidth=2,
+    marker="o",
+):
+    ax.plot(
+        frames / fps,
+        momenta,
+        label=label,
+        linewidth=linewidth,
+        color=color,
+        marker=marker,
+        markersize=5,
+        markeredgecolor="k",
+        markerfacecolor=color,
+        zorder=2,
+    )
+
+
+def realign_periods(
+    seconds: np.ndarray,
+    periods: list[dict] | None,
+) -> tuple[np.ndarray, list[dict] | None]:
+    """
+    Returns:
+        aligned_time_sec
+        aligned_periods (in seconds)
+    """
+    seconds = seconds.copy()
+
+    if not periods or len(periods) == 0:
+        return seconds, None  # first point is always at time 0
+
+    first_start_second = periods[0]["start_ms"] / 1000.0
+    seconds[0] = first_start_second
+    seconds -= first_start_second
+
+    aligned_periods = []
+    for p in periods:
+        start = p["start_ms"] / 1000.0
+        end = p["end_ms"] / 1000.0
+        shift = periods[0]["start_ms"] / 1000.0
+        aligned_periods.append(
+            {
+                "start_sec": start - shift,
+                "end_sec": end - shift,
+            }
+        )
+
+    return seconds, aligned_periods
+
+
+def get_momentum_graph_pixmap(overlays):
+    """
+    Draw multiple momentum overlays on the same graph.
+
+    Each overlay must provide:
+        - seconds (np.ndarray)
+        - momenta (np.ndarray)
+
+    Optional:
+        - periods (list[dict])
+        - label (str)
+        - color (str)
+        - period_color (str)
+    """
+
     fig = Figure(figsize=(10, 5), dpi=300)
     canvas = FigureCanvasAgg(fig)
     ax = fig.add_subplot(111)
 
-    ax.plot(
-        frames / fps,
-        momenta,
-        label="Momentum",
-        linewidth=2,
-        color="tab:green",
-        marker="o",
-        markersize=6,
-        markeredgecolor="k",
-        markerfacecolor="tab:green",
-    )
-    ax.axhline(0, linestyle="--", linewidth=1, color="gray")
+    for overlay in overlays:
+        seconds = overlay["seconds"]
+        momenta = overlay["momenta"]
+        periods = overlay.get("periods")
+
+        # --- Align frames ---
+        seconds, aligned_periods = realign_periods(
+            seconds,
+            periods,
+        )
+
+        # --- Draw momentum curve (with dots preserved) ---
+        ax.plot(
+            seconds,
+            momenta,
+            marker="o",  # restores the dots
+            markersize=5,
+            linewidth=1.5,
+            label=overlay.get("label", "Momentum"),
+            color=overlay.get("color", "tab:green"),
+        )
+        # --- Draw period markers ---
+        draw_period_markers(
+            ax,
+            aligned_periods,
+            color=overlay.get("period_color", overlay.get("color", "tab:red")),
+        )
+
+    # --- Shared styling ---
+    ax.axhline(0, linestyle="--", linewidth=1, color="gray", zorder=0)
+
     ax.set_title("Momentum Over Time")
     ax.set_xlabel("Time (seconds)")
     ax.set_ylabel("Momentum (+ left / - right)")
     ax.grid(True, alpha=0.3)
     ax.legend()
-    # Overlay periods (in data coordinates)
-    if periods:
-        ymin, ymax = ax.get_ylim()
-        for i, p in enumerate(periods):
-            t_start = p["start_ms"] / 1000
-            t_end = p["end_ms"] / 1000
-            ax.axvspan(
-                t_start,
-                t_end,
-                color="red",
-                alpha=0.3,
-                zorder=0,
-            )
-
-            ax.text(
-                t_start,
-                ymax,
-                f"Period {i+1}",
-                va="top",
-                ha="left",
-                color="white",
-                fontsize=9,
-                zorder=1,
-            )
 
     fig.tight_layout()
-    # Render to RGBA array
-    canvas.draw()
-    width, height = fig.get_size_inches() * fig.get_dpi()
-    img = np.frombuffer(canvas.tostring_argb(), dtype=np.uint8)
-    img = img.reshape(int(height), int(width), 4)
-    # Convert ARGB → RGBA
-    img = img[:, :, [1, 2, 3, 0]]
-    img = np.ascontiguousarray(img)
 
-    # Convert to QPixmap
-    pixmap = QPixmap.fromImage(
-        QImage(img.data, img.shape[1], img.shape[0], QImage.Format_RGBA8888)
+    # Render canvas
+    canvas.draw()
+
+    # Convert to QPixmap safely (ARGB path)
+    width, height = fig.canvas.get_width_height()
+    buf = canvas.buffer_rgba()
+    img = QImage(
+        buf,
+        width,
+        height,
+        QImage.Format_RGBA8888,
     )
-    return pixmap
+    return QPixmap.fromImage(img.copy())
 
 
 if __name__ == "__main__":
@@ -236,7 +337,7 @@ if __name__ == "__main__":
     def main():
         app = QApplication(sys.argv)
         match_context = MatchContext()
-        widget = GenerateMomentumGraphWidget()
+        widget = GenerateMomentumGraphWidget(match_context)
         match_context.set_file("matches_data/sabre_2.mp4")
         widget.show()
         sys.exit(app.exec())

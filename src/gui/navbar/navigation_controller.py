@@ -7,11 +7,12 @@ from PySide6.QtWidgets import QWidget
 
 
 class View(Enum):
-    SELECT_MATCH = auto()
+    HOME = auto()
     COMPARE_MATCHES = auto()
     MANAGE_MATCH = auto()
     MOMENTUM = auto()
     HEAT_MAP = auto()
+    COMPARE_MOMENTUM = auto()
 
 
 @dataclass

@@ -2,10 +2,10 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
-from gui.select_match_widget import SelectMatchWidget
+from src.gui.home_widget import HomeWidget
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = SelectMatchWidget("src/gui/main_window.ui")
-    window.ui.show()
+    window = HomeWidget()
+    window.show()
     sys.exit(app.exec())

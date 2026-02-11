@@ -4,6 +4,7 @@ import pstats
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QWidget
 
+from src.gui.navbar.app_navigator import AppNavigator, View
 from src.gui.util.task_graph import MomentumGraphTasksToIds, Task, TaskGraph, TaskState
 from src.gui.util.task_graph_navbar import TaskGraphLocalNav
 from src.pyside.MatchContext import MatchContext
@@ -67,6 +68,15 @@ TASK_DEPENDENCIES = [
         ],
     ),
 ]
+
+
+def navigation(nav: AppNavigator, match_ctx: MatchContext):
+    nav.register(
+        view=View.MOMENTUM,
+        title="Momentum Graph",
+        widget=MomentumGraphMainWidget(match_ctx),
+        parent=View.MANAGE_MATCH,
+    )
 
 
 class MomentumGraphMainWidget(QWidget):

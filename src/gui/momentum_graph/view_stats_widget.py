@@ -71,10 +71,16 @@ def render_momentum_graph_with_periods(
     momentum_df: pd.DataFrame, fps: float, periods: list[dict]
 ) -> np.ndarray:
     pixmap = get_momentum_graph_pixmap(
-        momentum_df["frame_id"].to_numpy(),
-        momentum_df["momentum"].to_numpy(),
-        fps,
-        periods,
+        overlays=[
+            {
+                "seconds": momentum_df["frame_id"].to_numpy() / fps,
+                "momenta": momentum_df["momentum"].to_numpy(),
+                "label": "Momentum",
+                "periods": periods,
+                "color": "tab:green",
+                "fps": fps,
+            }
+        ],
     )
     return pixmap_to_np(pixmap)
 

@@ -3,14 +3,25 @@ import sys
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import QApplication, QWidget
 
+from src.gui.navbar.app_navigator import AppNavigator
+from src.gui.navbar.navigation_controller import View
 from src.pyside.MatchContext import MatchContext
 
 from .ui_manage_match_widget import Ui_ManageMatchWidget
 
 
+def navigation(nav: AppNavigator, match_ctx: MatchContext):
+    widget = ManageMatchWidget(match_ctx)
+    nav.register(
+        view=View.MANAGE_MATCH,
+        title="Manage Match",
+        widget=widget,
+        parent=View.HOME,
+    )
+
+
 class ManageMatchWidget(QWidget):
-    navigate_to_momentum_graph = Signal()
-    navigate_to_heat_map = Signal()
+    navigate = Signal(View)
 
     def __init__(self, ctx: MatchContext, parent=None):
         super().__init__(parent)
@@ -37,11 +48,11 @@ class ManageMatchWidget(QWidget):
 
     @Slot()
     def on_momentumGraphButton_clicked(self):
-        self.navigate_to_momentum_graph.emit()
+        self.navigate.emit(View.MOMENTUM)
 
     @Slot()
     def on_heatMapButton_clicked(self):
-        self.navigate_to_heat_map.emit()
+        self.navigate.emit(View.HEAT_MAP)
 
 
 if __name__ == "__main__":
