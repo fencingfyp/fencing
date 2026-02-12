@@ -75,9 +75,6 @@ class SelectPeriodsWidget(BaseTaskWidget):
         self.info = QLabel(self._content)
         layout.addWidget(self.info)
 
-        self.finish_button = QPushButton("Finish selection", self._content)
-        self.finish_button.clicked.connect(self._finish)
-        layout.addWidget(self.finish_button)
         self.register_widget(self._content)
 
     @override
@@ -107,12 +104,10 @@ class SelectPeriodsWidget(BaseTaskWidget):
     def activate(self):
         """Activate video player and shortcuts."""
         self.player.play()
-        self.finish_button.setEnabled(False)
         self._update_actions()
 
     def deactivate(self):
         """Deactivate video player and shortcuts."""
-        self.finish_button.setEnabled(False)
         self.player.pause()
         self.clear_actions()
 
@@ -134,7 +129,14 @@ class SelectPeriodsWidget(BaseTaskWidget):
                         label="Mark Start (S)",
                         shortcut=Qt.Key.Key_S,
                         callback=self._mark_start,
-                    )
+                    ),
+                    TaskAction(
+                        id="finish",
+                        label="Finish Selection (F)",
+                        shortcut=Qt.Key.Key_F,
+                        enabled=len(self.controller.periods) > 0,
+                        callback=self._finish,
+                    ),
                 ]
             )
             return
@@ -147,7 +149,14 @@ class SelectPeriodsWidget(BaseTaskWidget):
                     label="Mark End (E)",
                     shortcut=Qt.Key.Key_E,
                     callback=self._mark_end,
-                )
+                ),
+                TaskAction(
+                    id="finish",
+                    label="Finish Selection (F)",
+                    shortcut=Qt.Key.Key_F,
+                    enabled=len(self.controller.periods) > 0,
+                    callback=self._finish,
+                ),
             ]
         )
 
@@ -155,13 +164,11 @@ class SelectPeriodsWidget(BaseTaskWidget):
     def _mark_start(self):
         self.controller.mark_start()
         self._update_info()
-        self._update_finish_button_state()
         self._update_actions()
 
     def _mark_end(self):
         self.controller.mark_end()
         self._update_info()
-        self._update_finish_button_state()
         self._update_actions()
 
     def _finish(self):
@@ -179,7 +186,6 @@ class SelectPeriodsWidget(BaseTaskWidget):
             )
 
         self.run_completed.emit(MomentumGraphTasksToIds.SELECT_PERIODS)
-        self.finish_button.setEnabled(False)
         self.info.setText("Selection finished.")
         self.is_running = False
         self.deactivate()
@@ -196,11 +202,6 @@ class SelectPeriodsWidget(BaseTaskWidget):
             return
         self.info.setText(
             f"Periods: {len(self.controller.periods)}/{self.max_periods}\nE = mark end"
-        )
-
-    def _update_finish_button_state(self):
-        self.finish_button.setEnabled(
-            self.is_running and len(self.controller.periods) > 0
         )
 
 
