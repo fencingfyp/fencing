@@ -1,10 +1,62 @@
 from typing import override
 
-from PySide6.QtCore import Signal, Slot
-from PySide6.QtWidgets import QLabel, QPushButton, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtCore import Property, QEasingCurve, QPropertyAnimation, Signal, Slot
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
+    QGraphicsOpacityEffect,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
+from src.gui.util.actions_panel_widget import ActionsPanelWidget
 from src.pyside.MatchContext import MatchContext
 from src.pyside.PysideUi import PysideUi
+
+
+class InstructionLabel(QLabel):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Overlay
+        self._highlight = QWidget(self)
+        self._highlight.setStyleSheet(
+            """
+            background-color: rgba(255, 255, 0, 180);
+            border-radius: 4px;
+        """
+        )
+        self._highlight.hide()
+
+        # Opacity effect
+        self._effect = QGraphicsOpacityEffect(self._highlight)
+        self._highlight.setGraphicsEffect(self._effect)
+
+        # Animation
+        self._anim = QPropertyAnimation(self._effect, b"opacity")
+        self._anim.setDuration(1200)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._anim.finished.connect(self._highlight.hide)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._highlight.setGeometry(self.rect())
+
+    def setText(self, text):
+        super().setText(text)
+        self.animate_highlight()
+
+    def animate_highlight(self):
+        self._highlight.show()
+        self._effect.setOpacity(1.0)
+
+        self._anim.stop()
+        self._anim.setStartValue(1.0)
+        self._anim.setEndValue(0.0)
+        self._anim.start()
 
 
 class BaseTaskWidget(QWidget):
@@ -24,7 +76,7 @@ class BaseTaskWidget(QWidget):
         self.videoLabel.setMinimumSize(1, 1)
         self.videoLabel.setStyleSheet("background: black;")
 
-        self.uiTextLabel = QLabel(self)
+        self.uiTextLabel = InstructionLabel(self)
         self.uiTextLabel.setWordWrap(True)
 
         self.runButton = QPushButton("Run", self)
@@ -48,6 +100,8 @@ class BaseTaskWidget(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
         layout.addWidget(self._content_stack)
+        self._action_panel = ActionsPanelWidget(self)
+        layout.addWidget(self._action_panel)
         self.setLayout(layout)
 
         # ==================================================
@@ -64,6 +118,7 @@ class BaseTaskWidget(QWidget):
         self.ui = PysideUi(
             video_label=self.videoLabel,
             text_label=self.uiTextLabel,
+            action_panel=self._action_panel,
             parent=self,
         )
 
@@ -150,6 +205,17 @@ class BaseTaskWidget(QWidget):
 
     def run_task(self):
         self.is_running = True
+
+    def set_actions(self, actions: list[tuple[str, callable]]):
+        """
+        Replace the current action buttons.
+        actions: list of (button_text, callback)
+        """
+        self._action_panel.set_actions(actions)
+
+    def clear_actions(self):
+        """Remove all action buttons."""
+        self._action_panel.clear()
 
     # --------------------------------------------------
     # Qt cleanup

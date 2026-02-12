@@ -1,12 +1,12 @@
 from abc import ABC
 
-import cv2
 import numpy as np
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
-from PySide6.QtGui import QKeySequence, QPixmap, QShortcut
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
 from src.gui.n_point_picker import NPointPicker
+from src.gui.util.actions_panel_widget import ActionsPanelWidget
 from src.gui.util.conversion import np_to_pixmap
 from src.gui.util.fencer_selection_controller import FencerSelectionController
 from src.model.Quadrilateral import Quadrilateral
@@ -27,11 +27,13 @@ class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
     def __init__(
         self,
         video_label: QLabel,
+        action_panel: ActionsPanelWidget | None,
         text_label: QLabel | None,
         parent: QObject,
     ):
         super().__init__(parent)
         self.video_label = video_label
+        self.action_panel = action_panel
         self.text_label = text_label
         self.video_renderer = VideoRenderer(video_label)
 
@@ -122,6 +124,8 @@ class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
         if hasattr(self, "fencer_selector") and self.fencer_selector:
             self.fencer_selector.deactivate()
             self.fencer_selector = None
+        if self.action_panel:
+            self.action_panel.clear()
 
     def get_n_points_async(self, frame, prompts: list[str], callback):
         if frame is None:
@@ -132,6 +136,7 @@ class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
         self.point_picker = NPointPicker(
             renderer=self.video_renderer,
             text_label=self.text_label,
+            action_panel=self.action_panel,
             prompts=prompts,
             on_done=callback,
         )

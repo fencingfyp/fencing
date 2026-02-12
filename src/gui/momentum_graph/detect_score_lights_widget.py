@@ -2,14 +2,17 @@ import csv
 from typing import override
 
 import cv2
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
+from src.gui.momentum_graph.base_task_widget import InstructionLabel
+from src.gui.util.actions_panel_widget import TaskAction
 from src.gui.video_player_widget import VideoPlayerWidget
 from src.model import Quadrilateral
 from src.model.AutoPatchLightDetector import SinglePatchAutoDetector
 from src.model.drawable import QuadrilateralDrawable
 from src.model.FileManager import FileRole
-from src.pyside import MatchContext
+from src.pyside.MatchContext import MatchContext
 from src.pyside.PysideUi import PysideUi
 from src.util.utils import generate_select_quadrilateral_instructions
 
@@ -23,7 +26,7 @@ class DetectScoreLightsWidget(BaseTaskWidget):
         self.register_widget(self.video_with_instructions)
 
         self.roi_stage = RoiSelectionStage(self.ui)
-        self.time_stage = TimeSelectionStage(self.video_with_instructions)
+        self.time_stage = TimeSelectionStage(self.video_with_instructions, self)
         self.processing_stage = ProcessingStage(self.ui)
 
         # Stage wiring
@@ -74,10 +77,7 @@ class VideoWithInstructions(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.player = VideoPlayerWidget(self)
-        self.label = QLabel(self)
-        self.label.setStyleSheet(
-            "color: white; background: rgba(0,0,0,128); padding: 4px;"
-        )
+        self.label = InstructionLabel(self)
         self.label.setWordWrap(True)
 
         layout = QVBoxLayout(self)
@@ -123,9 +123,14 @@ class RoiSelectionStage:
 
 
 class TimeSelectionStage:
-    def __init__(self, video_with_instructions: VideoWithInstructions):
+    def __init__(
+        self,
+        video_with_instructions: VideoWithInstructions,
+        action_host: BaseTaskWidget,
+    ):
         self.player = video_with_instructions.player
         self.video_with_instructions = video_with_instructions
+        self.action_host = action_host
         self.timestamps_selected_callback = None
         self.labels = ["left_neg", "left_pos", "right_neg", "right_pos"]
         self.index = 0
@@ -140,24 +145,44 @@ class TimeSelectionStage:
 
     def activate(self, video_path: str):
         self.player.set_video_source(video_path)
-        self.player.register_shortcut("E", self.mark_frame)
         self.index = 0
         self.video_with_instructions.set_instructions(self.instructions[self.index])
         self.timestamps.clear()
+        self._update_actions()
 
     def deactivate(self):
-        pass
+        self.action_host.clear_actions()
+
+    def _update_actions(self):
+        if self.index >= len(self.labels):
+            self.action_host.clear_actions()
+            return
+
+        self.action_host.set_actions(
+            [
+                TaskAction(
+                    id="mark_frame",
+                    label="Select Frame (E)",
+                    shortcut=Qt.Key.Key_E,
+                    callback=self.mark_frame,
+                )
+            ]
+        )
 
     def mark_frame(self):
         label = self.labels[self.index]
         frame = self.player.video_frame.get_current_frame_number()
         self.timestamps[label] = frame
         self.index += 1
+
         if self.index >= len(self.labels):
+            self.action_host.clear_actions()
             if self.timestamps_selected_callback:
                 self.timestamps_selected_callback(self.timestamps)
-                return
+            return
+
         self.video_with_instructions.set_instructions(self.instructions[self.index])
+        self._update_actions()
 
 
 class ProcessingStage:
@@ -255,7 +280,8 @@ class ProcessingStage:
 if __name__ == "__main__":
     app = QApplication([])
     match_context = MatchContext()
-    match_context.set_file("matches_data/sabre_2/sabre_2.mp4")
-    widget = DetectScoreLightsWidget()
+
+    widget = DetectScoreLightsWidget(match_context)
+    match_context.set_file("matches_data/sabre_3.mp4")
     widget.show()
     app.exec()

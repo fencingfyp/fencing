@@ -82,7 +82,7 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
         match_context = MatchContext()
         widget = CropRegionsWidget(match_context)
-        match_context.set_file("matches_data/epee_3/epee_3.mp4")
+        match_context.set_file("matches_data/sabre_3.mp4")
         widget.show()
         sys.exit(app.exec())
 

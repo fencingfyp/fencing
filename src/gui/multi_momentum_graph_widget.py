@@ -42,21 +42,21 @@ class MultiMomentumGraphWidget(QWidget):
         super().__init__(parent)
 
         self.matches: List[MatchContext] = []
-        self.fps: float | None = None
 
         self.display_label = QLabel(self)
         self.display_label.setMinimumSize(1, 1)
         self.display_label.setStyleSheet("background: black;")
-        # self.display_label.setScaledContents(True)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.display_label)
+        self.setLayout(layout)
 
         # Use PysideUi wrapper for scaling/rendering
         self.ui = PysideUi(
             video_label=self.display_label,
             text_label=None,
+            action_panel=None,
             parent=self,
         )
 
@@ -83,18 +83,17 @@ class MultiMomentumGraphWidget(QWidget):
 
         for idx, match in enumerate(self.matches):
             if not match.file_manager:
-                continue
+                raise ValueError(f"Missing file manager for match {match.match_name}.")
 
             fps = self._get_fps(match)
             if fps is None:
-                continue
-
+                raise ValueError(f"Failed to get FPS for match {match.match_name}.")
             momentum_df = self._load_momentum(match)
             periods = self._load_periods(match)
 
             if momentum_df is None or periods is None:  # TODO: Move this to validation
                 raise ValueError(
-                    f"Failed to load momentum data or periods for match {idx + 1}."
+                    f"Failed to load momentum data or periods for match {match.match_name}."
                 )
 
             overlays.append(

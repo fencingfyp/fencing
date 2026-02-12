@@ -5,6 +5,7 @@ from typing import List, Optional, override
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
+from src.gui.util.actions_panel_widget import TaskAction
 from src.gui.util.task_graph import MomentumGraphTasksToIds
 from src.gui.video_player_widget import VideoPlayerWidget
 from src.model.FileManager import FileRole
@@ -107,25 +108,61 @@ class SelectPeriodsWidget(BaseTaskWidget):
         """Activate video player and shortcuts."""
         self.player.play()
         self.finish_button.setEnabled(False)
-
-        self.player.register_shortcut(Qt.Key.Key_S, self._mark_start)
-        self.player.register_shortcut(Qt.Key.Key_E, self._mark_end)
+        self._update_actions()
 
     def deactivate(self):
         """Deactivate video player and shortcuts."""
         self.finish_button.setEnabled(False)
         self.player.pause()
+        self.clear_actions()
+
+    def _update_actions(self):
+        if (
+            not self.controller
+            or not self.is_running
+            or len(self.controller.periods) >= self.max_periods
+        ):
+            self.clear_actions()
+            return
+
+        # Waiting for start
+        if self.controller.current_start_ms is None:
+            self.set_actions(
+                [
+                    TaskAction(
+                        id="mark_start",
+                        label="Mark Start (S)",
+                        shortcut=Qt.Key.Key_S,
+                        callback=self._mark_start,
+                    )
+                ]
+            )
+            return
+
+        # Waiting for end
+        self.set_actions(
+            [
+                TaskAction(
+                    id="mark_end",
+                    label="Mark End (E)",
+                    shortcut=Qt.Key.Key_E,
+                    callback=self._mark_end,
+                )
+            ]
+        )
 
     # ------------------- controller wrappers -------------------
     def _mark_start(self):
         self.controller.mark_start()
         self._update_info()
         self._update_finish_button_state()
+        self._update_actions()
 
     def _mark_end(self):
         self.controller.mark_end()
         self._update_info()
         self._update_finish_button_state()
+        self._update_actions()
 
     def _finish(self):
         if not self.controller or not self.controller.periods:
@@ -178,7 +215,7 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
         match_context = MatchContext()
         widget = SelectPeriodsWidget(match_context)
-        match_context.set_file("matches_data/epee_3/epee_3.mp4")
+        match_context.set_file("matches_data/sabre_4.mp4")
         widget.show()
         sys.exit(app.exec())
 
