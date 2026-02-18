@@ -21,7 +21,7 @@ NUM_KEYPOINTS = 17
 def appears_in_future_detections(
     frame_manager: FrameInfoManager, current_frame_index: int, fencer_id: int
 ) -> bool:
-    for fi in frame_manager.find_cached_forward(current_frame_index):
+    for _, fi in frame_manager.find_cached_forward(current_frame_index):
         if fi and fencer_id in fi:
             print(f"Fencer {fencer_id} reappears")
             return True

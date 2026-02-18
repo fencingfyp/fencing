@@ -4,12 +4,18 @@ import numpy as np
 class Quadrilateral:
     """Represents a quadrilateral defined by four points. Each point is a tuple (x, y)."""
 
-    def __init__(self, points: list[tuple[int, int]]):
-        if len(points) != 4:
-            raise ValueError("A quadrilateral must have exactly 4 points.")
-        if not all(len(pt) == 2 for pt in points):
-            raise ValueError("Each point must be a tuple of (x, y).")
-        self.points = np.array(points, dtype=np.float32)
+    def __init__(self, points):
+        """
+        points: list[tuple[int, int]] OR np.ndarray of shape (4, 2)
+        """
+        if isinstance(points, np.ndarray):
+            if points.shape != (4, 2):
+                raise ValueError("NumPy array must be shape (4,2)")
+            self.points = points.astype(np.float32)
+        else:
+            if len(points) != 4 or not all(len(pt) == 2 for pt in points):
+                raise ValueError("A quadrilateral must have exactly 4 points (x,y).")
+            self.points = np.array(points, dtype=np.float32)
 
     def is_valid(self) -> bool:
         """Check if the quadrilateral has 4 distinct points."""
@@ -18,9 +24,12 @@ class Quadrilateral:
     def numpy(self) -> np.ndarray:
         return self.points.copy()
 
-    def to_list(self) -> list[tuple[float, float]]:
+    def to_list(self, type: str = "float") -> list[tuple[float, float]]:
         ordered_points = self._order_points()
-        return [(float(pt[0]), float(pt[1])) for pt in ordered_points]
+        if type == "int":
+            return [(int(pt[0]), int(pt[1])) for pt in ordered_points]
+        else:
+            return [(float(pt[0]), float(pt[1])) for pt in ordered_points]
 
     @staticmethod
     def from_opencv_format(pts: np.ndarray) -> "Quadrilateral":

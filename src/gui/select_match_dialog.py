@@ -35,7 +35,7 @@ class ValidationResult:
 
 
 def is_video_file(file_path: str) -> bool:
-    return file_path.lower().endswith(".mp4")
+    return file_path.lower().endswith(".mp4") or file_path.lower().endswith(".mts")
 
 
 class SelectMatchDialog(QDialog):

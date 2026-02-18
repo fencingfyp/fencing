@@ -76,14 +76,14 @@ class EasyOcrReader:
 
             crop = image[y0:y1, x0:x1]
 
-            # Now pad outward using edge values
             crop = cv2.copyMakeBorder(
                 crop,
                 top=pad,
                 bottom=pad,
                 left=pad,
                 right=pad,
-                borderType=cv2.BORDER_REPLICATE,
+                borderType=cv2.BORDER_CONSTANT,
+                value=0,
             )
             results = self.reader.recognize(crop, allowlist="0123456789")
             if results:

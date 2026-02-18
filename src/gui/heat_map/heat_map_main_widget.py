@@ -1,11 +1,27 @@
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QStackedWidget, QWidget
 
+from src.gui.heat_map.generate_heat_map_widget import GenerateHeatMapWidget
+from src.gui.momentum_graph.crop_regions_widget import CropRegionsWidget
+from src.gui.momentum_graph.detect_score_lights_widget import DetectScoreLightsWidget
+from src.gui.momentum_graph.generate_momentum_graph_widget import (
+    GenerateMomentumGraphWidget,
+)
+from src.gui.momentum_graph.perform_ocr_widget import PerformOcrWidget
 from src.gui.navbar.app_navigator import AppNavigator, View
 from src.gui.util.task_graph import HeatMapTasksToIds, Task, TaskGraph, TaskState
 from src.gui.util.task_graph_navbar import TaskGraphLocalNav
 from src.pyside.MatchContext import MatchContext
-from src.util.file_names import RAW_POSE_DATA_CSV_NAME
+from src.util.file_names import (
+    CROPPED_SCORE_LIGHTS_VIDEO_NAME,
+    CROPPED_SCOREBOARD_VIDEO_NAME,
+    CROPPED_TIMER_VIDEO_NAME,
+    DETECT_LIGHTS_OUTPUT_CSV_NAME,
+    MOMENTUM_DATA_CSV_NAME,
+    OCR_OUTPUT_CSV_NAME,
+    PROCESSED_POSE_DATA_CSV_NAME,
+    RAW_POSE_DATA_CSV_NAME,
+)
 
 from .heat_map_overview_widget import HeatMapOverviewWidget
 from .track_fencers_widget import TrackFencersWidget
@@ -19,8 +35,43 @@ TASK_DEPENDENCIES = [
     ),
     Task(
         HeatMapTasksToIds.TRACK_FENCERS.value,
-        [],
+        [PROCESSED_POSE_DATA_CSV_NAME],
         deps=[HeatMapTasksToIds.TRACK_POSES.value],
+    ),
+    Task(
+        HeatMapTasksToIds.GENERATE_HEAT_MAP.value,
+        [],
+        deps=[
+            HeatMapTasksToIds.TRACK_FENCERS.value,
+            HeatMapTasksToIds.GENERATE_MOMENTUM_GRAPH.value,
+            HeatMapTasksToIds.CROP_REGIONS.value,
+        ],
+    ),
+    Task(
+        HeatMapTasksToIds.CROP_REGIONS.value,
+        [
+            CROPPED_SCOREBOARD_VIDEO_NAME,
+            CROPPED_SCORE_LIGHTS_VIDEO_NAME,
+            CROPPED_TIMER_VIDEO_NAME,
+        ],
+    ),
+    Task(
+        HeatMapTasksToIds.PERFORM_OCR.value,
+        [OCR_OUTPUT_CSV_NAME],
+        deps=[HeatMapTasksToIds.CROP_REGIONS.value],
+    ),
+    Task(
+        HeatMapTasksToIds.DETECT_SCORE_LIGHTS.value,
+        [DETECT_LIGHTS_OUTPUT_CSV_NAME],
+        deps=[HeatMapTasksToIds.CROP_REGIONS.value],
+    ),
+    Task(
+        HeatMapTasksToIds.GENERATE_MOMENTUM_GRAPH.value,
+        [MOMENTUM_DATA_CSV_NAME],
+        deps=[
+            HeatMapTasksToIds.PERFORM_OCR.value,
+            HeatMapTasksToIds.DETECT_SCORE_LIGHTS.value,
+        ],
     ),
 ]
 
@@ -75,6 +126,21 @@ class HeatMapMainWidget(QWidget):
 
     def initialise_task_widgets(self):
         self.tasks_to_widgets = {}
+        self.tasks_to_widgets[HeatMapTasksToIds.CROP_REGIONS.value] = CropRegionsWidget(
+            self.match_context
+        )
+        self.tasks_to_widgets[HeatMapTasksToIds.PERFORM_OCR.value] = PerformOcrWidget(
+            self.match_context
+        )
+        self.tasks_to_widgets[HeatMapTasksToIds.DETECT_SCORE_LIGHTS.value] = (
+            DetectScoreLightsWidget(self.match_context)
+        )
+        self.tasks_to_widgets[HeatMapTasksToIds.GENERATE_MOMENTUM_GRAPH.value] = (
+            GenerateMomentumGraphWidget(self.match_context)
+        )
+        self.tasks_to_widgets[HeatMapTasksToIds.GENERATE_HEAT_MAP.value] = (
+            GenerateHeatMapWidget(self.match_context)
+        )
         self.tasks_to_widgets[HeatMapTasksToIds.TRACK_POSES.value] = TrackPosesWidget(
             self.match_context
         )

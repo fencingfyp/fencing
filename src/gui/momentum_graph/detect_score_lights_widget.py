@@ -282,6 +282,6 @@ if __name__ == "__main__":
     match_context = MatchContext()
 
     widget = DetectScoreLightsWidget(match_context)
-    match_context.set_file("matches_data/sabre_3.mp4")
+    match_context.set_file("matches_data/sabre_2.mp4")
     widget.show()
     app.exec()

@@ -6,6 +6,13 @@ import numpy as np
 PISTE_LENGTH_M = 14  # Standard piste length in meters
 
 
+def generate_select_line_instructions(target_name: str, confirm_key="w") -> list[str]:
+    return [
+        f"Select {target_name} start point, press '{confirm_key}' to confirm",
+        f"Select {target_name} end point, press '{confirm_key}' to confirm",
+    ]
+
+
 def generate_select_quadrilateral_instructions(
     target_name: str, confirm_key="w"
 ) -> list[str]:

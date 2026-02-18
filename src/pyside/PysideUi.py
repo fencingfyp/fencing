@@ -145,6 +145,7 @@ class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
         self.fencer_selector = FencerSelectionController(
             ui=self,
             video_label=self.video_label,
+            action_panel=self.action_panel,
             on_done=on_done,
         )
         self.fencer_selector.start(candidates, left)

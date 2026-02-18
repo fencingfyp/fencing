@@ -1,6 +1,6 @@
 from PySide6.QtCore import QObject, Qt
-from PySide6.QtGui import QKeySequence, QShortcut
 
+from src.gui.util.actions_panel_widget import ActionsPanelWidget, TaskAction
 from src.model.OpenCvUi import calculate_centrepoint
 
 
@@ -10,10 +10,13 @@ class FencerSelectionController(QObject):
     Short-lived: shortcuts and mouse are created on activate, removed on deactivate.
     """
 
-    def __init__(self, *, ui, video_label, on_done: callable):
+    def __init__(
+        self, *, ui, video_label, action_panel: ActionsPanelWidget, on_done: callable
+    ):
         super().__init__()
         self.ui = ui
         self.video_label = video_label
+        self.action_panel = action_panel
         self.on_done = on_done
 
         # state
@@ -24,10 +27,6 @@ class FencerSelectionController(QObject):
 
         # save original mouse handler
         self._orig_mouse_handler = video_label.mousePressEvent
-
-        # shortcuts (initialized on activate)
-        self._w_shortcut: QShortcut | None = None
-        self._s_shortcut: QShortcut | None = None
 
     # ----------------------- lifecycle -----------------------
     def start(self, candidates: dict[int, dict], left: bool):
@@ -52,35 +51,48 @@ class FencerSelectionController(QObject):
             return
         self._active = True
 
-        # create shortcuts fresh
-        self._w_shortcut = QShortcut(QKeySequence(Qt.Key.Key_W), self.video_label)
-        self._w_shortcut.activated.connect(self._confirm)
-
-        self._s_shortcut = QShortcut(QKeySequence(Qt.Key.Key_S), self.video_label)
-        self._s_shortcut.activated.connect(self._skip)
-
         # mouse
         self.video_label.setMouseTracking(True)
         self.video_label.mousePressEvent = self._on_mouse_click
+
+        self._update_actions()
 
     def deactivate(self):
         if not self._active:
             return
         self._active = False
 
-        # remove shortcuts
-        if self._w_shortcut:
-            self._w_shortcut.activated.disconnect(self._confirm)
-            self._w_shortcut.setParent(None)
-            self._w_shortcut = None
-
-        if self._s_shortcut:
-            self._s_shortcut.activated.disconnect(self._skip)
-            self._s_shortcut.setParent(None)
-            self._s_shortcut = None
-
         # restore mouse
         self.video_label.mousePressEvent = self._orig_mouse_handler
+
+        self.action_panel.clear()
+
+    def _update_actions(self):
+        side = "Left" if self.left else "Right"
+
+        actions = []
+
+        # Confirm only enabled if something selected
+        actions.append(
+            TaskAction(
+                id="confirm_fencer",
+                label="Confirm (W)",
+                shortcut=Qt.Key.Key_W,
+                callback=self._confirm,
+                enabled=self.selected_id is not None,
+            )
+        )
+
+        actions.append(
+            TaskAction(
+                id="skip_fencer",
+                label="Skip (S)",
+                shortcut=Qt.Key.Key_S,
+                callback=self._skip,
+            )
+        )
+
+        self.action_panel.set_actions(actions)
 
     # ----------------------- input handlers -----------------------
     def _on_mouse_click(self, event):
@@ -108,6 +120,7 @@ class FencerSelectionController(QObject):
         if closest_candidate:
             self.selected_id = closest_candidate["id"]
 
+        self._update_actions()
         self._render()
 
     def _confirm(self):

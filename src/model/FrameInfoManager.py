@@ -1,6 +1,6 @@
-import copy
 import csv
 from collections.abc import Callable
+from types import MappingProxyType
 from typing import Any, Dict, Iterator
 
 
@@ -107,9 +107,9 @@ class FrameInfoManager:
         Remove all cached frames < min_frame_to_keep.
         With the new rule, when requesting k+2, we evict k.
         """
-        to_delete = [f for f in self._cache if f < min_frame_to_keep]
-        for f in to_delete:
-            del self._cache[f]
+        for f in list(self._cache):
+            if f < min_frame_to_keep:
+                del self._cache[f]
 
     # ------------------------------------------------------------------
     # CSV reader
@@ -147,7 +147,7 @@ class FrameInfoManager:
 
                 # New frame encountered → flush previous frame
                 if frame_id != current_frame:
-                    yield current_frame, copy.deepcopy(batch)
+                    yield current_frame, MappingProxyType(batch)
 
                     # Forward-fill missing frames
                     if ffill:
@@ -163,12 +163,12 @@ class FrameInfoManager:
                 try:
                     current_row = next(reader)
                 except StopIteration:
-                    yield current_frame, copy.deepcopy(batch)
+                    yield current_frame, MappingProxyType(batch)
                     break
 
             # After EOF, forward-fill forever
             if current_frame is not None and ffill:
-                frozen = copy.deepcopy(batch)
+                frozen = MappingProxyType(batch)
                 while True:
                     current_frame += 1
                     yield current_frame, frozen

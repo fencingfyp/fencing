@@ -17,8 +17,7 @@ class DetectionsDrawable(Drawable):
             )
 
     def primitives(self):
-        for d in self.sub_drawables:
-            yield from d.primitives()
+        return []
 
     def style(self):
         # optional if individual drawables manage style

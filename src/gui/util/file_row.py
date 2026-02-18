@@ -27,7 +27,7 @@ class FileRow(QWidget):
             self,
             "Select video file",
             "",
-            "Video Files (*.mp4)",
+            "Video Files (*.mp4 *.mts)",
         )
         if file_path:
             self.path_box.setText(file_path)

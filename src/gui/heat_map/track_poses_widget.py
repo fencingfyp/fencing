@@ -11,6 +11,7 @@ from src.gui.util.task_graph import HeatMapTasksToIds
 from src.model import Ui
 from src.model.FileManager import FileRole
 from src.pyside.MatchContext import MatchContext
+from src.pyside.PysideUi import PysideUi
 from src.util.gpu import get_device
 
 
@@ -30,6 +31,8 @@ class TrackPosesWidget(BaseTaskWidget):
     def run_task(self):
         if not self.match_context.file_manager:
             return
+
+        self.is_running = True
 
         self.run_started.emit(HeatMapTasksToIds.TRACK_POSES)
 
@@ -51,8 +54,13 @@ class TrackPosesWidget(BaseTaskWidget):
         self.controller.start()
 
     def _on_finished(self):
+        self.is_running = False
         self.ui.write("Pose tracking completed.")
         self.run_completed.emit(HeatMapTasksToIds.TRACK_POSES)
+
+    def cancel(self):
+        if hasattr(self, "controller"):
+            self.controller.cancel()
 
 
 class PoseToCsvController:
@@ -66,17 +74,18 @@ class PoseToCsvController:
         self._on_finished = callback
 
     def on_finished(self):
+        self.cancel()
         if self._on_finished:
             self._on_finished()
 
     def __init__(
         self,
-        ui,
+        ui: PysideUi,
         input_path: str,
         output_path: str,
         model_path: str,
     ):
-        self.ui: Ui = ui
+        self.ui: PysideUi = ui
         self.input_path = input_path
         self.output_path = output_path
         self.model_path = model_path
@@ -113,13 +122,13 @@ class PoseToCsvController:
         self.writer.writerow(get_header_row())
 
         self.ui.write("Processing video...")
-        self.ui.run_loop(self._step, self.on_finished)
+        self.ui.schedule(self._step)
 
     # ------------------------------------------------------------------
     # Loop step
     # ------------------------------------------------------------------
 
-    def _step(self) -> bool:
+    def _step(self):
         """
         Returns:
             True  -> continue loop
@@ -128,8 +137,8 @@ class PoseToCsvController:
 
         ret, frame = self.cap.read()
         if not ret:
-            self.cancel()
-            return False
+            self.on_finished()
+            return
 
         results = self.model.track(frame, persist=True, verbose=False)
 
@@ -142,7 +151,7 @@ class PoseToCsvController:
         self.ui.set_fresh_frame(annotated_frame)
 
         self.frame_idx += 1
-        return True
+        self.ui.schedule(self._step)
 
     # ------------------------------------------------------------------
     # Cleanup
@@ -154,6 +163,9 @@ class PoseToCsvController:
 
         if self.csv_file is not None:
             self.csv_file.close()
+
+        if hasattr(self, "model") and self.model is not None:
+            del self.model
 
 
 if __name__ == "__main__":
@@ -167,7 +179,7 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
         match_context = MatchContext()
         widget = TrackPosesWidget(match_context)
-        match_context.set_file("matches_data/sabre_2.mp4")
+        match_context.set_file("matches_data/foil_2.mp4")
         widget.show()
         sys.exit(app.exec())
 

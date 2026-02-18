@@ -94,7 +94,6 @@ class VideoRenderer(QObject):
         """Draw a drawable on the frame pixmap using the draw scale."""
         for sub in drawable.get_sub_drawables():
             self._draw_drawable_scaled(painter, sub)
-            return
 
         style = drawable.style()
         for primitive_type, data in drawable.primitives():

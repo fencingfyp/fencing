@@ -1,186 +1,217 @@
 import argparse
 
 import cv2
+import numpy as np
 
-from model.FrameInfoManager import FrameInfoManager
-from model.OpenCvUi import OpenCvUi, UiCodes
-from src.model.tracker.OrbTracker import OrbTracker
-from src.util.utils import (
-    LEFT_FENCER_SCORE_LIGHT_INSTRUCTIONS,
-    RIGHT_FENCER_SCORE_LIGHT_INSTRUCTIONS,
-    convert_from_opencv_format,
-    convert_to_opencv_format,
-)
+from src.model import Quadrilateral
+from src.model.FrameInfoManager import FrameInfoManager
+from src.model.OpenCvUi import OpenCvUi, UiCodes
+from src.util.io import setup_output_video_io
+from src.util.utils import generate_select_quadrilateral_instructions
 
-CSV_COLS = 58  # 7 + 17 * 3
-NUM_KEYPOINTS = 17
+from .manual_track_fencers import get_header_row, row_mapper
 
 LEFT_FENCER_ID = 0
 RIGHT_FENCER_ID = 1
 
-DEFAULT_FPS = 50
-FULL_DELAY = int(1000 / DEFAULT_FPS)  # milliseconds
-HALF_DELAY = FULL_DELAY // 2  # milliseconds
 
-# planar tracking parameters
-MIN_INLIERS = 15
+class PisteMapper:
+    """Maps fencer positions from the engarde box to a top-down plane and calculates thirds."""
+
+    PISTE_LENGTH_M = 14.0
+    ENGARDE_BOX_LENGTH_M = 4.0
+    ENGARDE_LEFT_M = (PISTE_LENGTH_M - ENGARDE_BOX_LENGTH_M) / 2
+
+    def __init__(self, engarde_quad: Quadrilateral):
+        self.engarde_quad = engarde_quad
+        # Rectangle size for planar mapping (arbitrary)
+        self.rect_w, self.rect_h = 400, 100
+        self.H = self.compute_homography()
+
+    def compute_homography(self):
+        src_pts = np.array(self.engarde_quad.points, dtype=np.float32)
+        dst_pts = np.array(
+            [
+                [0, 0],
+                [self.rect_w - 1, 0],
+                [self.rect_w - 1, self.rect_h - 1],
+                [0, self.rect_h - 1],
+            ],
+            dtype=np.float32,
+        )
+        H, _ = cv2.findHomography(src_pts, dst_pts)
+        return H
+
+    def warp_point(self, pt: tuple[int, int]) -> tuple[float, float]:
+        pts = np.array([[pt]], dtype=np.float32)
+        warped = cv2.perspectiveTransform(pts, self.H)
+        return float(warped[0, 0, 0]), float(warped[0, 0, 1])
+
+    def map_to_piste(self, warped_x: float) -> float:
+        """Map x-coordinate in warped plane to full piste meters."""
+        frac = warped_x / self.rect_w
+        return self.ENGARDE_LEFT_M + frac * self.ENGARDE_BOX_LENGTH_M
+
+    def get_third(self, piste_x_m: float) -> str:
+        third_length = self.PISTE_LENGTH_M / 3
+        if piste_x_m < third_length:
+            return "left"
+        elif piste_x_m < 2 * third_length:
+            return "centre"
+        else:
+            return "right"
 
 
-def get_piste_centre_line(
-    positions: list[tuple[int, int]],
-) -> tuple[tuple[int, int], tuple[int, int]]:
-    if len(positions) != 4:
-        raise ValueError("Need exactly 4 positions to define the piste corners.")
+def get_valid_fencer_coords(
+    fencer_position: dict, confidence_thresh: float = 0.1
+) -> tuple[int, int] | None:
+    """
+    Validate fencer position dict and return ankle midpoint if confidence is sufficient.
+    Returns None if data is missing or below confidence threshold.
+    """
+    if fencer_position is None:
+        return None
 
-    # Take the average of the top and bottom lines to get center line
-    left_x = (positions[0][0] + positions[3][0]) // 2
-    left_y = (positions[0][1] + positions[3][1]) // 2
-    right_x = (positions[1][0] + positions[2][0]) // 2
-    right_y = (positions[1][1] + positions[2][1]) // 2
-    return (left_x, left_y), (right_x, right_y)
+    keypoints = fencer_position.get("keypoints", [])
+    if len(keypoints) <= 16:
+        return None
+
+    left_ankle = keypoints[15]
+    right_ankle = keypoints[16]
+
+    if left_ankle[2] > confidence_thresh and right_ankle[2] > confidence_thresh:
+        cx = int((left_ankle[0] + right_ankle[0]) / 2)
+        cy = int((left_ankle[1] + right_ankle[1]) / 2)
+        return cx, cy
+
+    return None
+
+
+def draw_fencer(
+    ui: OpenCvUi, fencer_position: dict, color: tuple[int, int, int]
+) -> tuple[int, int] | None:
+    """
+    Draws fencer box and ankle midpoint on the UI.
+    Returns the midpoint coordinates if valid, else None.
+    """
+    if fencer_position is None:
+        return
+
+    # Draw bounding box
+    x1, y1, x2, y2 = map(int, fencer_position["box"])
+    ui.draw_quadrilateral(
+        Quadrilateral([(x1, y1), (x2, y1), (x2, y2), (x1, y2)]), color=color
+    )
+
+    # Validate and get ankle midpoint
+    coords = get_valid_fencer_coords(fencer_position)
+    if coords:
+        cx, cy = coords
+        ui.plot_points(np.array([[cx, cy]]), color=color)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Analyse video with csv data")
-    parser.add_argument("input_video", help="Path to input video file")
-    parser.add_argument("input_csv", help="Path to input CSV file")
-    parser.add_argument(
-        "--output_video", help="Path to output video file (optional)", default=None
-    )
+    parser = argparse.ArgumentParser(description="Analyse video with CSV data")
+    parser.add_argument("input_video")
+    parser.add_argument("input_csv")
+    parser.add_argument("--output_video", default=None)
     args = parser.parse_args()
 
-    csv_path = args.input_csv
-    video_path = args.input_video
-
-    writer = None
     cap = cv2.VideoCapture(args.input_video)
     if not cap.isOpened():
         print(f"Error: Could not open video {args.input_video}")
         return
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    FULL_DELAY = int(1000 / fps)
-    HALF_DELAY = FULL_DELAY // 2
-    print(f"Video FPS: {fps}, Frame delay: {FULL_DELAY} ms")
 
-    # UI
-    slow = False
-    early_exit = False
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    full_delay = int(1000 / fps)
+    half_delay = full_delay // 2
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    ui = OpenCvUi("Fencing Analysis", width=int(width), height=int(height))
-    if args.output_video:
-        print(f"Output video will be saved to: {args.output_video}")
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(
-            args.output_video, fourcc, fps, (width, height + ui.text_box_height)
-        )
-        print(width, height + ui.text_box_height)
-        if not writer.isOpened():
-            print(
-                f"Failed to open video writer for {args.output_video}. Check the path and codec."
-            )
-            return
-    frame_manager = FrameInfoManager(csv_path, fps)
+    ui = OpenCvUi("Fencing Analysis", width, height)
+    writer = (
+        setup_output_video_io(args.output_video, fps, width, height)
+        if args.output_video
+        else None
+    )
+    frame_manager = FrameInfoManager(args.input_csv, fps, get_header_row(), row_mapper)
 
-    # Setup video analysis
-    # very roughly load the first frame of the video
-    temp_cap = cv2.VideoCapture(video_path)
-    ret, frame = temp_cap.read()
-    temp_cap.release()
+    ret, frame = cap.read()
     if not ret:
-        print(f"Error: Could not read frame from video {video_path}")
-        return
-    if frame is None:
-        print("No frames found in CSV, exiting.")
+        print(f"Error: Could not read frame from video {args.input_video}")
         return
 
-    piste_positions = ui.get_piste_positions(frame)
-    if len(piste_positions) != 4:
-        print("Piste positions not fully selected, exiting.")
+    # User selects engarde box
+    points = ui.get_n_points(
+        frame, generate_select_quadrilateral_instructions("piste engarde box")
+    )
+    if len(points) != 4:
+        print("Error: Exactly 4 points required for engarde box")
         return
-
-    left_fencer_score_light_positions = ui.get_n_points(
-        LEFT_FENCER_SCORE_LIGHT_INSTRUCTIONS
-    )
-    if len(left_fencer_score_light_positions) != 4:
-        print("Left fencer score light positions not fully selected, exiting.")
-        return
-
-    right_fencer_score_light_positions = ui.get_n_points(
-        RIGHT_FENCER_SCORE_LIGHT_INSTRUCTIONS
-    )
-    if len(right_fencer_score_light_positions) != 4:
-        print("Right fencer score light positions not fully selected, exiting.")
-        return
-
-    planar_tracker = OrbTracker()
-    planar_tracker.add_target("piste", frame, convert_to_opencv_format(piste_positions))
-    planar_tracker.add_target(
-        "left_fencer_score_light",
-        frame,
-        convert_to_opencv_format(left_fencer_score_light_positions),
-    )
-    planar_tracker.add_target(
-        "right_fencer_score_light",
-        frame,
-        convert_to_opencv_format(right_fencer_score_light_positions),
-    )
+    engarde_quad = Quadrilateral(points)
+    mapper = PisteMapper(engarde_quad)
 
     frame_id = 0
+    slow = False
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+    prev_left = None
+    prev_right = None
+
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        detections = frame_manager.get_frame_info_at(frame_id)
+        detections = frame_manager.get_frame_and_advance(frame_id)
         ui.set_fresh_frame(frame)
+        ui.draw_quadrilateral(engarde_quad, color=(0, 255, 0))
 
-        # track fencers
-        left_fencer_position = detections.get(LEFT_FENCER_ID, None)
-        right_fencer_position = detections.get(RIGHT_FENCER_ID, None)
+        left_dict = detections.get(LEFT_FENCER_ID, prev_left)
+        right_dict = detections.get(RIGHT_FENCER_ID, prev_right)
 
-        tracked_positions = planar_tracker.update_all(frame)
-        piste_positions_tracked = tracked_positions.get("piste", piste_positions)
-        left_fencer_score_light_tracked = tracked_positions.get(
-            "left_fencer_score_light", None
+        left_coords = get_valid_fencer_coords(left_dict)
+        right_coords = get_valid_fencer_coords(right_dict)
+
+        if left_coords:
+            draw_fencer(ui, left_dict, ui.left_fencer_colour)
+        if right_coords:
+            draw_fencer(ui, right_dict, ui.right_fencer_colour)
+
+        # Warp fencer positions to planar view
+        left_warp = mapper.warp_point(left_coords) if left_coords else None
+        right_warp = mapper.warp_point(right_coords) if right_coords else None
+
+        # Compute thirds using warped x-coordinate
+        left_third = (
+            mapper.get_third(mapper.map_to_piste(left_warp[0])) if left_warp else None
         )
-        right_fencer_score_light_tracked = tracked_positions.get(
-            "right_fencer_score_light", None
+        right_third = (
+            mapper.get_third(mapper.map_to_piste(right_warp[0])) if right_warp else None
         )
-        adapted_positions = convert_from_opencv_format(piste_positions_tracked)
-        piste_centre_line = get_piste_centre_line(adapted_positions)
 
-        ui.draw_polygon(left_fencer_score_light_tracked, color=(255, 255, 255))
-        ui.draw_polygon(right_fencer_score_light_tracked, color=(255, 255, 255))
-
-        ui.draw_piste_centre_line(piste_centre_line)
-        if left_fencer_position is not None:
-            ui.draw_fencer_centrepoint(left_fencer_position, is_left=True)
-        if right_fencer_position is not None:
-            ui.draw_fencer_centrepoint(right_fencer_position, is_left=False)
-        ui.draw_fencer_positions_on_piste(
-            left_fencer_position, right_fencer_position, piste_centre_line
+        ui.write_to_ui(
+            f"Left fencer in {left_third} third, Right fencer in {right_third} third"
         )
+
         ui.show_frame()
-
         if writer:
-            writer.write(ui.current_frame)
+            writer.write(ui.get_current_frame())
 
-        delay: int = FULL_DELAY if slow else HALF_DELAY
-        action = ui.get_user_input(delay, [UiCodes.QUIT, UiCodes.TOGGLE_SLOW])
+        delay = full_delay if slow else half_delay
+        action = ui.get_user_input(delay)
         if action == UiCodes.TOGGLE_SLOW:
             slow = not slow
-            print(f"Slow mode {'enabled' if slow else 'disabled'}.")
-        elif action == UiCodes.QUIT:  # q or Esc to quit
+            print("Toggled slow mode:", slow)
+        elif action == UiCodes.QUIT:
             break
+        elif action == UiCodes.PAUSE:
+            if ui.handle_pause():
+                break  # exit if user chose to quit during pause
 
-        if early_exit:
-            break
         frame_id += 1
 
     if writer:
         writer.release()
-
     cap.release()
     ui.close_additional_windows()
 

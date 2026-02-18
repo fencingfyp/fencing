@@ -168,7 +168,7 @@ class OrbTracker(TargetTracker):
 
     def update_all(self, frame: np.ndarray) -> dict[str, Quadrilateral | None]:
         # preprocess once per frame
-        frame = cv2.GaussianBlur(frame, (7, 7), 2)
+        # frame = cv2.GaussianBlur(frame, (7, 7), 2)
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         kp_frame, des_frame = self.orb.detectAndCompute(gray, None)

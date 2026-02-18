@@ -336,80 +336,17 @@ class OpenCvUi(Ui):
             quad[i][0][1] = int(quad[i][0][1] * scale_y)
         self.draw_polygon(quad, color=color, thickness=thickness)
 
-    def draw_piste_centre_line(
+    def draw_line(
         self, positions: list[tuple[int, int]], color: tuple[int, int, int] = None
     ) -> None:
-        if len(positions) < 4:
-            raise ValueError("piste centre line must have 4 points")
+        if len(positions) != 2:
+            raise ValueError("Lines require exactly 2 points.")
         if color is None:
             color = self.piste_centre_line_colour
-        left_x = (positions[0][0] + positions[3][0]) // 2
-        left_y = (positions[0][1] + positions[3][1]) // 2
-        right_x = (positions[1][0] + positions[2][0]) // 2
-        right_y = (positions[1][1] + positions[2][1]) // 2
-        x1, y1, x2, y2 = self.apply_offset(left_x, left_y, right_x, right_y)
+        x1, y1, x2, y2 = self.apply_offset(
+            positions[0][0], positions[0][1], positions[1][0], positions[1][1]
+        )
         cv2.line(self.current_frame, (x1, y1), (x2, y2), color, 2)
-
-    def draw_fencer_centrepoint(self, det: dict, is_left: bool) -> None:
-        color = self.left_fencer_colour if is_left else self.right_fencer_colour
-        x1, y1, x2, y2 = map(int, det["box"])
-        x1, y1, x2, y2 = self.apply_offset(x1, y1, x2, y2)
-        cv2.rectangle(self.current_frame, (x1, y1), (x2, y2), color, 2)
-        # draw only the centerpoint of shoulder points (6 and 7) https://docs.ultralytics.com/tasks/pose/
-        left_shoulder = det["keypoints"][6]
-        right_shoulder = det["keypoints"][7]
-        if left_shoulder[2] > 0.1 and right_shoulder[2] > 0.1:
-            cx = int((left_shoulder[0] + right_shoulder[0]) / 2)
-            cy = int((left_shoulder[1] + right_shoulder[1]) / 2)
-            cx, cy = self.apply_offset_point(cx, cy)
-            cv2.circle(self.current_frame, (cx, cy), 3, color, -1)
-
-    def draw_fencer_projection(
-        self,
-        fencer_position: dict,
-        piste_centre_line: tuple[tuple[int, int], tuple[int, int]],
-        colour: tuple[int, int, int],
-    ) -> tuple[int, int] | None:
-        if fencer_position is None:
-            return None
-        centrept = calculate_centrepoint(fencer_position)
-        proj = project_point_on_line(piste_centre_line, centrept)
-        proj_adjusted = self.apply_offset_point(int(proj[0]), int(proj[1]))
-        cv2.circle(self.current_frame, proj_adjusted, 3, colour, -1)
-        return proj_adjusted
-
-    def draw_fencer_positions_on_piste(
-        self,
-        left_fencer_position: dict,
-        right_fencer_position: dict,
-        piste_centre_line: tuple[tuple[int, int], tuple[int, int]],
-    ) -> None:
-        # Calculate fencer projections on line
-        left_proj_adjusted = self.draw_fencer_projection(
-            left_fencer_position, piste_centre_line, self.left_fencer_colour
-        )
-        right_proj_adjusted = self.draw_fencer_projection(
-            right_fencer_position, piste_centre_line, self.right_fencer_colour
-        )
-
-        piste_x1, piste_y1, piste_x2, piste_y2 = self.apply_offset(
-            *piste_centre_line[0], *piste_centre_line[1]
-        )
-        piste_pixel_distance = int(np.hypot(piste_x2 - piste_x1, piste_y2 - piste_y1))
-        self.draw_text_box()
-        if left_proj_adjusted is not None and right_proj_adjusted is not None:
-            fencer_pixel_distance = int(
-                np.hypot(
-                    right_proj_adjusted[0] - left_proj_adjusted[0],
-                    right_proj_adjusted[1] - left_proj_adjusted[1],
-                )
-            )
-            fencer_real_distance = (
-                fencer_pixel_distance / piste_pixel_distance
-            ) * PISTE_LENGTH_M
-            self.write_to_ui(f"Distance: {fencer_real_distance} m")
-        else:
-            self.write_to_ui("Distance: N/A")
 
     def get_quadrilateral(self, frame: np.ndarray, item_name: str) -> Quadrilateral:
         return Quadrilateral(

@@ -4,6 +4,7 @@ from pathlib import Path
 
 # Example file names
 from src.util.file_names import (
+    CROPPED_PISTE_VIDEO_NAME,
     CROPPED_SCORE_LIGHTS_VIDEO_NAME,
     CROPPED_SCOREBOARD_VIDEO_NAME,
     CROPPED_TIMER_VIDEO_NAME,
@@ -14,6 +15,7 @@ from src.util.file_names import (
     ORIGINAL_VIDEO_NAME,
     PERIODS_JSON_NAME,
     PROCESSED_POSE_DATA_CSV_NAME,
+    RAW_PISTE_QUADS_CSV_NAME,
     RAW_POSE_DATA_CSV_NAME,
 )
 
@@ -36,6 +38,8 @@ class FileRole(StrEnum):
     # Heat map
     RAW_POSE = RAW_POSE_DATA_CSV_NAME
     PROCESSED_POSE = PROCESSED_POSE_DATA_CSV_NAME
+    RAW_PISTE_QUADS = RAW_PISTE_QUADS_CSV_NAME
+    CROPPED_PISTE = CROPPED_PISTE_VIDEO_NAME
 
 
 class FileManager:

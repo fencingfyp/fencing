@@ -47,8 +47,8 @@ from src.pyside.MatchContext import MatchContext
 
 
 class MomentumGraphTasksToIds(Enum):
-    CROP_REGIONS = "Crop Regions"
-    PERFORM_OCR = "Perform OCR"
+    CROP_REGIONS = "Identify Scoreboard, Timer and Piste"
+    PERFORM_OCR = "Extract Scoring"
     DETECT_SCORE_LIGHTS = "Detect Score Lights"
     GENERATE_MOMENTUM_GRAPH = "Generate Momentum Graph"
     SELECT_PERIODS = "Select Periods"
@@ -58,6 +58,11 @@ class MomentumGraphTasksToIds(Enum):
 class HeatMapTasksToIds(Enum):
     TRACK_POSES = "track_poses"
     TRACK_FENCERS = "track_fencers"
+    GENERATE_HEAT_MAP = "generate_heat_map"
+    CROP_REGIONS = "Identify Scoreboard, Timer and Piste"
+    PERFORM_OCR = "Extract Scoring"
+    DETECT_SCORE_LIGHTS = "Detect Score Lights"
+    GENERATE_MOMENTUM_GRAPH = "Generate Momentum Graph"
 
 
 class TaskState(Enum):
