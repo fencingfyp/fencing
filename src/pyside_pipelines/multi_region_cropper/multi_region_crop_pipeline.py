@@ -1,3 +1,5 @@
+# src/pyside_pipelines/multi_region_cropper/multi_region_crop_pipeline.py
+
 from dataclasses import dataclass
 from typing import Callable, List
 
@@ -5,11 +7,11 @@ import cv2
 import numpy as np
 from PySide6.QtCore import QTimer
 
-from src.model import Quadrilateral
-from src.model.tracker import OrbTracker
+from src.model.tracker.DefinedRegion import DefinedRegion
+from src.model.tracker.TargetTracker import TargetTracker
+from src.model.tracker.tracker_factory import build_tracker
 from src.pyside.PysideUi import PysideUi
 
-from .defined_region import DefinedRegion
 from .output.region_output import RegionOutput
 
 
@@ -33,8 +35,15 @@ class RegionState:
 
 class MultiRegionProcessingPipeline:
     """
-    UI-optional pipeline.
-    Consumes DefinedRegion objects, tracks ROIs, and forwards frames/quads to outputs.
+    UI-optional, tracker-agnostic processing pipeline.
+
+    Accepts DefinedRegion objects and delegates tracker construction to
+    build_tracker(), which selects the appropriate concrete tracker(s)
+    based on each region's TrackingStrategy. The pipeline itself has no
+    knowledge of ORB vs AKAZE — swapping or mixing strategies requires
+    only changes to LabelConfig in the widget.
+
+    An optional tracker parameter allows injection for testing.
     """
 
     def __init__(
@@ -43,40 +52,36 @@ class MultiRegionProcessingPipeline:
         defined_regions: list[DefinedRegion],
         ui: PysideUi | None = None,
         on_finished: Callable | None = None,
+        tracker: TargetTracker | None = None,
     ):
         self.cap = cap
         self.defined_regions = defined_regions
         self.ui = ui
         self.on_finished = on_finished
-
-        self.tracker = OrbTracker()
         self.frame_id = 0
         self.cancelled = False
 
-        first_frame = self.cap.read()[1]
-        if first_frame is None:
+        ret, first_frame = self.cap.read()
+        if not ret or first_frame is None:
             raise ValueError("Failed to read first frame from video.")
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset video to start
+        self.tracker: TargetTracker = tracker or build_tracker(
+            defined_regions, first_frame
+        )
 
-        # Build typed region states
         fps = self.cap.get(cv2.CAP_PROP_FPS)
-        self.region_states: list[RegionState] = []
-        for region in defined_regions:
-            # Register with tracker
-            self.tracker.add_target(
-                region.label,
-                first_frame,
-                Quadrilateral(region.quad_np),
-                use_whole_frame=region.use_whole_frame,
+        self.region_states: list[RegionState] = [
+            RegionState(
+                label=region.label,
+                outputs=region.output_factory(region.quad_np, fps),
             )
-            # Build outputs
-            outputs = region.output_factory(region.quad_np, fps)
-            self.region_states.append(RegionState(label=region.label, outputs=outputs))
+            for region in defined_regions
+        ]
 
-    # ============================================================
-    # MAIN LOOP
-    # ============================================================
+    # ------------------------------------------------------------------
+    # Main loop
+    # ------------------------------------------------------------------
 
     def start(self):
         self._schedule(self._advance)
@@ -95,9 +100,7 @@ class MultiRegionProcessingPipeline:
         if self.ui:
             points = []
             for state in self.region_states:
-                pts = getattr(self.tracker, "get_target_pts", lambda l: None)(
-                    state.label
-                )
+                pts = self.tracker.get_target_pts(state.label)
                 if pts is not None:
                     points.extend(pts.tolist())
             self.ui.set_fresh_frame(frame)
@@ -105,9 +108,6 @@ class MultiRegionProcessingPipeline:
 
         self._schedule(self._advance)
 
-    # -------------------------
-    # Frame processing
-    # -------------------------
     def _process_frame(self, frame: np.ndarray):
         updated_quads = self.tracker.update_all(frame)
 
@@ -115,14 +115,14 @@ class MultiRegionProcessingPipeline:
             quad = updated_quads.get(state.label) or self.tracker.get_previous_quad(
                 state.label
             )
-            quad_np = quad.numpy()
-            state.process(frame, quad_np, self.frame_id)
+            state.process(frame, quad.numpy(), self.frame_id)
 
         self.frame_id += 1
 
-    # -------------------------
-    # Utilities
-    # -------------------------
+    # ------------------------------------------------------------------
+    # Scheduling
+    # ------------------------------------------------------------------
+
     def _schedule(self, fn: Callable):
         if not self.cancelled:
             if self.ui:
@@ -130,25 +130,23 @@ class MultiRegionProcessingPipeline:
             else:
                 QTimer.singleShot(0, fn)
 
-    # -------------------------
-    # Cleanup
-    # -------------------------
-    def cleanup(self):
-        self.cancelled = True
+    # ------------------------------------------------------------------
+    # Lifecycle — three distinct concerns:
+    #   cleanup()  — always runs, releases resources
+    #   cancel()   — aborted run, no completion signal
+    #   _finish()  — natural end, emits completion
+    # ------------------------------------------------------------------
+
+    def _cleanup(self):
         for state in self.region_states:
             state.close()
-
         self.cap.release()
 
     def cancel(self):
-        self.cleanup()
-        # delete all outputs since they're not complete
-        # for state in self.region_states:
-        #     for output in state.outputs:
-        #         output.delete()
+        self.cancelled = True
+        self._cleanup()
 
     def _finish(self):
-        self.cleanup()
-
+        self._cleanup()
         if self.on_finished:
             self.on_finished()

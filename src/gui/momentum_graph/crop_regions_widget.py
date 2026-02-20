@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication
 
 from src.gui.util.task_graph import MomentumGraphTasksToIds
 from src.model.FileManager import FileRole
+from src.model.tracker.TrackingStrategy import TrackingStrategy
 from src.pyside.MatchContext import MatchContext
 from src.pyside_pipelines.multi_region_cropper.multi_region_crop_pipeline import (
     MultiRegionProcessingPipeline,
@@ -18,6 +19,7 @@ from src.pyside_pipelines.multi_region_cropper.output.rectified_video_output imp
     RectifiedVideoOutput,
 )
 from src.pyside_pipelines.multi_region_cropper.roi_selection_controller import (
+    LabelConfig,
     ROISelectionPipeline,
 )
 
@@ -55,44 +57,62 @@ class CropRegionsWidget(BaseTaskWidget):
 
         self.run_started.emit(MomentumGraphTasksToIds.CROP_REGIONS)
 
-        # Map labels to output factories
-        labels_to_factories = {
-            "scoreboard": lambda quad, fps: [
-                RectifiedVideoOutput(
-                    self.match_context.file_manager.get_path(
-                        FileRole.CROPPED_SCOREBOARD
+        label_configs = {
+            "scoreboard": LabelConfig(
+                output_factory=lambda quad, fps: [
+                    RectifiedVideoOutput(
+                        self.match_context.file_manager.get_path(
+                            FileRole.CROPPED_SCOREBOARD
+                        ),
+                        fps,
+                        quad,
                     ),
-                    fps,
-                    quad,
-                ),
-            ],
-            "score lights": lambda quad, fps: [
-                RectifiedVideoOutput(
-                    self.match_context.file_manager.get_path(
-                        FileRole.CROPPED_SCORE_LIGHTS
+                ],
+                tracking_strategy=TrackingStrategy.ORB,
+                mask_margin=0.3,
+            ),
+            "score lights": LabelConfig(
+                output_factory=lambda quad, fps: [
+                    RectifiedVideoOutput(
+                        self.match_context.file_manager.get_path(
+                            FileRole.CROPPED_SCORE_LIGHTS
+                        ),
+                        fps,
+                        quad,
+                    )
+                ],
+                mask_margin=0.3,
+            ),
+            # "timer": LabelConfig(
+            #     output_factory=lambda quad, fps: [
+            #         RectifiedVideoOutput(
+            #             self.match_context.file_manager.get_path(
+            #                 FileRole.CROPPED_TIMER
+            #             ),
+            #             fps,
+            #             quad,
+            #         )
+            #     ],
+            # ),
+            "piste": LabelConfig(
+                output_factory=lambda quad, fps: [
+                    CsvOneShotQuadOutput(
+                        self.match_context.file_manager.get_path(
+                            FileRole.RAW_PISTE_QUADS
+                        ),
+                        quad,
                     ),
-                    fps,
-                    quad,
-                )
-            ],
-            # "timer": lambda quad, fps: [
-            #     RectifiedVideoOutput(
-            #         self.match_context.file_manager.get_path(FileRole.CROPPED_TIMER),
-            #         fps,
-            #         quad,
-            #     )
-            # ],
-            "piste": lambda quad, fps: [
-                CsvOneShotQuadOutput(
-                    self.match_context.file_manager.get_path(FileRole.RAW_PISTE_QUADS),
-                    quad,
-                ),
-                RectifiedVideoOutput(
-                    self.match_context.file_manager.get_path(FileRole.CROPPED_PISTE),
-                    fps,
-                    quad,
-                ),
-            ],
+                    RectifiedVideoOutput(
+                        self.match_context.file_manager.get_path(
+                            FileRole.CROPPED_PISTE
+                        ),
+                        fps,
+                        quad,
+                    ),
+                ],
+                tracking_strategy=TrackingStrategy.ORB,
+                mask_margin=1,
+            ),
         }
 
         # Start ROI selection UI
@@ -105,7 +125,7 @@ class CropRegionsWidget(BaseTaskWidget):
         self.roi_pipeline = ROISelectionPipeline(
             first_frame=first_frame,
             ui=self.ui,
-            region_output_factories=labels_to_factories,
+            label_configs=label_configs,
             on_finished=self._on_rois_defined,
         )
         self.roi_pipeline.start()

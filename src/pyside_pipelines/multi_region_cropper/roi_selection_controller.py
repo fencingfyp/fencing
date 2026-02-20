@@ -1,39 +1,35 @@
 from typing import Callable
 
-import cv2
 import numpy as np
 
-from src.model import Quadrilateral
+from src.model.Quadrilateral import Quadrilateral
+from src.model.tracker.DefinedRegion import DefinedRegion
 from src.pyside.PysideUi import PysideUi
 from src.util.utils import generate_select_quadrilateral_instructions
 
-from .defined_region import DefinedRegion
+from .label_config import LabelConfig
 
 
 class ROISelectionPipeline:
     """
-    UI-only pipeline.
-    Responsible ONLY for:
-        - Asking user for 4 points per label
-        - Producing DefinedRegion objects
+    UI-only pipeline. Prompts the user to select 4 corners per label in
+    sequence and produces DefinedRegion objects. Knows nothing about
+    tracking internals — strategy and tuning live in LabelConfig.
     """
 
     def __init__(
         self,
         first_frame: np.ndarray,
         ui: PysideUi,
-        region_output_factories: dict[str, Callable],
-        on_finished: Callable | None = None,
+        label_configs: dict[str, LabelConfig],
+        on_finished: Callable[[list[DefinedRegion]], None] | None = None,
     ):
         self.first_frame = first_frame.copy()
         self.ui = ui
-        self.region_output_factories = region_output_factories
-
-        self.labels = list(region_output_factories.keys())
+        self.label_configs = label_configs
+        self.labels = list(label_configs.keys())
         self.region_index = 0
-
         self.defined_regions: list[DefinedRegion] = []
-
         self._on_finished = on_finished
 
     def start(self):
@@ -45,43 +41,33 @@ class ROISelectionPipeline:
             return
 
         label = self.labels[self.region_index]
-
         self.ui.get_n_points_async(
             self.first_frame,
             generate_select_quadrilateral_instructions(label),
             callback=self._on_corners_selected,
         )
 
-    def _on_corners_selected(self, positions):
-        if self.region_index >= len(self.labels):
-            return
+    def _on_corners_selected(self, positions: list):
         if len(positions) != 4:
             raise ValueError(
-                "Exactly 4 points required."
-            )  # This should never happen since the UI enforces it (currently, but UI might change behaviour), but just in case...
+                f"Expected exactly 4 points for quad selection, got {len(positions)}"
+            )
 
         label = self.labels[self.region_index]
-        factory = self.region_output_factories[label]
-
-        quad = Quadrilateral(positions)
-        quad_np = quad.numpy().astype(np.float32)
+        config = self.label_configs[label]
 
         self.defined_regions.append(
             DefinedRegion(
                 label=label,
-                quad_np=quad_np,
-                output_factory=factory,
-                use_whole_frame=label
-                == "piste",  # Piste region is used for tracking only, so we want to allow features from the whole frame, not just the cropped region
+                quad_np=Quadrilateral(positions).numpy(),
+                output_factory=config.output_factory,
+                tracking_strategy=config.tracking_strategy,
+                mask_margin=config.mask_margin,
             )
         )
 
         self.region_index += 1
         self._ask_next_region()
-
-    # ============================================================
-    # FINISH
-    # ============================================================
 
     def _finish(self):
         if self._on_finished:
