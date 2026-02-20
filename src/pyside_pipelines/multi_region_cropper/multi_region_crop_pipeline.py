@@ -3,6 +3,7 @@ from typing import Callable, List
 
 import cv2
 import numpy as np
+from PySide6.QtCore import QTimer
 
 from src.model import Quadrilateral
 from src.model.tracker import OrbTracker
@@ -64,7 +65,10 @@ class MultiRegionProcessingPipeline:
         for region in defined_regions:
             # Register with tracker
             self.tracker.add_target(
-                region.label, first_frame, Quadrilateral(region.quad_np)
+                region.label,
+                first_frame,
+                Quadrilateral(region.quad_np),
+                use_whole_frame=region.use_whole_frame,
             )
             # Build outputs
             outputs = region.output_factory(region.quad_np, fps)
@@ -75,18 +79,7 @@ class MultiRegionProcessingPipeline:
     # ============================================================
 
     def start(self):
-        if self.ui:
-            self._schedule(self._advance)
-        else:
-            self._run_headless()
-
-    def _run_headless(self):
-        while not self.cancelled:
-            ret, frame = self.cap.read()
-            if not ret:
-                break
-            self._process_frame(frame)
-        self._finish()
+        self._schedule(self._advance)
 
     def _advance(self):
         if self.cancelled:
@@ -110,7 +103,7 @@ class MultiRegionProcessingPipeline:
             self.ui.set_fresh_frame(frame)
             self.ui.plot_points(points, (0, 255, 0))
 
-            self._schedule(self._advance)
+        self._schedule(self._advance)
 
     # -------------------------
     # Frame processing
@@ -131,8 +124,11 @@ class MultiRegionProcessingPipeline:
     # Utilities
     # -------------------------
     def _schedule(self, fn: Callable):
-        if self.ui and not self.cancelled:
-            self.ui.schedule(fn)
+        if not self.cancelled:
+            if self.ui:
+                self.ui.schedule(fn)
+            else:
+                QTimer.singleShot(0, fn)
 
     # -------------------------
     # Cleanup

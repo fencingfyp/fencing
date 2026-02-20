@@ -9,3 +9,4 @@ class DefinedRegion:
     label: str
     quad_np: np.ndarray
     output_factory: Callable[[np.ndarray, float], list]
+    use_whole_frame: bool = False

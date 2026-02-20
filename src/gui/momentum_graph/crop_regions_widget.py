@@ -1,3 +1,4 @@
+import time
 from typing import override
 
 import cv2
@@ -86,11 +87,11 @@ class CropRegionsWidget(BaseTaskWidget):
                     self.match_context.file_manager.get_path(FileRole.RAW_PISTE_QUADS),
                     quad,
                 ),
-                # RectifiedVideoOutput(
-                #     self.match_context.file_manager.get_path(FileRole.CROPPED_PISTE),
-                #     fps,
-                #     quad,
-                # ),
+                RectifiedVideoOutput(
+                    self.match_context.file_manager.get_path(FileRole.CROPPED_PISTE),
+                    fps,
+                    quad,
+                ),
             ],
         }
 
@@ -113,6 +114,7 @@ class CropRegionsWidget(BaseTaskWidget):
     # Callback from ROISelectionPipeline
     # -------------------------
     def _on_rois_defined(self, defined_regions):
+        self.t0 = time.time()
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset video to start
         self.processing_pipeline = MultiRegionProcessingPipeline(
             cap=self.cap,
@@ -133,6 +135,7 @@ class CropRegionsWidget(BaseTaskWidget):
         self.is_running = False
         self.run_completed.emit(MomentumGraphTasksToIds.CROP_REGIONS)
         self.ui.write("Cropping regions completed.")
+        print(f"CropRegionsWidget finished in {time.time() - self.t0:.2f} seconds.")
 
     @override
     def cancel(self):
@@ -158,7 +161,7 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
         match_context = MatchContext()
         widget = CropRegionsWidget(match_context)
-        match_context.set_file("matches_data/sabre_3.mp4")
+        match_context.set_file("matches_data/sabre_2.mp4")
         widget.show()
         sys.exit(app.exec())
 

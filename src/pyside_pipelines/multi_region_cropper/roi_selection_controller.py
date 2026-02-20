@@ -71,6 +71,8 @@ class ROISelectionPipeline:
                 label=label,
                 quad_np=quad_np,
                 output_factory=factory,
+                use_whole_frame=label
+                == "piste",  # Piste region is used for tracking only, so we want to allow features from the whole frame, not just the cropped region
             )
         )
 
