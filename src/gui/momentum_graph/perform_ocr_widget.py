@@ -7,8 +7,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 
 from scripts.momentum_graph.perform_ocr import (
     DO_OCR_EVERY_N_FRAMES,
-    extract_score_frame_from_frame,
-    process_image,
+    extract_roi,
     regularise_rectangle,
 )
 from src.gui.momentum_graph.base_task_widget import BaseTaskWidget
@@ -27,7 +26,6 @@ from src.util.utils import generate_select_quadrilateral_instructions
 class PerformOcrWidget(BaseTaskWidget):
     def __init__(self, match_context, parent=None):
         super().__init__(match_context, parent)
-
         self.uiTextLabel.setText("Press 'Run' to start OCR processing.")
 
     @override
@@ -39,7 +37,7 @@ class PerformOcrWidget(BaseTaskWidget):
         ret, frame = self.cap.read()
         if not ret:
             raise RuntimeError("Cannot read first frame from video.")
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to start
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
         self.ui.set_fresh_frame(frame)
         self.ui.write("Press 'Run' to start OCR processing.")
@@ -70,8 +68,7 @@ class PerformOcrWidget(BaseTaskWidget):
                     FileRole.RAW_SCORES
                 ),
             },
-            threshold_boundary=120,
-            use_seven_segment=False,
+            use_seven_segment=True,
         )
         self.controller.finished.connect(self._on_finished)
         self.controller.start()
@@ -88,14 +85,12 @@ class OcrController(QObject):
     def __init__(
         self,
         ui: PysideUi,
-        file_paths: str,
-        threshold_boundary: int = 120,
+        file_paths: dict,
         use_seven_segment: bool = False,
     ):
         super().__init__()
         self.ui = ui
         self.file_paths = file_paths
-        self.threshold_boundary = threshold_boundary
         self.seven_segment = use_seven_segment
 
         self.cap: Optional[cv2.VideoCapture] = None
@@ -114,7 +109,7 @@ class OcrController(QObject):
         self.csv_file = None
 
     def start(self):
-        """Initialize video and request score positions."""
+        """Validate videos, open capture, and request ROI selection from user."""
         input_video_path = self.file_paths["cropped_video"]
         original_video_path = self.file_paths["video"]
         self._validate_input_video(original_video_path, input_video_path)
@@ -127,7 +122,6 @@ class OcrController(QObject):
         if not ret:
             raise RuntimeError("Cannot read first frame from video.")
 
-        # Ask for left score positions
         self.ui.get_n_points_async(
             frame,
             generate_select_quadrilateral_instructions("left fencer score display"),
@@ -136,7 +130,6 @@ class OcrController(QObject):
 
     def _on_left_score_positions(self, frame, pts):
         self.left_score_positions = regularise_rectangle(pts)
-
         self.ui.get_n_points_async(
             frame,
             generate_select_quadrilateral_instructions("right fencer score display"),
@@ -172,17 +165,13 @@ class OcrController(QObject):
 
         self.ui.set_fresh_frame(frame)
 
-        l_frame = extract_score_frame_from_frame(frame, self.left_score_positions)
-        r_frame = extract_score_frame_from_frame(frame, self.right_score_positions)
-
-        l_score = r_score = l_conf = r_conf = None
         if self.current_frame_id % DO_OCR_EVERY_N_FRAMES == 0:
-            l_score, l_conf = self.ocr_reader.read(
-                process_image(l_frame, self.threshold_boundary, self.seven_segment)
-            )
-            r_score, r_conf = self.ocr_reader.read(
-                process_image(r_frame, self.threshold_boundary, self.seven_segment)
-            )
+            l_roi = extract_roi(frame, self.left_score_positions)
+            r_roi = extract_roi(frame, self.right_score_positions)
+
+            l_score, l_conf = self.ocr_reader.read(l_roi)
+            r_score, r_conf = self.ocr_reader.read(r_roi)
+
             self.csv_writer.writerow(
                 [self.current_frame_id, l_score, r_score, l_conf, r_conf]
             )
@@ -207,11 +196,9 @@ class OcrController(QObject):
     def cleanup(self):
         if self.timer.isActive():
             self.timer.stop()
-
         if self.cap:
             self.cap.release()
             self.cap = None
-
         if self.csv_file:
             self.csv_file.close()
             self.csv_file = None
@@ -240,6 +227,7 @@ class OcrController(QObject):
             raise IOError(f"Cannot open original video {original_path}")
         original_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         cap.release()
+
         if cropped_frames != original_frames:
             raise ValueError(
                 "Cropped video frame count does not match original video frame count."
@@ -257,17 +245,12 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
         match_context = MatchContext()
         widget = PerformOcrWidget(match_context)
-        match_context.set_file("matches_data/sabre_3.mp4")
+        match_context.set_file("matches_data/sabre_2.mp4")
         widget.show()
         sys.exit(app.exec())
 
-    # Run the profiler and save stats to a file
     cProfile.run("main()", "profile.stats")
-
-    # Load stats
     stats = pstats.Stats("profile.stats")
-    stats.strip_dirs()  # remove extraneous path info
-    stats.sort_stats("tottime")  # sort by total time
-
-    # Print only top 10 functions
+    stats.strip_dirs()
+    stats.sort_stats("tottime")
     stats.print_stats(10)

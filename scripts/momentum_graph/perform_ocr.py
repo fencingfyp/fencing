@@ -1,6 +1,20 @@
+"""
+perform_ocr.py
+--------------
+Reads fencing scores from a planar-tracked, cropped scoreboard video using OCR.
+The user manually selects two quadrilateral ROIs (left and right score displays)
+on the first frame. A quick calibration check is performed before full processing.
+
+All image preprocessing is delegated to ScorePreprocessor via EasyOcrReader.
+
+Usage:
+    python perform_ocr.py <output_folder> [--output-video] [--seven-segment] [--demo]
+"""
+
 import argparse
 import csv
 import os
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -20,390 +34,326 @@ from src.util.utils import (
     generate_select_quadrilateral_instructions,
 )
 
-DO_OCR_EVERY_N_FRAMES = (
-    5  # Set >1 to skip frames for speed (but less frequent score updates)
-)
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+DO_OCR_EVERY_N_FRAMES = 5
 MIN_WINDOW_HEIGHT = 780
 
 OUTPUT_VIDEO_NAME = "perform_ocr_output.mp4"
-OUTPUT_OCR_L_WINDOW = "ocr_left.mp4"
-OUTPUT_OCR_R_WINDOW = "ocr_right.mp4"
+OUTPUT_OCR_L_NAME = "ocr_left.mp4"
+OUTPUT_OCR_R_NAME = "ocr_right.mp4"
+
+CALIBRATION_N_SAMPLES = 10
+CALIBRATION_MIN_GAP_SECONDS = 7
+CALIBRATION_ACCURACY_THRESHOLD = 0.9
 
 
-def fontify_7segment(binary):
-    # assume binary: 0/255, white digits on black background
-
-    # --- Step 1: vertical erosion to thin right bars (helps distinguish 9 from 4)
-    kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 2))
-    thinned = cv2.erode(binary, kernel_v, iterations=1)
-
-    # --- Step 2: horizontal dilation to strengthen crossbars (makes 4 more distinct)
-    kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 1))
-    enhanced = cv2.dilate(thinned, kernel_h, iterations=1)
-
-    # --- Step 3: gentle closing to fill small segment gaps
-    kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 5))
-    closed = cv2.morphologyEx(enhanced, cv2.MORPH_CLOSE, kernel_close)
-
-    # --- Step 4: optional small opening to remove faint inactive segments
-    # kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-    # cleaned = cv2.morphologyEx(closed, cv2.MORPH_OPEN, kernel_open)
-
-    # --- Step 5: re-binarise to ensure crisp edges
-    final = cv2.threshold(closed, 128, 255, cv2.THRESH_BINARY)[1]
-
-    return final
+# ---------------------------------------------------------------------------
+# ROI extraction
+# ---------------------------------------------------------------------------
 
 
-def row_mapper(row: list[str]) -> dict[str, any]:
-    # Convert row to dict
-    id = row[1]
-    box = list(map(int, list(map(float, row[2:10]))))
-    # map to tuple of 4 points
-    box = [(box[0], box[1]), (box[2], box[3]), (box[4], box[5]), (box[6], box[7])]
-
-    return {
-        "id": id,
-        "box": box,  # [x1, y1, x2, y2, x3, y3, x4, y4]
-    }
+def regularise_rectangle(pts: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Convert an arbitrary quadrilateral selection to an axis-aligned bounding box."""
+    return convert_from_rect_to_box(convert_from_box_to_rect(pts))
 
 
-def get_output_header_row() -> list[str]:
-    return [
-        "frame_id",
-        "left_score",
-        "right_score",
-        "left_confidence",
-        "right_confidence",
-    ]
+def extract_roi(frame: np.ndarray, positions: list[tuple[int, int]]) -> np.ndarray:
+    """Crop the score ROI from a frame given its bounding box positions."""
+    x, y, w, h = convert_from_box_to_rect(positions)
+    return frame[int(y) : int(y + h), int(x) : int(x + w)]
 
 
-def validate_input_video(original_path: str, cropped_path: str) -> bool:
-    # Check if cropped video exists and is valid
-    if not os.path.exists(cropped_path):
-        raise IOError(
-            f"Error: Cropped video not found at {cropped_path}. Please run cropping first."
-        )
-
-    cap = cv2.VideoCapture(cropped_path)
-    if not cap.isOpened():
-        raise IOError(f"Error: Could not open cropped video at {cropped_path}.")
-
-    cropped_total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    cap.release()
-
-    orig_cap = cv2.VideoCapture(original_path)
-    if not orig_cap.isOpened():
-        raise IOError(f"Error: Could not open original video at {original_path}.")
-
-    original_total_frames = int(orig_cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    orig_cap.release()
-
-    if cropped_total_frames != original_total_frames:
-        raise ValueError(
-            f"Error: Cropped video frame count ({cropped_total_frames}) does not match original video frame count ({original_total_frames}). Please re-crop the video."
-        )
-
-
-def process_image(image, threshold_boundary, is_seven_segment=False):
-    gray_up = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    gray_up = cv2.copyMakeBorder(
-        gray_up, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=[0, 0, 0]
+def select_roi(ui: OpenCvUi, frame: np.ndarray, label: str) -> list[tuple[int, int]]:
+    """Ask the user to select a quadrilateral ROI for a named score display."""
+    return regularise_rectangle(
+        ui.get_n_points(frame, generate_select_quadrilateral_instructions(label))
     )
 
-    # Adaptive threshold (handles varying lighting)
-    gray_up = cv2.threshold(gray_up, threshold_boundary, 255, cv2.THRESH_BINARY)[1]
-    # if is_seven_segment:
-    #     gray_up = fontify_7segment(gray_up)
 
-    return cv2.cvtColor(gray_up, cv2.COLOR_GRAY2BGR)
+# ---------------------------------------------------------------------------
+# Video writers
+# ---------------------------------------------------------------------------
 
 
-def get_parse_args():
-    parser = argparse.ArgumentParser(description="Use OCR to read scoreboard")
-    parser.add_argument(
-        "output_folder", help="Path to output folder for intermediate/final products"
+def create_video_writers(
+    output_folder: str,
+    fps: float,
+    ui: OpenCvUi,
+    left_positions: list,
+    right_positions: list,
+) -> tuple[cv2.VideoWriter, cv2.VideoWriter, cv2.VideoWriter]:
+    """Instantiate video writers for the main view and both OCR preview windows."""
+    main_writer = setup_output_video_io(
+        os.path.join(output_folder, OUTPUT_VIDEO_NAME),
+        fps,
+        ui.get_output_dimensions(),
     )
-    parser.add_argument(
-        "--output-video",
-        action="store_true",
-        help="If set, outputs video with OCR results",
+    l_x, l_y, l_w, l_h = convert_from_box_to_rect(left_positions)
+    r_x, r_y, r_w, r_h = convert_from_box_to_rect(right_positions)
+    l_writer = setup_output_video_io(
+        os.path.join(output_folder, OUTPUT_OCR_L_NAME), fps, (int(l_w), int(l_h))
     )
-    parser.add_argument(
-        "--threshold-boundary",
-        type=int,
-        help="Threshold for binary segmentation",
-        default=120,
+    r_writer = setup_output_video_io(
+        os.path.join(output_folder, OUTPUT_OCR_R_NAME), fps, (int(r_w), int(r_h))
     )
-    parser.add_argument(
-        "--seven-segment",
-        action="store_true",
-        help="Use seven-segment digit recognition mode",
-    )
-    parser.add_argument(
-        "--demo", action="store_true", help="If set, doesn't output any csv"
-    )
-    return parser.parse_args()
+    return main_writer, l_writer, r_writer
 
 
-def random_with_min_gap(total_frames, n, min_gap):
+# ---------------------------------------------------------------------------
+# Calibration
+# ---------------------------------------------------------------------------
+
+
+def _sample_frame_indices(total_frames: int, fps: float) -> list[int]:
+    """Pick up to CALIBRATION_N_SAMPLES frames spaced at least CALIBRATION_MIN_GAP_SECONDS apart."""
+    min_gap = int(fps * CALIBRATION_MIN_GAP_SECONDS)
     selected = []
     attempts = 0
-    while len(selected) < n and attempts < 10_000:
+    while len(selected) < CALIBRATION_N_SAMPLES and attempts < 10_000:
         candidate = np.random.randint(0, total_frames)
         if all(abs(candidate - s) >= min_gap for s in selected):
             selected.append(candidate)
         attempts += 1
-    return np.sort(selected)
-
-
-def ask_user_confirmation(
-    ui: OpenCvUi, frame, threshold_boundary, ocr_reader, n_correct, n_total
-) -> tuple[int, int, bool]:
-    score, conf = extract_score_from_frame(frame, threshold_boundary, ocr_reader)
-    processed = process_image(frame, threshold_boundary, ocr_reader.seven_segment)
-    ui.clear_frame()
-    ui.set_fresh_frame(processed)
-    ui.write_to_ui(
-        f"OCR Left Score: {score} (Conf: {conf:.2f}), press 1 if it's correct, 2 if not, 3 to skip"
-    )
-    ui.show_frame()
-    action = ui.get_user_input(
-        0,
-        [UiCodes.CUSTOM_1, UiCodes.CUSTOM_2, UiCodes.CUSTOM_3, UiCodes.QUIT],
-        must_be_valid=True,
-    )
-    if action == UiCodes.CUSTOM_1:
-        return n_correct + 1, n_total + 1, False
-    elif action == UiCodes.CUSTOM_2:
-        return n_correct, n_total + 1, False
-    elif action == UiCodes.CUSTOM_3:
-        return n_correct, n_total, False
-    return n_correct, n_total, True
+    return sorted(selected)
 
 
 def calibrate_ocr(
     ui: OpenCvUi,
-    ocr_reader,
-    cap,
-    threshold_boundary,
-    total_frames,
-    left_score_positions,
-    right_score_positions,
-    threshold_confidence=0.9,
-):
-    print("Performing OCR precheck on random frames...")
-    sample_frame_indices = random_with_min_gap(
-        total_frames, 15, cap.get(cv2.CAP_PROP_FPS) * 7
-    )  # 15 frames, at least 7 seconds apart
-    n_correct = 0
-    n_total = 0
-    for frame_idx in sample_frame_indices:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+    cap: cv2.VideoCapture,
+    ocr_reader: EasyOcrReader,
+    total_frames: int,
+    fps: float,
+    left_positions: list,
+    right_positions: list,
+) -> float:
+    """
+    Show the user a sample of OCR results on random frames and ask for confirmation.
+    Returns the observed accuracy. Warns if below threshold.
+    """
+    print("Running OCR calibration check on random frames...")
+    indices = _sample_frame_indices(total_frames, fps)
+    n_correct = n_total = 0
+
+    for idx in indices:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
         ret, frame = cap.read()
         if not ret:
             continue
-        frame = cv2.resize(
-            frame, (ui.display_width, ui.display_height), interpolation=cv2.INTER_CUBIC
+
+        positions = left_positions if idx % 2 == 0 else right_positions
+        roi = extract_roi(frame, positions)
+        score, conf = ocr_reader.read(roi)
+
+        ui.clear_frame()
+        ui.set_fresh_frame(ocr_reader.preprocessor(roi))
+        ui.write_to_ui(
+            f"Score: {score}  Conf: {conf:.2f} | "
+            "1=correct  2=wrong  3=skip  Q=quit calibration"
         )
-        if frame_idx % 2 == 0:
-            frame = extract_score_frame_from_frame(frame, left_score_positions)
-        else:
-            frame = extract_score_frame_from_frame(frame, right_score_positions)
-        n_correct, n_total, early_break = ask_user_confirmation(
-            ui, frame, threshold_boundary, ocr_reader, n_correct, n_total
+        ui.show_frame()
+
+        action = ui.get_user_input(
+            0,
+            [UiCodes.CUSTOM_1, UiCodes.CUSTOM_2, UiCodes.CUSTOM_3, UiCodes.QUIT],
+            must_be_valid=True,
         )
-        if early_break:
+        if action == UiCodes.QUIT:
             break
-    accuracy = (n_correct / n_total) if n_total > 0 else 0.0
-    print(
-        f"OCR Precheck complete. Accuracy: {accuracy*100:.2f}% ({n_correct}/{n_total})"
-    )
-    if accuracy < threshold_confidence:
+        elif action == UiCodes.CUSTOM_3:
+            continue
+        n_total += 1
+        if action == UiCodes.CUSTOM_1:
+            n_correct += 1
+
+    accuracy = n_correct / n_total if n_total > 0 else 0.0
+    print(f"Calibration: {accuracy*100:.1f}% ({n_correct}/{n_total})")
+    if n_total > 0 and accuracy < CALIBRATION_ACCURACY_THRESHOLD:
         print(
-            "Warning: OCR accuracy below threshold. Consider recalibrating or adjusting settings."
+            f"Warning: accuracy {accuracy*100:.1f}% is below "
+            f"{CALIBRATION_ACCURACY_THRESHOLD*100:.0f}%. "
+            "Consider adjusting the ROI selection or lighting."
+        )
+    return accuracy
+
+
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+
+
+def validate_videos(original_path: str, cropped_path: str) -> None:
+    """Ensure both videos exist and have the same frame count."""
+    for path, label in [(cropped_path, "Cropped"), (original_path, "Original")]:
+        if not os.path.exists(path):
+            raise IOError(f"{label} video not found: {path}")
+        cap = cv2.VideoCapture(path)
+        if not cap.isOpened():
+            raise IOError(f"Cannot open {label} video: {path}")
+        cap.release()
+
+    def frame_count(p):
+        c = cv2.VideoCapture(p)
+        n = int(c.get(cv2.CAP_PROP_FRAME_COUNT))
+        c.release()
+        return n
+
+    n_orig = frame_count(original_path)
+    n_crop = frame_count(cropped_path)
+    if n_orig != n_crop:
+        raise ValueError(
+            f"Frame count mismatch: original={n_orig}, cropped={n_crop}. "
+            "Please re-crop the video."
         )
 
 
-def regularise_rectangle(pts: list[tuple[int, int]]) -> list[tuple[int, int]]:
-    return convert_from_rect_to_box(convert_from_box_to_rect(pts))
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
 
 
-def main():
-    args = get_parse_args()
-    output_video = args.output_video
-    output_folder = args.output_folder
-    threshold_boundary = args.threshold_boundary
-    use_seven_segment = args.seven_segment
-    demo_mode = args.demo
-
-    input_video_path = os.path.join(
-        output_folder,
-        CROPPED_SCOREBOARD_VIDEO_NAME,
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="OCR fencing scoreboard scores")
+    parser.add_argument(
+        "output_folder", help="Folder containing input videos and for outputs"
     )
-    original_video_path = os.path.join(output_folder, ORIGINAL_VIDEO_NAME)
-    validate_input_video(original_video_path, input_video_path)
-
-    output_csv_path = setup_output_file(output_folder, OCR_OUTPUT_CSV_NAME)
-
-    cap, fps, original_width, original_height, frame_count = setup_input_video_io(
-        input_video_path
+    parser.add_argument(
+        "--output-video", action="store_true", help="Write OCR preview videos"
     )
-    FULL_DELAY = int(1000 / fps)
-    FAST_FORWARD = min(FULL_DELAY // 16, 1)
-    print(f"Video FPS: {fps}, Frame delay: {FULL_DELAY} ms")
+    parser.add_argument(
+        "--seven-segment", action="store_true", help="Seven-segment digit mode"
+    )
+    parser.add_argument(
+        "--demo", action="store_true", help="Run without writing CSV output"
+    )
+    return parser.parse_args()
 
-    # UI
-    slow = False
-    early_exit = False
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    args = parse_args()
+
+    cropped_path = os.path.join(args.output_folder, CROPPED_SCOREBOARD_VIDEO_NAME)
+    original_path = os.path.join(args.output_folder, ORIGINAL_VIDEO_NAME)
+    validate_videos(original_path, cropped_path)
+
+    output_csv_path = setup_output_file(args.output_folder, OCR_OUTPUT_CSV_NAME)
+    cap, fps, width, height, frame_count = setup_input_video_io(cropped_path)
+
     ui = OpenCvUi(
         "Performing OCR",
-        width=int(original_width),
-        height=int(original_height),
+        width=int(width),
+        height=int(height),
         display_height=MIN_WINDOW_HEIGHT,
     )
 
-    # Read first frame
-    ret, frame = cap.read()
+    # --- ROI selection ---
+    ret, first_frame = cap.read()
     if not ret:
-        print("Error: Could not read first frame.")
-        return
+        raise RuntimeError("Cannot read first frame.")
 
-    left_score_positions = regularise_rectangle(
-        ui.get_n_points(
-            frame,
-            generate_select_quadrilateral_instructions("left fencer score display"),
-        )
-    )
-    right_score_positions = regularise_rectangle(
-        ui.get_n_points(
-            frame,
-            generate_select_quadrilateral_instructions("right fencer score display"),
-        )
-    )
+    left_positions = select_roi(ui, first_frame, "left fencer score")
+    right_positions = select_roi(ui, first_frame, "right fencer score")
 
-    # Initialise OCR
-    device = get_device()
-    print(f"Using device: {device}")
-    ocr_reader = EasyOcrReader(device, seven_segment=use_seven_segment)
+    # --- OCR reader ---
+    ocr_reader = EasyOcrReader(get_device(), seven_segment=args.seven_segment)
 
+    # --- Calibration ---
     calibrate_ocr(
-        ui,
-        ocr_reader,
-        cap,
-        threshold_boundary,
-        frame_count,
-        left_score_positions,
-        right_score_positions,
+        ui, cap, ocr_reader, frame_count, fps, left_positions, right_positions
     )
 
-    ocr_window_l = "OCR Preview L"
-    cv2.namedWindow(ocr_window_l, cv2.WINDOW_NORMAL)
-    ocr_window_r = "OCR Preview R"
-    cv2.namedWindow(ocr_window_r, cv2.WINDOW_NORMAL)
+    # --- Preview windows ---
+    cv2.namedWindow("OCR Left", cv2.WINDOW_NORMAL)
+    cv2.namedWindow("OCR Right", cv2.WINDOW_NORMAL)
 
-    video_writer = None
-    if output_video:
-        output_video_path = os.path.join(output_folder, OUTPUT_VIDEO_NAME)
-        ocr_window_l_path = os.path.join(output_folder, OUTPUT_OCR_L_WINDOW)
-        ocr_window_r_path = os.path.join(output_folder, OUTPUT_OCR_R_WINDOW)
-        video_writer = setup_output_video_io(
-            output_video_path, fps, ui.get_output_dimensions()
+    # --- Optional video writers ---
+    video_writer = l_writer = r_writer = None
+    if args.output_video:
+        video_writer, l_writer, r_writer = create_video_writers(
+            args.output_folder, fps, ui, left_positions, right_positions
         )
-        _, _, w1, h1 = convert_from_box_to_rect(left_score_positions)
-        _, _, w2, h2 = convert_from_box_to_rect(right_score_positions)
-        ocr_window_l_writer = setup_output_video_io(ocr_window_l_path, fps, (w1, h1))
-        ocr_window_r_writer = setup_output_video_io(ocr_window_r_path, fps, (w2, h2))
 
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to start
+    # --- Main loop ---
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
     frame_id = 0
-    mode = "a" if demo_mode else "w"
-    with open(output_csv_path, mode, newline="") as f:
-        csv_writer = csv.writer(f)
-        header_row = get_output_header_row()
-        if not demo_mode:
-            csv_writer.writerow(header_row)
+    l_score = r_score = None
+    l_conf = r_conf = 0.0
+    slow = False
+
+    FULL_DELAY = int(1000 / fps)
+    FAST_DELAY = max(FULL_DELAY // 16, 1)
+
+    csv_file = open(output_csv_path, "w", newline="") if not args.demo else None
+    csv_writer = None
+    if csv_file:
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(
+            [
+                "frame_id",
+                "left_score",
+                "right_score",
+                "left_confidence",
+                "right_confidence",
+            ]
+        )
+
+    try:
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
 
-            ui.set_fresh_frame(frame)
-            ui.refresh_frame()
-
-            l_frame = extract_score_frame_from_frame(
-                ui.get_current_frame(), left_score_positions
-            )
-            r_frame = extract_score_frame_from_frame(
-                ui.get_current_frame(), right_score_positions
-            )
+            l_roi = extract_roi(frame, left_positions)
+            r_roi = extract_roi(frame, right_positions)
 
             if frame_id % DO_OCR_EVERY_N_FRAMES == 0:
-                l_score, l_conf = extract_score_from_frame(
-                    l_frame, threshold_boundary, ocr_reader, ocr_window_l
-                )
-                r_score, r_conf = extract_score_from_frame(
-                    r_frame, threshold_boundary, ocr_reader, ocr_window_r
-                )
-
-                if not demo_mode:
+                l_score, l_conf = ocr_reader.read(l_roi)
+                r_score, r_conf = ocr_reader.read(r_roi)
+                cv2.imshow("OCR Left", ocr_reader.preprocessor(l_roi))
+                cv2.imshow("OCR Right", ocr_reader.preprocessor(r_roi))
+                if csv_writer:
                     csv_writer.writerow([frame_id, l_score, r_score, l_conf, r_conf])
 
+            ui.set_fresh_frame(frame)
+            ui.refresh_frame()
             ui.write_to_ui(
-                f"Left score: {l_score} Right score: {r_score} | "
-                f"OCR confidence L: {l_conf:.2f} R: {r_conf:.2f}"
+                f"L: {l_score} ({l_conf:.2f})  R: {r_score} ({r_conf:.2f})  "
+                f"| frame {frame_id}/{frame_count}"
             )
             ui.show_frame()
 
-            if output_video:
-                ocr_window_l_writer.write(
-                    process_image(l_frame, threshold_boundary, use_seven_segment)
-                )
-                ocr_window_r_writer.write(
-                    process_image(r_frame, threshold_boundary, use_seven_segment)
-                )
+            if args.output_video:
                 video_writer.write(ui.current_frame)
+                l_writer.write(ocr_reader.preprocessor(l_roi))
+                r_writer.write(ocr_reader.preprocessor(r_roi))
 
-            delay: int = FULL_DELAY if slow else FAST_FORWARD
-            action = ui.get_user_input(delay)
+            action = ui.get_user_input(FULL_DELAY if slow else FAST_DELAY)
             if action == UiCodes.TOGGLE_SLOW:
                 slow = not slow
-                print(f"Slow mode {'enabled' if slow else 'disabled'}.")
-            elif action == UiCodes.QUIT:  # q or Esc to quit
+            elif action == UiCodes.QUIT:
                 break
             elif action == UiCodes.PAUSE:
-                early_exit = ui.handle_pause()
+                if ui.handle_pause():
+                    break
 
-            if early_exit:
-                break
             frame_id += 1
 
-        if output_video:
-            video_writer.release()
-            ocr_window_l_writer.release()
-            ocr_window_r_writer.release()
-
+    finally:
         cap.release()
-        ui.close_additional_windows()
-        cv2.destroyWindow(ocr_window_l)
-        cv2.destroyWindow(ocr_window_r)
-
-
-def extract_score_frame_from_frame(frame, score_positions):
-    x, y, w, h = convert_from_box_to_rect(score_positions)
-    x, y, w, h = int(x), int(y), int(w), int(h)
-    out = frame[y : y + h, x : x + w]
-    return out
-
-
-def extract_score_from_frame(
-    frame, threshold_boundary, ocr_reader: EasyOcrReader, window_name=None
-):
-    processed = process_image(frame, threshold_boundary, ocr_reader.seven_segment)
-    if window_name:
-        cv2.imshow(window_name, processed)
-    return ocr_reader.read(processed)  # returns score, confidence
+        if csv_file:
+            csv_file.close()
+        if args.output_video:
+            for w in (video_writer, l_writer, r_writer):
+                if w:
+                    w.release()
+        cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":

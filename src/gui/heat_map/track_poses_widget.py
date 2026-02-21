@@ -37,7 +37,7 @@ class TrackPosesWidget(BaseTaskWidget):
         self.run_started.emit(HeatMapTasksToIds.TRACK_POSES)
 
         input_video_path = self.match_context.file_manager.get_original_video()
-        model_path = os.path.join("models", "yolo", "yolo11l-pose.pt")
+        model_path = os.path.join("models", "yolo", "yolo26n-pose.pt")
 
         # Create controller
         self.controller = PoseToCsvController(
@@ -108,12 +108,13 @@ class PoseToCsvController:
         """Initialise resources and start processing loop."""
 
         self.ui.write("Loading YOLO model...")
-        self.model = YOLO(self.model_path)
+        self.model = YOLO(self.model_path, task="pose")
 
         self.cap = cv2.VideoCapture(self.input_path)
         if not self.cap.isOpened():
             self.ui.write(f"Error opening video file: {self.input_path}")
             return
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 16)
 
         self.csv_file = open(self.output_path, "w", newline="")
         self.writer = csv.writer(self.csv_file)
@@ -140,15 +141,22 @@ class PoseToCsvController:
             self.on_finished()
             return
 
-        results = self.model.track(frame, persist=True, verbose=False)
+        results = self.model.track(
+            frame,
+            persist=True,
+            verbose=False,
+            device=self.device,
+            tracker="bytetrack.yaml",
+            half=True,
+        )
 
         # Write CSV rows
         rows = extract_rows(results, self.frame_idx)
         if rows:
             self.writer.writerows(rows)
 
-        annotated_frame = results[0].plot()
-        self.ui.set_fresh_frame(annotated_frame)
+        # annotated_frame = results[0].plot()
+        self.ui.set_fresh_frame(frame)
 
         self.frame_idx += 1
         self.ui.schedule(self._step)
