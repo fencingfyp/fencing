@@ -55,6 +55,7 @@ class MultiRegionProcessingPipeline:
         tracker: TargetTracker | None = None,
     ):
         self.cap = cap
+        self.total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.defined_regions = defined_regions
         self.ui = ui
         self.on_finished = on_finished
@@ -98,13 +99,8 @@ class MultiRegionProcessingPipeline:
         self._process_frame(frame)
 
         if self.ui:
-            points = []
-            for state in self.region_states:
-                pts = self.tracker.get_target_pts(state.label)
-                if pts is not None:
-                    points.extend(pts.tolist())
-            self.ui.set_fresh_frame(frame)
-            self.ui.plot_points(points, (0, 255, 0))
+            percent = (self.frame_id / self.total_frames) * 100
+            self.ui.write(f"Processing ({percent:.1f}%)", silent=True)
 
         self._schedule(self._advance)
 

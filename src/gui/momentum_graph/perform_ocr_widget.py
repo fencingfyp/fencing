@@ -1,8 +1,25 @@
+"""
+perform_ocr_widget.py
+---------------------
+PySide6 widget for batched OCR processing of fencing scoreboard videos.
+
+Processing is split into two phases driven by a single QTimer to avoid
+threading and lock contention:
+
+  Phase 1 — COLLECTING: iterate all frames, extract and preprocess ROIs,
+             accumulate into a preallocated results array alongside frame IDs.
+  Phase 2 — INFERRING: drain the accumulated crops in batches through
+             EasyOCR (single GPU call per batch), write results to CSV
+             in strict frame order.
+"""
+
 import csv
 import os
+from enum import Enum, auto
 from typing import Optional, override
 
 import cv2
+import numpy as np
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from scripts.momentum_graph.perform_ocr import (
@@ -21,6 +38,14 @@ from src.pyside.PysideUi import PysideUi
 from src.util.gpu import get_device
 from src.util.io import setup_input_video_io, setup_output_file
 from src.util.utils import generate_select_quadrilateral_instructions
+
+MAX_FRAMES = 200_000
+TARGET_CROPS_PER_BATCH = 16
+
+
+class Phase(Enum):
+    COLLECTING = auto()
+    INFERRING = auto()
 
 
 class PerformOcrWidget(BaseTaskWidget):
@@ -94,19 +119,38 @@ class OcrController(QObject):
         self.seven_segment = use_seven_segment
 
         self.cap: Optional[cv2.VideoCapture] = None
-        self.current_frame_id: int = 0
         self.frame_count: int = 0
         self.fps: float = 0
+        self.current_frame_id: int = 0
 
         self.left_score_positions = None
         self.right_score_positions = None
         self.ocr_reader: Optional[EasyOcrReader] = None
 
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self._process_frame)
+        # --- Collection state ---
+        # Preallocated storage: one row per OCR frame, columns:
+        #   [frame_id, l_score, r_score, l_conf, r_conf]
+        # Scores/confs filled in during inference phase.
+        self._ocr_frame_ids: list[int] = []
+        self._pending_rois: list[np.ndarray] = []  # interleaved: [l0, r0, l1, r1, ...]
 
-        self.csv_writer = None
+        # --- Inference state ---
+        self._batch_size: int = 0
+        self._batch_index: int = 0  # index into _pending_rois
+        self._results: Optional[np.ndarray] = (
+            None  # shape (n_ocr_frames, 4): l_score, r_score, l_conf, r_conf
+        )
+
+        self._phase = Phase.COLLECTING
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._tick)
+
         self.csv_file = None
+        self.csv_writer = None
+
+    # ------------------------------------------------------------------
+    # Startup
+    # ------------------------------------------------------------------
 
     def start(self):
         """Validate videos, open capture, and request ROI selection from user."""
@@ -142,6 +186,7 @@ class OcrController(QObject):
         self.current_frame_id = 0
 
         self.ocr_reader = EasyOcrReader(get_device(), seven_segment=self.seven_segment)
+        self._batch_size = TARGET_CROPS_PER_BATCH
 
         self.csv_file = open(self.file_paths["output_csv"], "w", newline="")
         self.csv_writer = csv.writer(self.csv_file)
@@ -155,40 +200,104 @@ class OcrController(QObject):
             ]
         )
 
+        self._phase = Phase.COLLECTING
         self.timer.start(0)
 
-    def _process_frame(self):
+    # ------------------------------------------------------------------
+    # Timer tick — dispatches to current phase
+    # ------------------------------------------------------------------
+
+    def _tick(self):
+        if self._phase == Phase.COLLECTING:
+            self._collect_frame()
+        else:
+            self._infer_batch()
+
+    # ------------------------------------------------------------------
+    # Phase 1: collecting
+    # ------------------------------------------------------------------
+
+    def _collect_frame(self):
         ret, frame = self.cap.read()
         if not ret:
-            self.stop()
+            self._begin_inference()
             return
 
-        self.ui.set_fresh_frame(frame)
+        # self.ui.set_fresh_frame(frame)
+        # self.ui.draw_objects(
+        #     [
+        #         QuadrilateralDrawable(Quadrilateral(self.left_score_positions)),
+        #         QuadrilateralDrawable(Quadrilateral(self.right_score_positions)),
+        #     ]
+        # )
+        self.ui.write(f"Collecting frame {self.current_frame_id}/{self.frame_count}...")
 
         if self.current_frame_id % DO_OCR_EVERY_N_FRAMES == 0:
             l_roi = extract_roi(frame, self.left_score_positions)
             r_roi = extract_roi(frame, self.right_score_positions)
-
-            l_score, l_conf = self.ocr_reader.read(l_roi)
-            r_score, r_conf = self.ocr_reader.read(r_roi)
-
-            self.csv_writer.writerow(
-                [self.current_frame_id, l_score, r_score, l_conf, r_conf]
-            )
-            self.ui.write(f"Frame {self.current_frame_id}: L={l_score} R={r_score}")
-
-        self.ui.draw_objects(
-            [
-                QuadrilateralDrawable(Quadrilateral(self.left_score_positions)),
-                QuadrilateralDrawable(Quadrilateral(self.right_score_positions)),
-            ]
-        )
+            # Preprocess on CPU now, store for batched GPU inference later
+            self._pending_rois.append(self.ocr_reader.preprocessor(l_roi))
+            self._pending_rois.append(self.ocr_reader.preprocessor(r_roi))
+            self._ocr_frame_ids.append(self.current_frame_id)
 
         self.current_frame_id += 1
 
-    # --------------------------------------------------
+    def _begin_inference(self):
+        """Switch to inference phase once all frames are collected."""
+        n_ocr_frames = len(self._ocr_frame_ids)
+        # results array: rows = ocr frames, cols = [l_score, r_score, l_conf, r_conf]
+        # stored as object dtype to hold string scores and float confidences
+        self._results = np.empty((n_ocr_frames, 4), dtype=object)
+        self._batch_index = 0
+        self._phase = Phase.INFERRING
+        self.ui.write(
+            f"Collection complete. Running inference on {len(self._pending_rois)} crops "
+            f"in batches of {self._batch_size}..."
+        )
+
+    # ------------------------------------------------------------------
+    # Phase 2: inferring
+    # ------------------------------------------------------------------
+
+    def _infer_batch(self):
+        """Process one batch of crops per tick, then write CSV when done."""
+        start = self._batch_index
+        end = min(start + self._batch_size, len(self._pending_rois))
+        batch = self._pending_rois[start:end]
+
+        results = self.ocr_reader.read_batch(batch)
+
+        # results is flat [l0, r0, l1, r1, ...] — pair them back up
+        for i, pair_start in enumerate(range(0, len(results), 2)):
+            ocr_frame_idx = (start // 2) + i
+            l_score, l_conf = results[pair_start]
+            r_score, r_conf = results[pair_start + 1]
+            self._results[ocr_frame_idx] = [l_score, r_score, l_conf, r_conf]
+
+        self.ui.write(f"Inference: {end}/{len(self._pending_rois)} crops processed...")
+
+        self._batch_index = end
+        if self._batch_index >= len(self._pending_rois):
+            self._write_csv()
+            self.stop()
+
+    # ------------------------------------------------------------------
+    # CSV output
+    # ------------------------------------------------------------------
+
+    def _write_csv(self):
+        """Write results in strict frame ID order."""
+        # _ocr_frame_ids is already in ascending order since we collected
+        # frames sequentially, but sort defensively
+        order = np.argsort(self._ocr_frame_ids)
+        for idx in order:
+            frame_id = self._ocr_frame_ids[idx]
+            l_score, r_score, l_conf, r_conf = self._results[idx]
+            self.csv_writer.writerow([frame_id, l_score, r_score, l_conf, r_conf])
+
+    # ------------------------------------------------------------------
     # Cleanup
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
 
     def cancel(self):
         self.cleanup()
@@ -203,14 +312,17 @@ class OcrController(QObject):
             self.csv_file.close()
             self.csv_file = None
             self.csv_writer = None
+        self._pending_rois.clear()
+        self._ocr_frame_ids.clear()
+        self._results = None
 
     def stop(self):
         self.cleanup()
         self.finished.emit()
 
-    # --------------------------------------------------
-    # Utilities
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
+    # Validation
+    # ------------------------------------------------------------------
 
     def _validate_input_video(self, original_path: str, cropped_path: str):
         if not os.path.exists(cropped_path):

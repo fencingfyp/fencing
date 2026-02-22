@@ -289,6 +289,14 @@ def main():
     cap.release()
     pred = process_scores(df, total_length=total_length, window_median=int(fps * 6))
 
+    raw_pred = np.column_stack(
+        [
+            pd.to_numeric(df["left_score"], errors="coerce").to_numpy(),
+            pd.to_numeric(df["right_score"], errors="coerce").to_numpy(),
+        ]
+    )
+    # pred = raw_pred
+
     # Rewrite the predictions CSV with cleaned data in this format: frame_id,left_score,right_score,left_confidence,right_confidence. set confidence to 1.0
     frame_ids = np.arange(len(pred))
     pred_df = pd.DataFrame(

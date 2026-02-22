@@ -45,9 +45,10 @@ class InstructionLabel(QLabel):
         super().resizeEvent(event)
         self._highlight.setGeometry(self.rect())
 
-    def setText(self, text):
+    def setText(self, text, silent=False):
         super().setText(text)
-        self.animate_highlight()
+        if not silent:
+            self.animate_highlight()
 
     def animate_highlight(self):
         self._highlight.show()

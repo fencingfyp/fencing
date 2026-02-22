@@ -22,6 +22,9 @@ from src.pyside_pipelines.multi_region_cropper.roi_selection_controller import (
     LabelConfig,
     ROISelectionPipeline,
 )
+from src.pyside_pipelines.multi_region_cropper.superpoint_multi_region_pipeline import (
+    SuperPointBatchPipeline,
+)
 
 from .base_task_widget import BaseTaskWidget
 
@@ -32,7 +35,9 @@ class CropRegionsWidget(BaseTaskWidget):
         self.cap: cv2.VideoCapture | None = None
         self.is_running = False
         self.roi_pipeline: ROISelectionPipeline | None = None
-        self.processing_pipeline: MultiRegionProcessingPipeline | None = None
+        self.processing_pipeline: (
+            MultiRegionProcessingPipeline | SuperPointBatchPipeline | None
+        ) = None
 
     @override
     def setup(self):
@@ -189,4 +194,4 @@ if __name__ == "__main__":
     stats = pstats.Stats("profile.stats")
     stats.strip_dirs()
     stats.sort_stats("tottime")
-    stats.print_stats(10)
+    stats.print_stats(20)

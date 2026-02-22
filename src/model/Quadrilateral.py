@@ -110,3 +110,6 @@ class Quadrilateral:
 
     def __repr__(self) -> str:
         return f"Quadrilateral({[tuple(pt) for pt in self.points]})"
+
+    def __str__(self):
+        return f"Quadrilateral with points: {[tuple(pt) for pt in self.points]}"

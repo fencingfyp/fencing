@@ -50,9 +50,9 @@ class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
     # Rendering API (matches OpenCvUi intent)
     # ------------------------------------------------------------------
 
-    def write(self, text: str):
+    def write(self, text: str, silent=False):
         if self.text_label:
-            self.text_label.setText(text)
+            self.text_label.setText(text, silent=silent)
 
     def set_fresh_frame(self, frame: np.ndarray) -> QPixmap:
         return self.video_renderer.set_frame(frame)

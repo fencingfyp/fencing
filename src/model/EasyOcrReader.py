@@ -6,13 +6,12 @@ Encapsulates image preprocessing and OCR reading for fencing scoreboard digits.
 Responsibilities:
   - ScorePreprocessor: converts a raw BGR ROI crop into a clean binarized image
     ready for OCR. All image processing lives here.
-  - EasyOcrReader: runs EasyOCR on a preprocessed image. Knows nothing about
-    image processing beyond what format EasyOCR expects.
+  - EasyOcrReader: orchestrates preprocessing and batched inference via EasyOCR's
+    recognize() with pre-known bounding boxes, skipping CRAFT detection entirely.
+    Both normal and seven-segment modes batch all crops into a single GPU call.
 """
 
 from __future__ import annotations
-
-from typing import Optional
 
 import cv2
 import easyocr
@@ -24,13 +23,10 @@ import numpy as np
 
 TARGET_HEIGHT = 64  # Canonical height all crops are scaled to
 BORDER_PAD = 20  # White border added around binarized image for OCR
-EDGE_MARGIN = max(
-    1, int(TARGET_HEIGHT * 0.08)
-)  # Pixels to ignore at ROI edges when computing histogram
-# 8% is arbitary.
 HIST_SMOOTH_KERNEL = 25  # GaussianBlur kernel size for histogram smoothing
-
-THRESHOLD_RATIO = 0.7  # Threshold at this fraction of the way from Otsu to bright peak
+THRESHOLD_RATIO = 0.5  # Fraction from Otsu up to bright peak for threshold
+# 0.0 = Otsu only (includes halo), 1.0 = peak only (core only)
+EDGE_MARGIN = max(1, int(TARGET_HEIGHT * 0.08))
 
 
 # ---------------------------------------------------------------------------
@@ -40,16 +36,17 @@ THRESHOLD_RATIO = 0.7  # Threshold at this fraction of the way from Otsu to brig
 
 class ScorePreprocessor:
     """
-    Converts a raw BGR score ROI into a clean binary BGR image for OCR.
+    Converts a raw BGR score ROI into a clean binary grayscale image for OCR.
 
     Pipeline:
-      1. Channel selection    — pick the channel with highest contrast
-      2. Edge margin crop     — exclude noisy ROI edges from histogram analysis
-      3. Resize               — scale to fixed canonical height
-      4. Histogram thresholding — Otsu to find background/foreground split,
-                                  then FWHM-based offset to cut below digit peak
-      5. Polarity normalisation — ensure dark digits on white background
-      6. Border padding        — white border so OCR doesn't clip edge digits
+      1. Channel selection     — pick the channel with highest contrast
+      2. Resize                — scale to fixed canonical height
+      3. Histogram thresholding — Otsu to find background/foreground split,
+                                  then ratio-based offset to cut below digit peak
+      4. Polarity normalisation — ensure dark digits on white background
+      5. Tight cropping         — crop to content bounding box, removing excess whitespace
+      6. Re-enforce height      — resize back to TARGET_HEIGHT after crop
+      7. Border padding         — white border so OCR doesn't clip edge digits
     """
 
     def __call__(self, image: np.ndarray) -> np.ndarray:
@@ -57,18 +54,16 @@ class ScorePreprocessor:
         gray = self._resize(gray)
         binary = self._threshold(gray)
         binary = self._normalise_polarity(binary)
+        binary = self._tight_crop(binary)
+        binary = self._resize_height(binary)
         binary = self._add_border(binary)
-        return cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
-
-    # ------------------------------------------------------------------
-    # Pipeline steps
-    # ------------------------------------------------------------------
+        return binary
 
     def _select_channel(self, image: np.ndarray) -> np.ndarray:
         """
         Pick the single BGR channel with the highest standard deviation.
-        This handles variable digit colour (red/white/amber) across videos
-        without any hardcoded channel assumption.
+        Handles variable digit colour (red/white/amber) across videos without
+        any hardcoded channel assumption.
         """
         channels = cv2.split(image)
         return max(channels, key=lambda c: c.std())
@@ -83,63 +78,61 @@ class ScorePreprocessor:
         """
         Threshold using the bright peak of the histogram.
 
-        The ROI histogram has (at least) two modes: digit cores (bright) and
-        background (dark), with a halo/glow tail between them. Otsu finds the
-        valley between background and foreground, anchoring our search to the
-        upper half. We then find the bright peak above Otsu and threshold at
-        one FWHM below it, cutting the halo tail while keeping the digit core.
-
+        Otsu finds the valley between background and foreground modes. We find
+        the bright peak above Otsu and threshold at THRESHOLD_RATIO of the way
+        from Otsu to the peak, cutting the halo tail while keeping digit core.
         Edge pixels are excluded from histogram computation to avoid ROI
         boundary noise skewing the bright peak.
         """
-        # Compute histogram on inner region only (exclude noisy edges)
         inner = gray[EDGE_MARGIN:-EDGE_MARGIN, EDGE_MARGIN:-EDGE_MARGIN]
         hist = cv2.calcHist([inner], [0], None, [256], [0, 256]).flatten()
         hist_smooth = cv2.GaussianBlur(
             hist[None, :], (1, HIST_SMOOTH_KERNEL), 0
         ).flatten()
 
-        # Otsu gives us the background/foreground boundary
         otsu_thresh, _ = cv2.threshold(
             gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
         )
         otsu_thresh = int(otsu_thresh)
 
-        # Find the bright peak above Otsu
         upper = hist_smooth[otsu_thresh:]
         bright_peak = int(np.argmax(upper)) + otsu_thresh
 
-        # Threshold at a fixed fraction of the way from Otsu up to the bright peak
-
         threshold = int(otsu_thresh + (bright_peak - otsu_thresh) * THRESHOLD_RATIO)
-
-        # draw histogram and thresholds for debugging
-        # import matplotlib.pyplot as plt
-
-        # plt.figure(figsize=(8, 4))
-        # plt.plot(hist_smooth, label="Smoothed histogram")
-        # plt.axvline(otsu_thresh, color="orange", linestyle="--", label="Otsu threshold")
-        # plt.axvline(bright_peak, color="green", linestyle="--", label="Bright peak")
-        # plt.axvline(threshold, color="red", linestyle="--", label="Threshold")
-        # plt.legend()
-        # plt.title("Histogram and thresholds")
-        # plt.xlabel("Pixel intensity")
-        # plt.ylabel("Count")
-        # plt.show()
-
         _, binary = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
         return binary
 
     def _normalise_polarity(self, binary: np.ndarray) -> np.ndarray:
         """
         Ensure dark digits on white background.
-        EasyOCR expects this convention; scoreboards may be either polarity.
-        Majority vote: if more than half the pixels are dark, the background
-        is dark and we invert.
+        If more than half the pixels are dark, background is dark — invert.
         """
         if np.mean(binary) < 127:
             return cv2.bitwise_not(binary)
         return binary
+
+    def _tight_crop(self, binary: np.ndarray) -> np.ndarray:
+        """
+        Crop to the bounding box of actual content pixels.
+        Removes excess whitespace so the CRNN doesn't waste sequence steps
+        on empty columns. Border is added after, so padding stays consistent.
+        """
+        dark = binary < 127
+        rows = np.where(dark.any(axis=1))[0]
+        cols = np.where(dark.any(axis=0))[0]
+        if len(rows) == 0 or len(cols) == 0:
+            return binary
+        return binary[rows[0] : rows[-1] + 1, cols[0] : cols[-1] + 1]
+
+    def _resize_height(self, binary: np.ndarray) -> np.ndarray:
+        """Re-enforce TARGET_HEIGHT after tight crop may have changed it."""
+        h, w = binary.shape
+        if h == TARGET_HEIGHT:
+            return binary
+        new_w = max(int(w * TARGET_HEIGHT / h), 1)
+        return cv2.resize(
+            binary, (new_w, TARGET_HEIGHT), interpolation=cv2.INTER_NEAREST
+        )
 
     def _add_border(self, binary: np.ndarray) -> np.ndarray:
         """Add white border so OCR doesn't clip digits at image edges."""
@@ -161,83 +154,119 @@ class ScorePreprocessor:
 
 class EasyOcrReader:
     """
-    Runs EasyOCR on a preprocessed score ROI.
+    Orchestrates preprocessing and batched inference for fencing scoreboard OCR.
 
     Two modes:
-      - Normal: pass the full image to EasyOCR and take the highest-confidence
-        detection closest to the image centre.
-      - Seven-segment: segment individual digits by contour, run OCR on each,
-        then concatenate results left-to-right.
+      - Normal: preprocess each ROI, tile onto a canvas, pass all boxes to
+        EasyOCR recognize() in one GPU call.
+      - Seven-segment: preprocess each ROI, segment digits via contour detection,
+        tile ALL digit crops from ALL ROIs onto a single canvas, then pass all
+        boxes to recognize() in one GPU call. Results are reassembled per-image
+        using the precomputed digit counts.
+
+    In both modes, CRAFT detection is skipped entirely — bounding boxes are
+    supplied directly to recognize().
     """
 
     def __init__(self, device: str, seven_segment: bool = False):
-        self.reader = easyocr.Reader(["ch_sim"], gpu=device)
         self.seven_segment = seven_segment
         self.preprocessor = ScorePreprocessor()
+        self.reader = easyocr.Reader(["ch_sim"], gpu=(device != "cpu"), verbose=False)
 
     def read(self, raw_image: np.ndarray) -> tuple[str, float]:
-        """
-        Preprocess and read a score from a raw BGR ROI crop.
+        """Preprocess and read a single raw BGR ROI crop."""
+        return self.read_batch([raw_image])[0]
 
-        Returns:
-            (score, confidence): score as string, confidence in [0, 1].
-            Returns ("", 0.0) if nothing is detected.
+    def read_batch(self, raw_images: list[np.ndarray]) -> list[tuple[str, float]]:
         """
-        processed = self.preprocessor(raw_image)
+        Preprocess and read a batch of raw BGR ROI crops in a single GPU call.
+
+        Normal mode: one crop per image, one result per image.
+        Seven-segment mode: segment each preprocessed image into digit crops,
+        batch all digit crops together, then reassemble results per image.
+        """
+        processed = [self.preprocessor(img) for img in raw_images]
+
         if self.seven_segment:
-            return self._read_seven_segment(processed)
-        return self._read_normal(processed)
+            return self._read_batch_seven_segment(processed)
+        return self._read_batch_normal(processed)
 
     # ------------------------------------------------------------------
-    # Reading modes
+    # Normal mode
     # ------------------------------------------------------------------
 
-    def _read_normal(self, image: np.ndarray) -> tuple[str, float]:
+    def _read_batch_normal(self, images: list[np.ndarray]) -> list[tuple[str, float]]:
+        canvas, boxes = self._make_canvas(images)
+        return self._recognize_with_boxes(canvas, boxes, n_expected=len(images))
+
+    # ------------------------------------------------------------------
+    # Seven-segment mode
+    # ------------------------------------------------------------------
+
+    def _read_batch_seven_segment(
+        self, images: list[np.ndarray]
+    ) -> list[tuple[str, float]]:
         """
-        Run EasyOCR on the full image.
-        Among all detections, pick the one with the highest confidence
-        whose bounding box centre is closest to the image centre.
-        Proximity to centre breaks ties and avoids picking up background noise
-        at image edges.
+        Segment all images into digit crops, batch all crops in one GPU call,
+        then reassemble results back into per-image (score, confidence) pairs.
+
+        Precomputing digit counts per image lets us slice the flat results list
+        back into per-image groups after inference.
         """
-        results = self.reader.recognize(image, allowlist="0123456789")
-        if not results:
-            return "", 0.0
+        # Segment each image and record how many digits were found
+        all_crops: list[np.ndarray] = []
+        digit_counts: list[int] = []  # digit_counts[i] = n digits found in images[i]
 
-        h, w = image.shape[:2]
-        cx, cy = w / 2, h / 2
+        for image in images:
+            boxes = self._segment_digits(image)
+            crops = self._extract_digit_crops(image, boxes)
+            all_crops.extend(crops)
+            digit_counts.append(len(crops))
 
-        def centre_distance(bbox):
-            xs = [p[0] for p in bbox]
-            ys = [p[1] for p in bbox]
-            return ((np.mean(xs) - cx) ** 2 + (np.mean(ys) - cy) ** 2) ** 0.5
+        if not all_crops:
+            return [("", 0.0)] * len(images)
 
-        # Filter out malformed results
-        valid = [
-            (bbox, text, prob)
-            for bbox, text, prob in results
-            if bbox is not None and len(bbox) == 4 and text
-        ]
-        if not valid:
-            return "", 0.0
+        # One canvas, one GPU call for all digit crops across all images
+        canvas, canvas_boxes = self._make_canvas(all_crops)
+        cv2.imshow(
+            "Debug Canvas", debug_canvas(canvas, canvas_boxes)
+        )  # Debug visualization
+        flat_results = self._recognize_with_boxes(
+            canvas, canvas_boxes, n_expected=len(all_crops)
+        )
 
-        # Primary sort: confidence (desc). Secondary: proximity to centre (asc).
-        best = min(valid, key=lambda r: (-r[2], centre_distance(r[0])))
-        _, text, prob = best
-        return text, float(prob)
+        # Reassemble flat results into per-image (score, confidence) pairs
+        output = []
+        idx = 0
+        for count in digit_counts:
+            image_results = flat_results[idx : idx + count]
+            idx += count
 
-    def _read_seven_segment(self, image: np.ndarray) -> tuple[str, float]:
-        """
-        Segment individual digit blobs by contour, run OCR on each crop,
-        then concatenate left-to-right.
-        """
-        boxes = self._segment_digits(image)
-        if not boxes:
-            return "", 0.0
+            digits = [text for text, _ in image_results if text]
+            confidences = [conf for _, conf in image_results if conf > 0]
 
-        digits, confidences = [], []
-        for i, (x, y, w, h) in enumerate(boxes):
+            if not digits:
+                output.append(("", 0.0))
+            else:
+                output.append(
+                    (
+                        "".join(digits),
+                        float(np.mean(confidences)),
+                    )
+                )
+        return output
+
+    def _extract_digit_crops(
+        self,
+        image: np.ndarray,
+        boxes: list[tuple[int, int, int, int]],
+    ) -> list[np.ndarray]:
+        """Extract, normalise height, and pad individual digit crops."""
+        crops = []
+        for x, y, w, h in boxes:
             crop = image[y : y + h, x : x + w]
+            # Re-enforce canonical height since digit sub-regions won't be TARGET_HEIGHT
+            crop = self.preprocessor._resize_height(crop)
             crop = cv2.copyMakeBorder(
                 crop,
                 BORDER_PAD,
@@ -245,30 +274,82 @@ class EasyOcrReader:
                 BORDER_PAD,
                 BORDER_PAD,
                 cv2.BORDER_CONSTANT,
-                value=(255, 255, 255),
+                value=255,
             )
-            # cv2.imshow(f"crop_{i}", crop)
-            results = self.reader.recognize(crop, allowlist="0123456789")
-            if results:
-                _, text, prob = max(results, key=lambda r: r[2])
-                digits.append(text)
-                confidences.append(prob)
+            crops.append(crop)
+        return crops
 
-        if not digits:
-            return "", 0.0
-        return "".join(digits), float(np.mean(confidences))
+    # ------------------------------------------------------------------
+    # Canvas builder
+    # ------------------------------------------------------------------
+
+    def _make_canvas(
+        self, images: list[np.ndarray]
+    ) -> tuple[np.ndarray, list[list[int]]]:
+        """
+        Tile preprocessed grayscale images horizontally onto a white canvas.
+        All images must be the same height (TARGET_HEIGHT + 2 * BORDER_PAD).
+        Returns the canvas and bounding boxes as [x_min, x_max, y_min, y_max].
+        No gap between images — recognize() operates strictly within each box.
+        """
+        h = images[0].shape[0]
+        total_w = sum(img.shape[1] for img in images)
+        canvas = np.full((h, total_w), 255, dtype=np.uint8)
+
+        boxes = []
+        x = 0
+        for img in images:
+            w = img.shape[1]
+            canvas[:, x : x + w] = img
+            boxes.append([x, x + w, 0, h])
+            x += w
+        return canvas, boxes
+
+    # ------------------------------------------------------------------
+    # Recognizer
+    # ------------------------------------------------------------------
+
+    def _recognize_with_boxes(
+        self,
+        canvas: np.ndarray,
+        boxes: list[list[int]],
+        n_expected: int,
+    ) -> list[tuple[str, float]]:
+        """
+        Run EasyOCR recognition on a canvas with pre-known bounding boxes.
+        Skips CRAFT detection; batches CRNN over all boxes in one GPU call.
+        Results are matched back to input order by x_min position.
+        """
+        results = self.reader.recognize(
+            canvas,
+            horizontal_list=boxes,
+            free_list=[],
+            allowlist="0123456789",
+            batch_size=n_expected,
+        )
+
+        # Sort by x_min of returned bbox to recover input left-to-right order
+        if results:
+            results = sorted(results, key=lambda r: r[0][0][0])
+
+        output = []
+        for i in range(n_expected):
+            if i < len(results) and results[i]:
+                _, text, conf = results[i]
+                output.append((text, float(conf)))
+            else:
+                output.append(("", 0.0))
+        return output
 
     # ------------------------------------------------------------------
     # Seven-segment helpers
     # ------------------------------------------------------------------
+
     def _segment_digits(
         self,
         binary: np.ndarray,
         max_digits: int = 2,
-        open_kernel: tuple[int, int] = (
-            3,
-            1,
-        ),  # wide enough to break digit bridges, short enough to preserve horizontal segments
+        open_kernel: tuple[int, int] = (3, 1),
         min_area_fraction: float = 0.05,
         height_tol: float = 0.6,
     ) -> list[tuple[int, int, int, int]]:
@@ -283,7 +364,7 @@ class EasyOcrReader:
             (width, height) of the opening kernel. Wider breaks more connections;
             taller risks destroying horizontal digit segments.
         min_area_fraction : float
-            Blobs smaller than this fraction of the largest blob are treated as noise.
+            Blobs smaller than this fraction of the largest blob are noise.
         height_tol : float
             Blobs shorter than this fraction of the tallest blob are dropped.
         """
@@ -293,7 +374,6 @@ class EasyOcrReader:
             else binary
         )
         inv = cv2.bitwise_not(gray)
-
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, open_kernel)
         inv = cv2.morphologyEx(inv, cv2.MORPH_OPEN, kernel)
 
@@ -311,5 +391,29 @@ class EasyOcrReader:
             if b[2] * b[3] >= min_area_fraction * max_area
             and b[3] >= height_tol * tallest_h
         ]
-
         return sorted(filtered, key=lambda b: b[0])[:max_digits]
+
+
+# ---------------------------------------------------------------------------
+# Debug utilities
+# ---------------------------------------------------------------------------
+
+
+def debug_canvas(canvas: np.ndarray, boxes: list[list[int]]) -> np.ndarray:
+    """
+    Annotate a canvas with bounding boxes and indices for debugging.
+    Returns a BGR image suitable for cv2.imshow.
+    """
+    vis = cv2.cvtColor(canvas, cv2.COLOR_GRAY2BGR)
+    for i, (x_min, x_max, y_min, y_max) in enumerate(boxes):
+        cv2.rectangle(vis, (x_min, y_min), (x_max, y_max), (0, 255, 0), 1)
+        cv2.putText(
+            vis,
+            str(i),
+            (x_min + 2, y_min + 12),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.4,
+            (0, 0, 255),
+            1,
+        )
+    return vis

@@ -47,3 +47,5 @@ pyside6
 graphviz
 pygraphviz
 nx
+kornia
+lightglue (https://github.com/cvg/LightGlue)
