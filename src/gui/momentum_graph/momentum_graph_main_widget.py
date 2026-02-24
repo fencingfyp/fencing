@@ -33,7 +33,7 @@ TASK_DEPENDENCIES = [
         [
             CROPPED_SCOREBOARD_VIDEO_NAME,
             CROPPED_SCORE_LIGHTS_VIDEO_NAME,
-            CROPPED_TIMER_VIDEO_NAME,
+            # CROPPED_TIMER_VIDEO_NAME,
         ],
     ),
     Task(

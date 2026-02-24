@@ -8,3 +8,7 @@
 **/__pycache__/*.pyc
 
 **/*.stats
+
+/training_data
+/lmdb
+/logs

@@ -114,11 +114,15 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     import cProfile
+    import os
+
+    import cv2
 
     def main():
         app = QApplication(sys.argv)
         window = MainWindow()
         window.show()
+        cv2.setNumThreads(os.cpu_count())  # Set OpenCV to use all available threads
         sys.exit(app.exec())
 
     # Run the profiler and save stats to a file

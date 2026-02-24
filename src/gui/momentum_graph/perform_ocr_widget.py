@@ -31,8 +31,9 @@ from src.gui.momentum_graph.base_task_widget import BaseTaskWidget
 from src.gui.util.task_graph import MomentumGraphTasksToIds
 from src.model import Quadrilateral
 from src.model.drawable.quadrilateral_drawable import QuadrilateralDrawable
-from src.model.EasyOcrReader import EasyOcrReader
 from src.model.FileManager import FileRole
+from src.model.reader.EasyOcrReader import EasyOcrReader
+from src.model.reader.SevenSegmentReader import SevenSegmentReader
 from src.pyside.MatchContext import MatchContext
 from src.pyside.PysideUi import PysideUi
 from src.util.gpu import get_device
@@ -125,7 +126,7 @@ class OcrController(QObject):
 
         self.left_score_positions = None
         self.right_score_positions = None
-        self.ocr_reader: Optional[EasyOcrReader] = None
+        self.ocr_reader: Optional[EasyOcrReader | SevenSegmentReader] = None
 
         # --- Collection state ---
         # Preallocated storage: one row per OCR frame, columns:
@@ -185,7 +186,12 @@ class OcrController(QObject):
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         self.current_frame_id = 0
 
-        self.ocr_reader = EasyOcrReader(get_device(), seven_segment=self.seven_segment)
+        if self.seven_segment:
+            self.ocr_reader = SevenSegmentReader()
+        else:
+            self.ocr_reader = EasyOcrReader(
+                get_device(), seven_segment=self.seven_segment
+            )
         self._batch_size = TARGET_CROPS_PER_BATCH
 
         self.csv_file = open(self.file_paths["output_csv"], "w", newline="")
@@ -236,8 +242,8 @@ class OcrController(QObject):
             l_roi = extract_roi(frame, self.left_score_positions)
             r_roi = extract_roi(frame, self.right_score_positions)
             # Preprocess on CPU now, store for batched GPU inference later
-            self._pending_rois.append(self.ocr_reader.preprocessor(l_roi))
-            self._pending_rois.append(self.ocr_reader.preprocessor(r_roi))
+            self._pending_rois.append(l_roi)
+            self._pending_rois.append(r_roi)
             self._ocr_frame_ids.append(self.current_frame_id)
 
         self.current_frame_id += 1

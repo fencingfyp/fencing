@@ -1,6 +1,6 @@
 import argparse
 from os import path
-from typing import Tuple
+from typing import Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -68,12 +68,6 @@ def densify_frames(pred: pd.DataFrame, total_length: int) -> pd.DataFrame:
     return pred[["frame_id", "left_score", "right_score"]]
 
 
-from typing import Optional
-
-import numpy as np
-import pandas as pd
-
-
 def remove_isolated_spikes_np(values: np.ndarray) -> np.ndarray:
     """
     Remove points surrounded by NaNs (both neighbors NaN).
@@ -125,8 +119,14 @@ def process_scores(
     """
 
     # Extract numeric scores
-    left = pd.to_numeric(pred["left_score"], errors="coerce").to_numpy()
-    right = pd.to_numeric(pred["right_score"], errors="coerce").to_numpy()
+    left = (
+        pd.to_numeric(pred["left_score"], errors="coerce").to_numpy().astype(np.float32)
+    )
+    right = (
+        pd.to_numeric(pred["right_score"], errors="coerce")
+        .to_numpy()
+        .astype(np.float32)
+    )
 
     # Remove unrealistic outliers
     left[left > 15] = np.nan
@@ -157,113 +157,20 @@ def process_scores(
     right = rolling_mode_np(right, window_median)
 
     # Cap jumps
-    left = cap_jumps_np(left, max_jump=1)
-    right = cap_jumps_np(right, max_jump=1)
+    # left = cap_jumps_np(left, max_jump=1)
+    # right = cap_jumps_np(right, max_jump=1)
 
     return np.column_stack([left, right])
 
 
-# def remove_isolated_spikes(series):
-#     """
-#     Removes isolated spikes surrounded by NaNs or with large jumps vs nearest valid neighbors.
-#     - diff_threshold: optional numeric limit; if abs difference > threshold, mark as NaN.
-#     """
-#     s = series.copy()
-#     isnan = s.isna()
-#     n = len(s)
-
-#     # Remove points surrounded by NaNs (both neighbors NaN)
-#     mask_isolated = np.zeros(n, dtype=bool)
-#     for i in range(1, n - 1):
-#         if not isnan[i] and isnan[i - 1] and isnan[i + 1]:
-#             mask_isolated[i] = True
-
-#     s[mask_isolated] = np.nan
-#     return s
-
-
-# def apply_rolling_mode(series: pd.Series, window_size: int) -> pd.Series:
-#     """
-#     Apply rolling mode smoothing to a pandas Series.
-#     """
-#     return series.rolling(window=window_size, center=True, min_periods=1).apply(
-#         lambda x: x.mode().iloc[0] if not x.mode().empty else x.iloc[-1]
-#     )
-
-
-# def process_scores(
-#     pred: pd.DataFrame, total_length=None, window_median=350, confidence_threshold=0.5
-# ) -> np.ndarray:
-#     """
-#     Cleans, and smooths prediction CSVs.
-#     Handles sparse frame_ids by forward-filling to produce a dense sequence.
-
-#     Returns:
-#         np.ndarray (n×2): [[left_score_smooth, right_score_smooth], ...]
-#     """
-
-#     # Ensure numeric
-#     pred["left_score"] = pd.to_numeric(pred["left_score"], errors="coerce")
-#     pred["right_score"] = pd.to_numeric(pred["right_score"], errors="coerce")
-
-#     # # Remove unrealistic outliers early
-#     pred.loc[pred["left_score"] > 15, "left_score"] = np.nan
-#     pred.loc[pred["right_score"] > 15, "right_score"] = np.nan
-
-#     # Remove low-confidence predictions
-#     if "left_confidence" in pred.columns:
-#         pred.loc[pred["left_confidence"] < confidence_threshold, "left_score"] = np.nan
-#     if "right_confidence" in pred.columns:
-#         pred.loc[pred["right_confidence"] < confidence_threshold, "right_score"] = (
-#             np.nan
-#         )
-
-#     # --- Remove isolated spikes ---
-#     pred["left_score"] = remove_isolated_spikes(pred["left_score"])
-#     pred["right_score"] = remove_isolated_spikes(pred["right_score"])
-
-#     # forward fill to densify frames
-#     pred = (
-#         densify_frames(pred, total_length=total_length)
-#         if total_length is not None
-#         else pred
-#     )
-
-#     # for side in ['left_score', 'right_score']:
-#     #     diffs = pred[side].diff()
-#     #     pred.loc[diffs > 1, side] = np.nan
-
-#     # --- Interpolate missing values (smoothly) ---
-#     for col in ["left_score", "right_score"]:
-#         pred[col] = (
-#             pred[col]
-#             .interpolate(method="values", x=pred["frame_id"], limit_direction="both")
-#             .round()
-#         )
-#         pred[col] = apply_rolling_mode(pred[col], window_median).round()
-
-#     # --- Final cleanup: prohibit jumps >1 between frames ---
-#     for col in ["left_score", "right_score"]:
-#         values = pred[col].to_numpy()
-#         for i in range(1, len(values)):
-#             diff = values[i] - values[i - 1]
-
-#             # If the jump between consecutive frames exceeds 1, fix it
-#             if abs(diff) > 1:
-#                 # ----------------------------------------
-#                 # Option 1: Snap to previous (maintain stability)
-#                 # ----------------------------------------
-#                 values[i] = values[i - 1]
-
-#                 # ----------------------------------------
-#                 # Option 2: Ignore (leave as is)
-#                 # ----------------------------------------
-#                 # pass
-
-#         pred[col] = values
-
-#     # --- Return as NumPy array ---
-#     return pred[["left_score", "right_score"]].to_numpy()
+def void_jumps_np(values: np.ndarray, max_jump: int = 1) -> np.ndarray:
+    """
+    Snap consecutive values that jump more than max_jump to previous value.
+    """
+    for i in range(1, len(values)):
+        if abs(values[i] - values[i - 1]) > max_jump:
+            values[i] = np.nan
+    return values
 
 
 def parse_arguments():
@@ -295,7 +202,7 @@ def main():
             pd.to_numeric(df["right_score"], errors="coerce").to_numpy(),
         ]
     )
-    # pred = raw_pred
+    pred = raw_pred  # for demo purposes, show raw predictions instead of processed
 
     # Rewrite the predictions CSV with cleaned data in this format: frame_id,left_score,right_score,left_confidence,right_confidence. set confidence to 1.0
     frame_ids = np.arange(len(pred))

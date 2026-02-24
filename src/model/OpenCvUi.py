@@ -195,6 +195,8 @@ class OpenCvUi(Ui):
                 (self.display_width, self.display_height),
                 interpolation=cv2.INTER_CUBIC,
             )
+        if len(target.shape) == 2 or target.shape[2] == 1:
+            target = cv2.cvtColor(target, cv2.COLOR_GRAY2BGR)
 
         # Write back into current_frame
         self.current_frame[self.text_box_height :, :, :] = target

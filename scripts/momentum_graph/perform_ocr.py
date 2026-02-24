@@ -1,16 +1,3 @@
-"""
-perform_ocr.py
---------------
-Reads fencing scores from a planar-tracked, cropped scoreboard video using OCR.
-The user manually selects two quadrilateral ROIs (left and right score displays)
-on the first frame. A quick calibration check is performed before full processing.
-
-All image preprocessing is delegated to ScorePreprocessor via EasyOcrReader.
-
-Usage:
-    python perform_ocr.py <output_folder> [--output-video] [--seven-segment] [--demo]
-"""
-
 import argparse
 import csv
 import os
@@ -20,7 +7,8 @@ import cv2
 import numpy as np
 
 from src.model import OpenCvUi, UiCodes
-from src.model.EasyOcrReader import EasyOcrReader
+from src.model.reader.EasyOcrReader import EasyOcrReader
+from src.model.reader.SevenSegmentReader import SevenSegmentReader
 from src.util.file_names import (
     CROPPED_SCOREBOARD_VIDEO_NAME,
     OCR_OUTPUT_CSV_NAME,
@@ -45,9 +33,9 @@ OUTPUT_VIDEO_NAME = "perform_ocr_output.mp4"
 OUTPUT_OCR_L_NAME = "ocr_left.mp4"
 OUTPUT_OCR_R_NAME = "ocr_right.mp4"
 
-CALIBRATION_N_SAMPLES = 10
-CALIBRATION_MIN_GAP_SECONDS = 7
-CALIBRATION_ACCURACY_THRESHOLD = 0.9
+# CALIBRATION_N_SAMPLES = 10
+# CALIBRATION_MIN_GAP_SECONDS = 7
+# CALIBRATION_ACCURACY_THRESHOLD = 0.9
 
 
 # ---------------------------------------------------------------------------
@@ -107,76 +95,76 @@ def create_video_writers(
 # ---------------------------------------------------------------------------
 
 
-def _sample_frame_indices(total_frames: int, fps: float) -> list[int]:
-    """Pick up to CALIBRATION_N_SAMPLES frames spaced at least CALIBRATION_MIN_GAP_SECONDS apart."""
-    min_gap = int(fps * CALIBRATION_MIN_GAP_SECONDS)
-    selected = []
-    attempts = 0
-    while len(selected) < CALIBRATION_N_SAMPLES and attempts < 10_000:
-        candidate = np.random.randint(0, total_frames)
-        if all(abs(candidate - s) >= min_gap for s in selected):
-            selected.append(candidate)
-        attempts += 1
-    return sorted(selected)
+# def _sample_frame_indices(total_frames: int, fps: float) -> list[int]:
+#     """Pick up to CALIBRATION_N_SAMPLES frames spaced at least CALIBRATION_MIN_GAP_SECONDS apart."""
+#     min_gap = int(fps * CALIBRATION_MIN_GAP_SECONDS)
+#     selected = []
+#     attempts = 0
+#     while len(selected) < CALIBRATION_N_SAMPLES and attempts < 10_000:
+#         candidate = np.random.randint(0, total_frames)
+#         if all(abs(candidate - s) >= min_gap for s in selected):
+#             selected.append(candidate)
+#         attempts += 1
+#     return sorted(selected)
 
 
-def calibrate_ocr(
-    ui: OpenCvUi,
-    cap: cv2.VideoCapture,
-    ocr_reader: EasyOcrReader,
-    total_frames: int,
-    fps: float,
-    left_positions: list,
-    right_positions: list,
-) -> float:
-    """
-    Show the user a sample of OCR results on random frames and ask for confirmation.
-    Returns the observed accuracy. Warns if below threshold.
-    """
-    print("Running OCR calibration check on random frames...")
-    indices = _sample_frame_indices(total_frames, fps)
-    n_correct = n_total = 0
+# def calibrate_ocr(
+#     ui: OpenCvUi,
+#     cap: cv2.VideoCapture,
+#     ocr_reader: EasyOcrReader,
+#     total_frames: int,
+#     fps: float,
+#     left_positions: list,
+#     right_positions: list,
+# ) -> float:
+#     """
+#     Show the user a sample of OCR results on random frames and ask for confirmation.
+#     Returns the observed accuracy. Warns if below threshold.
+#     """
+#     print("Running OCR calibration check on random frames...")
+#     indices = _sample_frame_indices(total_frames, fps)
+#     n_correct = n_total = 0
 
-    for idx in indices:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-        ret, frame = cap.read()
-        if not ret:
-            continue
+#     for idx in indices:
+#         cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+#         ret, frame = cap.read()
+#         if not ret:
+#             continue
 
-        positions = left_positions if idx % 2 == 0 else right_positions
-        roi = extract_roi(frame, positions)
-        score, conf = ocr_reader.read(roi)
+#         positions = left_positions if idx % 2 == 0 else right_positions
+#         roi = extract_roi(frame, positions)
+#         score, conf = ocr_reader.read(roi)
 
-        ui.clear_frame()
-        ui.set_fresh_frame(ocr_reader.preprocessor(roi))
-        ui.write_to_ui(
-            f"Score: {score}  Conf: {conf:.2f} | "
-            "1=correct  2=wrong  3=skip  Q=quit calibration"
-        )
-        ui.show_frame()
+#         ui.clear_frame()
+#         ui.set_fresh_frame(ocr_reader.preprocessor(roi))
+#         ui.write_to_ui(
+#             f"Score: {score}  Conf: {conf:.2f} | "
+#             "1=correct  2=wrong  3=skip  Q=quit calibration"
+#         )
+#         ui.show_frame()
 
-        action = ui.get_user_input(
-            0,
-            [UiCodes.CUSTOM_1, UiCodes.CUSTOM_2, UiCodes.CUSTOM_3, UiCodes.QUIT],
-            must_be_valid=True,
-        )
-        if action == UiCodes.QUIT:
-            break
-        elif action == UiCodes.CUSTOM_3:
-            continue
-        n_total += 1
-        if action == UiCodes.CUSTOM_1:
-            n_correct += 1
+#         action = ui.get_user_input(
+#             0,
+#             [UiCodes.CUSTOM_1, UiCodes.CUSTOM_2, UiCodes.CUSTOM_3, UiCodes.QUIT],
+#             must_be_valid=True,
+#         )
+#         if action == UiCodes.QUIT:
+#             break
+#         elif action == UiCodes.CUSTOM_3:
+#             continue
+#         n_total += 1
+#         if action == UiCodes.CUSTOM_1:
+#             n_correct += 1
 
-    accuracy = n_correct / n_total if n_total > 0 else 0.0
-    print(f"Calibration: {accuracy*100:.1f}% ({n_correct}/{n_total})")
-    if n_total > 0 and accuracy < CALIBRATION_ACCURACY_THRESHOLD:
-        print(
-            f"Warning: accuracy {accuracy*100:.1f}% is below "
-            f"{CALIBRATION_ACCURACY_THRESHOLD*100:.0f}%. "
-            "Consider adjusting the ROI selection or lighting."
-        )
-    return accuracy
+#     accuracy = n_correct / n_total if n_total > 0 else 0.0
+#     print(f"Calibration: {accuracy*100:.1f}% ({n_correct}/{n_total})")
+#     if n_total > 0 and accuracy < CALIBRATION_ACCURACY_THRESHOLD:
+#         print(
+#             f"Warning: accuracy {accuracy*100:.1f}% is below "
+#             f"{CALIBRATION_ACCURACY_THRESHOLD*100:.0f}%. "
+#             "Consider adjusting the ROI selection or lighting."
+#         )
+#     return accuracy
 
 
 # ---------------------------------------------------------------------------
@@ -261,13 +249,10 @@ def main() -> None:
     left_positions = select_roi(ui, first_frame, "left fencer score")
     right_positions = select_roi(ui, first_frame, "right fencer score")
 
-    # --- OCR reader ---
-    ocr_reader = EasyOcrReader(get_device(), seven_segment=args.seven_segment)
-
-    # --- Calibration ---
-    calibrate_ocr(
-        ui, cap, ocr_reader, frame_count, fps, left_positions, right_positions
-    )
+    if args.seven_segment:
+        ocr_reader = SevenSegmentReader()
+    else:
+        ocr_reader = EasyOcrReader(get_device(), seven_segment=args.seven_segment)
 
     # --- Preview windows ---
     cv2.namedWindow("OCR Left", cv2.WINDOW_NORMAL)
@@ -307,6 +292,9 @@ def main() -> None:
     try:
         while True:
             ret, frame = cap.read()
+            if frame_id < 0:
+                frame_id += 1
+                continue
             if not ret:
                 break
 
@@ -316,6 +304,8 @@ def main() -> None:
             if frame_id % DO_OCR_EVERY_N_FRAMES == 0:
                 l_score, l_conf = ocr_reader.read(l_roi)
                 r_score, r_conf = ocr_reader.read(r_roi)
+                # cv2.imshow("Raw Left", (l_roi))
+                # cv2.imshow("Raw Right", (r_roi))
                 cv2.imshow("OCR Left", ocr_reader.preprocessor(l_roi))
                 cv2.imshow("OCR Right", ocr_reader.preprocessor(r_roi))
                 if csv_writer:

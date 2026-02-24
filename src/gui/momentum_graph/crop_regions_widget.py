@@ -22,9 +22,6 @@ from src.pyside_pipelines.multi_region_cropper.roi_selection_controller import (
     LabelConfig,
     ROISelectionPipeline,
 )
-from src.pyside_pipelines.multi_region_cropper.superpoint_multi_region_pipeline import (
-    SuperPointBatchPipeline,
-)
 
 from .base_task_widget import BaseTaskWidget
 
@@ -35,9 +32,7 @@ class CropRegionsWidget(BaseTaskWidget):
         self.cap: cv2.VideoCapture | None = None
         self.is_running = False
         self.roi_pipeline: ROISelectionPipeline | None = None
-        self.processing_pipeline: (
-            MultiRegionProcessingPipeline | SuperPointBatchPipeline | None
-        ) = None
+        self.processing_pipeline: MultiRegionProcessingPipeline | None = None
 
     @override
     def setup(self):
@@ -186,7 +181,7 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
         match_context = MatchContext()
         widget = CropRegionsWidget(match_context)
-        match_context.set_file("matches_data/sabre_2.mp4")
+        match_context.set_file("matches_data/foil_2.mp4")
         widget.show()
         sys.exit(app.exec())
 
