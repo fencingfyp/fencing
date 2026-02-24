@@ -1,4 +1,5 @@
 import csv
+import time
 from typing import override
 
 import cv2
@@ -64,10 +65,15 @@ class DetectScoreLightsWidget(BaseTaskWidget):
         self.time_stage.deactivate()
         self.processing_stage.init_detectors(timestamps)
         self.show_default_ui()
+        self.t0 = time.time()
         self.processing_stage.start_processing()
 
     def _on_processing_completed(self):
-        self.ui.write("Score lights detection completed.")
+        self.ui.write(
+            "Score lights detection completed in {:.2f} seconds.".format(
+                time.time() - self.t0
+            )
+        )
         self.is_running = False
         self.run_completed.emit(MomentumGraphTasksToIds.DETECT_SCORE_LIGHTS)
 
@@ -188,6 +194,9 @@ class TimeSelectionStage:
         self._update_actions()
 
 
+BATCH_SIZE = 16
+
+
 class ProcessingStage:
     def __init__(self, ui: PysideUi):
         self.ui = ui
@@ -201,6 +210,7 @@ class ProcessingStage:
         self.csv_file = None
         self.csv_writer = None
         self.current_frame_id = 0
+        self.total_frames = 0
         self.completed_callback = None
 
     def set_paths(self, cropped_lights_video_path: str, output_csv_path: str):
@@ -239,6 +249,7 @@ class ProcessingStage:
 
     def start_processing(self):
         self.cap = cv2.VideoCapture(self.cropped_lights_video_path)
+        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.csv_file = open(
             self.output_csv_path,
             "w",
@@ -246,28 +257,39 @@ class ProcessingStage:
         )
         self.csv_writer = csv.writer(self.csv_file)
         self.csv_writer.writerow(["frame_id", "left_light", "right_light"])
-        self.ui.schedule(self._process_frame)
+        self.ui.schedule(self._process_frames)
 
-    def _process_frame(self):
-        ret, frame = self.cap.read()
-        if not ret:
+    def _process_frames(self):
+        batch = []
+        for _ in range(BATCH_SIZE):
+            ret, frame = self.cap.read()
+            if not ret:
+                break
+            batch.append(frame)
+
+        if not batch:
             self.finish()
             return
 
-        self.ui.set_fresh_frame(frame)
-        left_on = self.left_detector.classify(frame, self.left_positions)
-        right_on = self.right_detector.classify(frame, self.right_positions)
-
-        self.ui.draw_objects(
-            [
-                QuadrilateralDrawable(self.left_positions, (255, 0, 0)),
-                QuadrilateralDrawable(self.right_positions, (0, 255, 0)),
-            ]
+        left_results = self.left_detector.classify_batch(
+            [(f, self.left_positions) for f in batch]
         )
-        self.csv_writer.writerow([self.current_frame_id, int(left_on), int(right_on)])
-        self.ui.show_frame()
-        self.current_frame_id += 1
-        self.ui.schedule(self._process_frame)
+        right_results = self.right_detector.classify_batch(
+            [(f, self.right_positions) for f in batch]
+        )
+
+        for frame, left_on, right_on in zip(batch, left_results, right_results):
+            self.ui.write(
+                f"Processed frame {self.current_frame_id}/{self.total_frames}: "
+                f"left={left_on}, right={right_on}",
+                silent=True,
+            )
+            self.csv_writer.writerow(
+                [self.current_frame_id, int(left_on), int(right_on)]
+            )
+            self.current_frame_id += 1
+
+        self.ui.schedule(self._process_frames)
 
     def finish(self):
         self.cancel()
@@ -287,4 +309,5 @@ if __name__ == "__main__":
     widget = DetectScoreLightsWidget(match_context)
     match_context.set_file("matches_data/sabre_2.mp4")
     widget.show()
+    app.exec()
     app.exec()

@@ -157,8 +157,8 @@ def process_scores(
     right = rolling_mode_np(right, window_median)
 
     # Cap jumps
-    # left = cap_jumps_np(left, max_jump=1)
-    # right = cap_jumps_np(right, max_jump=1)
+    left = cap_jumps_np(left, max_jump=1)
+    right = cap_jumps_np(right, max_jump=1)
 
     return np.column_stack([left, right])
 

@@ -1,5 +1,6 @@
 import csv
 import os
+import time
 from typing import override
 
 import cv2
@@ -39,6 +40,8 @@ class TrackPosesWidget(BaseTaskWidget):
         input_video_path = self.match_context.file_manager.get_original_video()
         model_path = os.path.join("models", "yolo", "yolo26n-pose.pt")
 
+        self.t0 = time.time()
+
         # Create controller
         self.controller = PoseToCsvController(
             ui=self.ui,
@@ -55,7 +58,11 @@ class TrackPosesWidget(BaseTaskWidget):
 
     def _on_finished(self):
         self.is_running = False
-        self.ui.write("Pose tracking completed.")
+        self.ui.write(
+            "Pose tracking completed. Elapsed time: {:.2f} seconds.".format(
+                time.time() - self.t0
+            )
+        )
         self.run_completed.emit(HeatMapTasksToIds.TRACK_POSES)
 
     def cancel(self):
@@ -97,6 +104,7 @@ class PoseToCsvController:
         self.csv_file = None
 
         self.frame_idx = 0
+        self.total_frames = None
 
         self._on_finished = None
 
@@ -115,6 +123,7 @@ class PoseToCsvController:
             self.ui.write(f"Error opening video file: {self.input_path}")
             return
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 16)
+        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
         self.csv_file = open(self.output_path, "w", newline="")
         self.writer = csv.writer(self.csv_file)
@@ -155,8 +164,9 @@ class PoseToCsvController:
         if rows:
             self.writer.writerows(rows)
 
-        # annotated_frame = results[0].plot()
-        self.ui.set_fresh_frame(frame)
+        self.ui.write(
+            f"Processed frame {self.frame_idx+1}/{self.total_frames}", silent=True
+        )
 
         self.frame_idx += 1
         self.ui.schedule(self._step)

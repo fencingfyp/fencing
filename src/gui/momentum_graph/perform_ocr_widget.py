@@ -15,6 +15,7 @@ threading and lock contention:
 
 import csv
 import os
+import time
 from enum import Enum, auto
 from typing import Optional, override
 
@@ -106,7 +107,6 @@ class PerformOcrWidget(BaseTaskWidget):
 
     def _on_finished(self):
         self.run_completed.emit(MomentumGraphTasksToIds.PERFORM_OCR)
-        self.ui.write("OCR processing completed.")
         self.is_running = False
 
 
@@ -214,6 +214,7 @@ class OcrController(QObject):
         )
 
         self._phase = Phase.COLLECTING
+        self.t0 = time.time()
         self.timer.start(0)
 
     # ------------------------------------------------------------------
@@ -236,14 +237,10 @@ class OcrController(QObject):
             self._begin_inference()
             return
 
-        # self.ui.set_fresh_frame(frame)
-        # self.ui.draw_objects(
-        #     [
-        #         QuadrilateralDrawable(Quadrilateral(self.left_score_positions)),
-        #         QuadrilateralDrawable(Quadrilateral(self.right_score_positions)),
-        #     ]
-        # )
-        self.ui.write(f"Collecting frame {self.current_frame_id}/{self.frame_count}...")
+        self.ui.write(
+            f"Collecting frame {self.current_frame_id}/{self.frame_count}...",
+            silent=True,
+        )
 
         if self.current_frame_id % DO_OCR_EVERY_N_FRAMES == 0:
             l_roi = extract_roi(frame, self.left_score_positions)
@@ -265,7 +262,8 @@ class OcrController(QObject):
         self._phase = Phase.INFERRING
         self.ui.write(
             f"Collection complete. Running inference on {len(self._pending_rois)} crops "
-            f"in batches of {self._batch_size}..."
+            f"in batches of {self._batch_size}...",
+            silent=True,
         )
 
     # ------------------------------------------------------------------
@@ -287,7 +285,10 @@ class OcrController(QObject):
             r_score, r_conf = results[pair_start + 1]
             self._results[ocr_frame_idx] = [l_score, r_score, l_conf, r_conf]
 
-        self.ui.write(f"Inference: {end}/{len(self._pending_rois)} crops processed...")
+        self.ui.write(
+            f"Inference: {end}/{len(self._pending_rois)} crops processed...",
+            silent=True,
+        )
 
         self._batch_index = end
         if self._batch_index >= len(self._pending_rois):
@@ -331,6 +332,11 @@ class OcrController(QObject):
 
     def stop(self):
         self.cleanup()
+        self.ui.write(
+            "OCR processing completed. Elapsed time: {:.2f} seconds.".format(
+                time.time() - self.t0
+            )
+        )
         self.finished.emit()
 
     # ------------------------------------------------------------------
@@ -378,4 +384,5 @@ if __name__ == "__main__":
     stats = pstats.Stats("profile.stats")
     stats.strip_dirs()
     stats.sort_stats("tottime")
+    stats.print_stats(10)
     stats.print_stats(10)

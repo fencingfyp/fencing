@@ -24,7 +24,7 @@ class Quadrilateral:
     def numpy(self) -> np.ndarray:
         return self.points.copy()
 
-    def to_list(self, type: str = "float") -> list[tuple[float, float]]:
+    def to_drawable_list(self, type: str = "float") -> list[tuple[float, float]]:
         ordered_points = self._order_points()
         if type == "int":
             return [(int(pt[0]), int(pt[1])) for pt in ordered_points]

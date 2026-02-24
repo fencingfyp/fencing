@@ -74,6 +74,72 @@ class SinglePatchAutoDetector:
     def get_debug_info(self):
         return self.debug_info
 
+    def classify_batch(
+        self,
+        pairs: list[tuple[np.ndarray, Quadrilateral]],
+    ) -> list[bool]:
+        """
+        Classify a list of (frame, patch) pairs, fully vectorised.
+        Each frame is matched to its corresponding quadrilateral.
+        """
+        if not pairs:
+            return []
+
+        shapes = [frame.shape[:2] for frame, _ in pairs]
+        if len(set(shapes)) > 1:
+            raise ValueError(
+                f"All frames must have the same spatial dimensions, got: {set(shapes)}"
+            )
+        n = len(pairs)
+        h, w = pairs[0][0].shape[:2]
+
+        # Convert all frames to LAB and stack → (n, h, w, 3)
+        labs = np.stack(
+            [
+                cv2.cvtColor(frame, cv2.COLOR_BGR2LAB).astype(np.float32)
+                for frame, _ in pairs
+            ],
+            axis=0,
+        )
+
+        L_ch = labs[..., 0]  # (n, h, w)
+        a_ch = labs[..., 1]
+        b_ch = labs[..., 2]
+        chroma = np.sqrt((a_ch - 128) ** 2 + (b_ch - 128) ** 2)
+
+        # Build per-pair masks → (n, h, w)
+        masks = np.stack(
+            [
+                cv2.fillPoly(
+                    np.zeros((h, w), np.uint8), [quad.numpy().astype(np.int32)], 255
+                ).astype(bool)
+                for _, quad in pairs
+            ],
+            axis=0,
+        )
+
+        nan_masks = np.where(masks, 1.0, np.nan)  # (n, h, w)
+        L_flat = (L_ch * nan_masks).reshape(n, -1)
+        a_flat = (a_ch * nan_masks).reshape(n, -1)
+        b_flat = (b_ch * nan_masks).reshape(n, -1)
+        chroma_flat = (chroma * nan_masks).reshape(n, -1)
+
+        L_stats = np.nanpercentile(L_flat, 75, axis=1)  # (n,)
+        chroma_stats = np.nanpercentile(chroma_flat, 75, axis=1)
+        a_means = np.nanmean(a_flat, axis=1)
+        b_means = np.nanmean(b_flat, axis=1)
+
+        ab_means = np.stack([a_means, b_means], axis=1)  # (n, 2)
+
+        brightness_ok = np.abs(L_stats - self.baseline_L) >= self.L_thresh
+        chroma_ratios = chroma_stats / (L_stats + 1e-3)
+        chroma_ok = chroma_ratios >= self.chroma_ratio_thresh
+        diff = ab_means - self.mu_ab  # (n, 2)
+        dists = np.einsum("ni,ij,nj->n", diff, self.cov_inv, diff)
+        colour_ok = dists <= self.dist_thresh
+
+        return (brightness_ok & chroma_ok & colour_ok).tolist()
+
     def classify(self, frame: np.ndarray, patch_pts: Quadrilateral) -> bool:
         L, ab_pixels, chroma = self.lab_stats_pixels(frame, patch_pts)
         ab_mean = np.mean(ab_pixels, axis=0)

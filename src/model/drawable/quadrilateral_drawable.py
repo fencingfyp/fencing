@@ -14,7 +14,7 @@ class QuadrilateralDrawable(Drawable):
 
     def primitives(self):
         # Return polygon points
-        yield ("polygon", self.quad.to_list())
+        yield ("polygon", self.quad.to_drawable_list())
 
     def style(self):
         return {"color": self._color, "thickness": 2}
