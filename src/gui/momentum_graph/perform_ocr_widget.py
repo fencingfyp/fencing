@@ -65,20 +65,24 @@ class PerformOcrWidget(BaseTaskWidget):
             raise RuntimeError("Cannot read first frame from video.")
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
+        self.add_run_option("seven_segment", "Use seven-segment model")
+
         self.ui.set_fresh_frame(frame)
         self.ui.write("Press 'Run' to start OCR processing.")
-        self.run_task()
 
     @override
     def on_runButton_clicked(self):
+        settings = self.get_run_settings()
+        self.seven_segment = settings.get("seven_segment", False)
         self.run_task()
 
     @override
     def run_task(self):
         if self.is_running or not self.match_context.file_manager:
             return
+
         self.run_started.emit(MomentumGraphTasksToIds.PERFORM_OCR)
-        self.is_running = True
+        super().run_task()
 
         if self.controller:
             self.controller.cancel()
@@ -94,8 +98,9 @@ class PerformOcrWidget(BaseTaskWidget):
                     FileRole.RAW_SCORES
                 ),
             },
-            use_seven_segment=True,
+            use_seven_segment=self.seven_segment,
         )
+
         self.controller.finished.connect(self._on_finished)
         self.controller.start()
 
@@ -187,8 +192,10 @@ class OcrController(QObject):
         self.current_frame_id = 0
 
         if self.seven_segment:
+            print("Using seven-segment model for OCR.")
             self.ocr_reader = SevenSegmentReader()
         else:
+            print("Using EasyOCR for OCR.")
             self.ocr_reader = EasyOcrReader(
                 get_device(), seven_segment=self.seven_segment
             )

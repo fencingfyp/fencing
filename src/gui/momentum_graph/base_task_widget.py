@@ -1,63 +1,13 @@
 from typing import override
 
-from PySide6.QtCore import Property, QEasingCurve, QPropertyAnimation, Signal, Slot
-from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (
-    QGraphicsOpacityEffect,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QStackedWidget,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtCore import Signal, Slot
+from PySide6.QtWidgets import QCheckBox, QLabel, QStackedWidget, QVBoxLayout, QWidget
 
+from src.gui.instruction_label import InstructionLabel
+from src.gui.pre_run_panel import PreRunPanel
 from src.gui.util.actions_panel_widget import ActionsPanelWidget
 from src.pyside.MatchContext import MatchContext
 from src.pyside.PysideUi import PysideUi
-
-
-class InstructionLabel(QLabel):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # Overlay
-        self._highlight = QWidget(self)
-        self._highlight.setStyleSheet(
-            """
-            background-color: rgba(255, 255, 0, 180);
-            border-radius: 4px;
-        """
-        )
-        self._highlight.hide()
-
-        # Opacity effect
-        self._effect = QGraphicsOpacityEffect(self._highlight)
-        self._highlight.setGraphicsEffect(self._effect)
-
-        # Animation
-        self._anim = QPropertyAnimation(self._effect, b"opacity")
-        self._anim.setDuration(1200)
-        self._anim.setEasingCurve(QEasingCurve.OutCubic)
-        self._anim.finished.connect(self._highlight.hide)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._highlight.setGeometry(self.rect())
-
-    def setText(self, text, silent=False):
-        super().setText(text)
-        if not silent:
-            self.animate_highlight()
-
-    def animate_highlight(self):
-        self._highlight.show()
-        self._effect.setOpacity(1.0)
-
-        self._anim.stop()
-        self._anim.setStartValue(1.0)
-        self._anim.setEndValue(0.0)
-        self._anim.start()
 
 
 class BaseTaskWidget(QWidget):
@@ -68,7 +18,6 @@ class BaseTaskWidget(QWidget):
         super().__init__(parent)
         self.match_context = match_context
         self._content_stack = QStackedWidget(self)
-        # self._content_stack.setStyleSheet("border: 2px solid red;")
 
         # ==================================================
         # Default / legacy UI widgets
@@ -80,17 +29,20 @@ class BaseTaskWidget(QWidget):
         self.uiTextLabel = InstructionLabel(self)
         self.uiTextLabel.setWordWrap(True)
 
-        self.runButton = QPushButton("Run", self)
-        self.runButton.hide()
+        # ==================================================
+        # Pre-run panel (options + run button)
+        # ==================================================
+        self._pre_run_panel = PreRunPanel(self)
+        # Expose run button at the top level for back-compat
+        self.runButton = self._pre_run_panel.run_button
 
         self._default_view = QWidget(self)
         default_layout = QVBoxLayout(self._default_view)
         default_layout.setContentsMargins(0, 0, 0, 0)
         default_layout.setSpacing(8)
-
         default_layout.addWidget(self.videoLabel, stretch=1)
         default_layout.addWidget(self.uiTextLabel)
-        default_layout.addWidget(self.runButton)
+        default_layout.addWidget(self._pre_run_panel)
 
         self._content_stack.addWidget(self._default_view)
 
@@ -130,7 +82,53 @@ class BaseTaskWidget(QWidget):
         self.match_context.match_changed.connect(self.on_match_context_changed)
 
     # --------------------------------------------------
-    # Content management (NEW, extensible API)
+    # Pre-run options API (delegates to PreRunPanel)
+    # --------------------------------------------------
+
+    def add_run_option(
+        self, key: str, label: str, *, checked: bool = False
+    ) -> QCheckBox:
+        """
+        Register a checkbox option that appears above the Run button.
+        The panel and Run button are shown automatically.
+
+        Example (in subclass setup()):
+            self.add_run_option("verbose", "Verbose output")
+            self.add_run_option("dry_run", "Dry run", checked=True)
+        """
+        cb = self._pre_run_panel.add_checkbox(key, label, checked=checked)
+        self._pre_run_panel.show_run_button()
+        return cb
+
+    def remove_run_option(self, key: str):
+        """Remove a previously added option by key."""
+        self._pre_run_panel.remove_checkbox(key)
+
+    def clear_run_options(self):
+        """Remove all options (checkboxes). Hides the panel if run button is also hidden."""
+        self._pre_run_panel.clear_checkboxes()
+
+    def get_run_settings(self) -> dict[str, bool]:
+        """
+        Consume the current state of all pre-run options.
+        Call this inside on_runButton_clicked (or run_task) to read selections.
+
+        Returns:
+            dict mapping each option key to its checked state, e.g.
+            {"verbose": True, "dry_run": False}
+        """
+        return self._pre_run_panel.get_settings()
+
+    def show_run_button(self):
+        """Explicitly show the Run button (and the panel)."""
+        self._pre_run_panel.show_run_button()
+
+    def hide_run_button(self):
+        """Hide the Run button after it has been pressed (or before run starts)."""
+        self._pre_run_panel.hide_run_button()
+
+    # --------------------------------------------------
+    # Content management
     # --------------------------------------------------
 
     def show_default_ui(self):
@@ -163,6 +161,7 @@ class BaseTaskWidget(QWidget):
 
     def cleanup(self):
         self.ui.close_additional_windows()
+        self.clear_run_options()
 
     @Slot()
     def on_match_context_changed(self):
@@ -184,7 +183,7 @@ class BaseTaskWidget(QWidget):
         return super().hideEvent(event)
 
     def setup(self):
-        """Override in subclasses."""
+        """Override in subclasses to configure options and run button."""
         pass
 
     # --------------------------------------------------
@@ -202,16 +201,23 @@ class BaseTaskWidget(QWidget):
 
     @Slot()
     def on_runButton_clicked(self):
+        """
+        Override in subclasses. Call get_run_settings() here to read options,
+        then call hide_run_button() if you want to hide the panel while running.
+
+        Example:
+            settings = self.get_run_settings()
+            self.hide_run_button()
+            self.run_task(verbose=settings["verbose"])
+        """
         pass
 
     def run_task(self):
         self.is_running = True
+        self._pre_run_panel.hide()
 
     def set_actions(self, actions: list[tuple[str, callable]]):
-        """
-        Replace the current action buttons.
-        actions: list of (button_text, callback)
-        """
+        """Replace the current action buttons. actions: list of (button_text, callback)."""
         self._action_panel.set_actions(actions)
 
     def clear_actions(self):
@@ -226,4 +232,5 @@ class BaseTaskWidget(QWidget):
         if self.is_running:
             self.cancel()
         self.cleanup()
+        return super().closeEvent(event)
         return super().closeEvent(event)
