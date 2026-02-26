@@ -96,8 +96,8 @@ class TrainTransform:
     normalised single-channel tensor the model expects.
     """
 
-    def __init__(self):
-        self.augmenter = SevenSegmentAugmenter(AugmentationConfig())
+    def __init__(self, aug_cfg: AugmentationConfig = None):
+        self.augmenter = SevenSegmentAugmenter(aug_cfg or AugmentationConfig())
         self.preprocessor = SevenSegmentScorePreprocessor(PreprocessorConfig())
         self.to_tensor = transforms.Compose(
             [

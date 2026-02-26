@@ -79,6 +79,34 @@ class SevenSegmentReader:
         scores, classes = self._infer(batch)
         return [(int(c), float(s)) for c, s in zip(classes, scores)]
 
+    def predict_with_confidence(
+        self,
+        image: torch.Tensor,
+    ) -> tuple[int, float, np.ndarray]:
+        """
+        Run inference and return the predicted class, its confidence, and the
+        full softmax probability distribution over all 16 classes.
+
+        Args:
+            model:  trained MobileNetV2, in eval mode
+            image:  preprocessed tensor of shape (1, 1, H, W), normalised
+            device: torch device
+
+        Returns:
+            pred_class:   int, argmax of softmax
+            confidence:   float, probability of the predicted class
+            probs:        np.ndarray of shape (16,), full softmax distribution
+        """
+        self.model.eval()
+        with torch.no_grad():
+            logits = self.model(image.to(self.device))  # (1, 16)
+            probs = torch.softmax(logits, dim=1)  # (1, 16)
+            probs_np = probs.squeeze(0).cpu().numpy()  # (16,)
+            pred_class = int(np.argmax(probs_np))
+            confidence = float(probs_np[pred_class])
+
+        return pred_class, confidence, probs_np
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------

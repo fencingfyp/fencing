@@ -223,6 +223,8 @@ class OrbTracker(TargetTracker):
             self._using_lite = False
 
     def update_all(self, frame: np.ndarray) -> dict[str, Quadrilateral | None]:
+        self._update_orb_mode()
+
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gray = self.clahe.apply(gray)
         h, w = gray.shape
@@ -231,32 +233,35 @@ class OrbTracker(TargetTracker):
         )
 
         kp_frame, des_frame = self._detect(small)
-
-        kp_frame, kp_pts = self._upscale_and_cache(kp_frame)
+        kp_frame, kp_pts = self._upscale_and_extract_pts(kp_frame)
 
         results = {}
         for name, target in self.targets.items():
             results[name] = target.update_with_features(kp_frame, des_frame, kp_pts)
 
-        # If any target failed with lite, retry the whole frame with full ORB
-        if self._using_lite and any(
-            r is None or target.is_struggling()
-            for (name, r), target in zip(results.items(), self.targets.values())
-        ):
-            kp_frame, des_frame = self.orb_full.detectAndCompute(small, None)
-            kp_frame, kp_pts = self._upscale_and_cache(kp_frame)
-            self._using_lite = False
+        if self._using_lite and self._any_target_struggling(results):
+            self._retry_struggling_targets(small, results)
 
-            for name, target in self.targets.items():
-                if results[name] is None or target.is_struggling():
-                    results[name] = target.update_with_features(
-                        kp_frame, des_frame, kp_pts
-                    )
-
-        self._update_orb_mode()
         return results
 
-    def _upscale_and_cache(self, kp_frame: list) -> tuple[list, np.ndarray]:
+    def _any_target_struggling(self, results: dict) -> bool:
+        return any(
+            r is None or self.targets[name].is_struggling()
+            for name, r in results.items()
+        )
+
+    def _retry_struggling_targets(self, small: np.ndarray, results: dict) -> None:
+        kp_full, des_full = self.orb_full.detectAndCompute(small, None)
+        kp_full, kp_pts_full = self._upscale_and_extract_pts(kp_full)
+        self._using_lite = False
+
+        for name, target in self.targets.items():
+            if results[name] is None or target.is_struggling():
+                results[name] = target.update_with_features(
+                    kp_full, des_full, kp_pts_full
+                )
+
+    def _upscale_and_extract_pts(self, kp_frame: list) -> tuple[list, np.ndarray]:
         inv = 1.0 / self.detection_scale
         for kp in kp_frame:
             kp.pt = (kp.pt[0] * inv, kp.pt[1] * inv)

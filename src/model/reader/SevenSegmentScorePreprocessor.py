@@ -94,12 +94,6 @@ class SevenSegmentScorePreprocessor:
         gray = self._to_gray(contrasted)
         steps.append(("gray", gray))
 
-        # binary = self._binarise(gray, ratio)
-        # steps.append(("binary", binary))
-
-        # cropped = self._tight_crop(binary)
-        # steps.append(("tight_crop", cropped))
-
         resized = self._pad_to_output_size(gray)
         steps.append(("output", resized))
 
@@ -187,49 +181,6 @@ class SevenSegmentScorePreprocessor:
             return image.copy()
         dominant = self._detect_dominant_channel(image)
         return image[:, :, dominant]
-
-    def _binarise(
-        self, gray: np.ndarray, ratio: float, debug: bool = False
-    ) -> np.ndarray:
-        otsu_thresh, _ = cv2.threshold(
-            gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-        )
-
-        hist = cv2.calcHist([gray], [0], None, [256], [0, 256]).flatten()
-        upper_hist = hist[int(otsu_thresh) :]
-        bright_peak_offset = int(np.argmax(upper_hist))
-        bright_peak = int(otsu_thresh) + bright_peak_offset
-
-        peak_height = upper_hist[bright_peak_offset]
-        peak_threshold = 0.2 * peak_height
-        left_edge_offset = bright_peak_offset  # fallback
-        for i in range(bright_peak_offset - 1, -1, -1):
-            if upper_hist[i] < peak_threshold:
-                left_edge_offset = i
-                break
-
-        left_edge = int(otsu_thresh) + left_edge_offset
-
-        threshold = int(otsu_thresh) + ratio * (left_edge - int(otsu_thresh))
-        threshold = float(np.clip(threshold, 0, 254))
-
-        # Enforce minimum foreground fraction — walk threshold left until enough
-        # pixels survive. Guards against Otsu landing too close to the peak and
-        # the ratio pushing the threshold into real segment data.
-        total_pixels = hist.sum()
-        for t in range(int(threshold), -1, -1):
-            if hist[t:].sum() / total_pixels >= self.cfg.min_foreground_fraction:
-                threshold = float(t)
-                break
-
-        _, binary = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
-
-        if debug:
-            self._visualise_histogram(
-                hist, int(otsu_thresh), bright_peak, left_edge, int(threshold)
-            )
-
-        return binary
 
     def _visualise_histogram(
         self,

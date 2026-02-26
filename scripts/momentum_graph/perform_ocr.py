@@ -292,7 +292,7 @@ def main() -> None:
     try:
         while True:
             ret, frame = cap.read()
-            if frame_id < 0:
+            if frame_id < 7000:
                 frame_id += 1
                 continue
             if not ret:
@@ -304,8 +304,6 @@ def main() -> None:
             if frame_id % DO_OCR_EVERY_N_FRAMES == 0:
                 l_score, l_conf = ocr_reader.read(l_roi)
                 r_score, r_conf = ocr_reader.read(r_roi)
-                # cv2.imshow("Raw Left", (l_roi))
-                # cv2.imshow("Raw Right", (r_roi))
                 cv2.imshow("OCR Left", ocr_reader.preprocessor(l_roi))
                 cv2.imshow("OCR Right", ocr_reader.preprocessor(r_roi))
                 if csv_writer:

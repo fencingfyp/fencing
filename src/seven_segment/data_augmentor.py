@@ -15,47 +15,43 @@ from src.model.reader.SevenSegmentScorePreprocessor import SevenSegmentScorePrep
 class AugmentationConfig:
     # Rotation
     rotation_max_deg: float = 5.0
-    rotation_p: float = 0.5
+    rotation_p: float = 0.3616461765929567
 
     # Perspective warp
-    perspective_max_shift: float = 0.12  # fraction of image dimension
-    perspective_p: float = 0.5
+    perspective_max_shift: float = 0.1  # fraction of image dimension
+    perspective_p: float = 0.43
 
     # Crop and border padding
     # Random crop simulates overcropping; border padding simulates loose ROI
     crop_max_fraction: float = 0.05  # max fraction to crop from any edge
     pad_max_fraction: float = 0.10  # max fraction of image size to pad
-    crop_p: float = 0.5
-    pad_p: float = 0.5
+    crop_p: float = 0.44
+    pad_p: float = 0.64
 
     # Brightness and contrast:  out = alpha * in + beta
-    brightness_max_delta: float = 45.0  # beta range: [-delta, +delta]
-    contrast_range: tuple = (0.65, 1.45)  # alpha range
-    brightness_contrast_p: float = 0.6
+    brightness_max_delta: float = 43.0  # beta range: [-delta, +delta]
+    contrast_range: tuple = (0.7, 1.4)  # alpha range
+    brightness_contrast_p: float = 0.45
 
     # Gamma:  out = in ^ (1/gamma) — values >1 brighten midtones, <1 darken
-    gamma_range: tuple = (0.7, 1.4)
-    gamma_p: float = 0.4
+    gamma_range: tuple = (0.76, 1.37)
+    gamma_p: float = 0.468
 
     # Gaussian blur — kernel must be odd
-    blur_kernel_size: int = 5
+    blur_kernel_size: int = 3
     blur_p: float = 0.3
 
     # Gaussian noise — simulates sensor noise and binarisation instability
-    noise_std_range: tuple = (2.0, 12.0)
+    noise_std_range: tuple = (1.39, 18.44)
     noise_max_value: float = (
         180  # clip noise to this value to avoid false bright pixels that could skew binarisation
     )
-    noise_p: float = 0.3
-
-    # Salt and pepper noise
-    salt_pepper_fraction: float = 0.01  # fraction of pixels to corrupt
-    salt_pepper_p: float = 0.2
+    noise_p: float = 0.229
 
     # Colour jitter (hue/saturation shift in HSV space)
     # Covers different segment colours across display types
-    hue_max_shift: int = 10  # degrees in [0, 180] OpenCV hue space
-    saturation_range: tuple = (0.5, 1.5)
+    hue_max_shift: int = 9  # degrees in [0, 180] OpenCV hue space
+    saturation_range: tuple = (0.446, 1.58)
     colour_jitter_p: float = 0.4
 
 
@@ -118,17 +114,6 @@ class SevenSegmentAugmenter:
 
         if self._roll(self.cfg.noise_p):
             img = self._gaussian_noise(img)
-
-        # if self._roll(self.cfg.salt_pepper_p):
-        #     img = self._salt_pepper(img)
-
-        # TODO: integrate SevenSegmentScorePreprocessor here so that every
-        # augmented variant is binarised, tight-cropped, aspect-ratio padded,
-        # and resized to the CNN input canvas before being returned.
-        # Example:
-        #   img = preprocessor.process(img, otsu_ratio=self.cfg.otsu_ratio)
-        # Consider also randomising otsu_ratio slightly per sample (see
-        # AugmentationConfig) to further cover threshold sensitivity.
 
         return img
 

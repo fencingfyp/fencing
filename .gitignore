@@ -12,3 +12,5 @@
 /training_data
 /lmdb
 /logs
+
+**/*.db
