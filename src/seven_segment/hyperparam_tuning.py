@@ -23,7 +23,7 @@ from .train_model import (
 def objective(trial: optuna.Trial) -> float:
     cfg = AugmentationConfig(
         # Rotation
-        rotation_max_deg=trial.suggest_float("rotation_max_deg", 3.0, 15.0),
+        rotation_max_deg=trial.suggest_float("rotation_max_deg", 3.0, 12.0),
         rotation_p=trial.suggest_float("rotation_p", 0.3, 0.8),
         # Perspective warp
         perspective_max_shift=trial.suggest_float("perspective_max_shift", 0.05, 0.20),
@@ -57,7 +57,7 @@ def objective(trial: optuna.Trial) -> float:
         noise_p=trial.suggest_float("noise_p", 0.2, 0.6),
         # Colour jitter
         colour_jitter_p=trial.suggest_float("colour_jitter_p", 0.2, 0.7),
-        hue_max_shift=trial.suggest_int("hue_max_shift", 5, 20),
+        hue_max_shift=trial.suggest_int("hue_max_shift", 10, 30),
         saturation_range=(
             trial.suggest_float("sat_low", 0.3, 0.8),
             trial.suggest_float("sat_high", 1.2, 1.8),
@@ -139,6 +139,7 @@ if __name__ == "__main__":
             patience=1,
         ),
     )
+    study.enqueue_trial(asdict(AugmentationConfig()))
     study.optimize(objective, n_trials=100, show_progress_bar=True)
 
     print("Best val accuracy:", study.best_value)

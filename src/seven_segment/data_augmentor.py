@@ -43,16 +43,13 @@ class AugmentationConfig:
 
     # Gaussian noise — simulates sensor noise and binarisation instability
     noise_std_range: tuple = (1.39, 18.44)
-    noise_max_value: float = (
-        180  # clip noise to this value to avoid false bright pixels that could skew binarisation
-    )
     noise_p: float = 0.229
 
     # Colour jitter (hue/saturation shift in HSV space)
     # Covers different segment colours across display types
-    hue_max_shift: int = 9  # degrees in [0, 180] OpenCV hue space
-    saturation_range: tuple = (0.446, 1.58)
-    colour_jitter_p: float = 0.4
+    hue_max_shift: int = 15  # degrees in [0, 180] OpenCV hue space
+    saturation_range: tuple = (0.45, 1.6)
+    colour_jitter_p: float = 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -63,15 +60,8 @@ class AugmentationConfig:
 class SevenSegmentAugmenter:
     """
     Augmentation pipeline for seven-segment score crops stored as BGR uint8.
-
-    Call augment(image) to get a single augmented copy.
-    Each augmentation is applied independently with its configured probability,
-    so the model also sees relatively clean samples rather than always receiving
-    maximally distorted inputs.
-
-    The preprocessor (binarisation, tight crop, aspect-ratio padding, resize)
-    should be applied AFTER augmentation so that augmented variants are
-    normalised to the same canvas before being fed to the model.
+    Augmented images are passed directly to the preprocessor which resizes
+    and converts to RGB for MobileNetV2.
     """
 
     def __init__(self, config: AugmentationConfig = None):
@@ -118,7 +108,6 @@ class SevenSegmentAugmenter:
         return img
 
     def augment_batch(self, images: list[np.ndarray]) -> list[np.ndarray]:
-        """Convenience wrapper to augment a list of images."""
         return [self.augment(img) for img in images]
 
     # ------------------------------------------------------------------
@@ -129,7 +118,6 @@ class SevenSegmentAugmenter:
         h, w = img.shape[:2]
         angle = random.uniform(-self.cfg.rotation_max_deg, self.cfg.rotation_max_deg)
         M = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
-        # Border reflect avoids hard black edges that could confuse binarisation
         return cv2.warpAffine(img, M, (w, h), borderMode=cv2.BORDER_REFLECT_101)
 
     def _perspective_warp(self, img: np.ndarray) -> np.ndarray:
@@ -152,30 +140,17 @@ class SevenSegmentAugmenter:
         return cv2.warpPerspective(img, M, (w, h), borderMode=cv2.BORDER_REFLECT_101)
 
     def _random_crop(self, img: np.ndarray) -> np.ndarray:
-        """
-        Randomly remove a small fraction from each edge, then resize back to
-        original dimensions. Simulates a tighter-than-intended ROI crop that
-        may clip digit edges.
-        """
         h, w = img.shape[:2]
         f = self.cfg.crop_max_fraction
         top = int(random.uniform(0, f) * h)
         bottom = int(random.uniform(0, f) * h)
         left = int(random.uniform(0, f) * w)
         right = int(random.uniform(0, f) * w)
-
-        # Guard against degenerate crop
         y1, y2 = top, max(h - bottom, top + 1)
         x1, x2 = left, max(w - right, left + 1)
-        cropped = img[y1:y2, x1:x2]
-        return cv2.resize(cropped, (w, h), interpolation=cv2.INTER_LINEAR)
+        return cv2.resize(img[y1:y2, x1:x2], (w, h), interpolation=cv2.INTER_LINEAR)
 
     def _border_pad(self, img: np.ndarray) -> np.ndarray:
-        """
-        Add random padding on each edge filled with the mean border colour,
-        then resize back. Simulates a looser-than-intended ROI that includes
-        background pixels around the digit.
-        """
         h, w = img.shape[:2]
         f = self.cfg.pad_max_fraction
         top = int(random.uniform(0, f) * h)
@@ -183,9 +158,16 @@ class SevenSegmentAugmenter:
         left = int(random.uniform(0, f) * w)
         right = int(random.uniform(0, f) * w)
 
-        # Use mean border colour rather than black so padding does not produce
-        # hard edges that artificially skew the binarisation threshold
-        border_colour = [int(img[:, :, c].mean()) for c in range(img.shape[2])]
+        # Randomise border fill to simulate different background conditions:
+        # dark panel, bright overexposure, or mean (neutral)
+        fill_type = random.choice(["dark", "bright", "mean"])
+        if fill_type == "dark":
+            border_colour = [random.randint(0, 30)] * 3
+        elif fill_type == "bright":
+            border_colour = [random.randint(200, 255)] * 3
+        else:
+            border_colour = [int(img[:, :, c].mean()) for c in range(img.shape[2])]
+
         padded = cv2.copyMakeBorder(
             img,
             top,
@@ -198,7 +180,11 @@ class SevenSegmentAugmenter:
         return cv2.resize(padded, (w, h), interpolation=cv2.INTER_LINEAR)
 
     def _colour_jitter(self, img: np.ndarray) -> np.ndarray:
-        """Shift hue and scale saturation in HSV space."""
+        """
+        Shift hue and scale saturation in HSV space.
+        More impactful now that colour information is passed to the model —
+        covers segment colour variation across display types and lighting casts.
+        """
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.int32)
         hsv[:, :, 0] = (
             hsv[:, :, 0]
@@ -209,7 +195,6 @@ class SevenSegmentAugmenter:
         return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
 
     def _brightness_contrast(self, img: np.ndarray) -> np.ndarray:
-        """Apply alpha * img + beta, clipped to [0, 255]."""
         alpha = random.uniform(*self.cfg.contrast_range)
         beta = random.uniform(
             -self.cfg.brightness_max_delta, self.cfg.brightness_max_delta
@@ -217,11 +202,6 @@ class SevenSegmentAugmenter:
         return np.clip(img.astype(np.float32) * alpha + beta, 0, 255).astype(np.uint8)
 
     def _gamma(self, img: np.ndarray) -> np.ndarray:
-        """
-        Apply gamma correction via a lookup table.
-        gamma > 1 brightens midtones; gamma < 1 darkens them.
-        Simulates different display brightness settings and camera exposure curves.
-        """
         gamma = random.uniform(*self.cfg.gamma_range)
         inv_gamma = 1.0 / gamma
         lut = np.array(
@@ -237,13 +217,7 @@ class SevenSegmentAugmenter:
     def _gaussian_noise(self, img: np.ndarray) -> np.ndarray:
         std = random.uniform(*self.cfg.noise_std_range)
         noise = np.random.normal(0, std, img.shape).astype(np.float32)
-        return np.clip(
-            img.astype(np.float32) + noise, 0, self.cfg.noise_max_value
-        ).astype(np.uint8)
-
-    # ------------------------------------------------------------------
-    # Utility
-    # ------------------------------------------------------------------
+        return np.clip(img.astype(np.float32) + noise, 0, 255).astype(np.uint8)
 
     @staticmethod
     def _roll(p: float) -> bool:
@@ -363,7 +337,7 @@ if __name__ == "__main__":
         img = cv2.imread(str(img_path))
 
         augmented = aug.augment(img)
-        preprocessed_list = pre._process_one_debug(augmented, 0.8)
+        preprocessed_list = pre._process_one_debug(augmented)
 
         # Ensure all panels are BGR for stacking
         img_bgr = to_bgr(img)

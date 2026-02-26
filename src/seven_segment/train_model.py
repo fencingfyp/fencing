@@ -1,7 +1,6 @@
 import argparse
 import logging
 import os
-import pstats
 import time
 from dataclasses import dataclass
 
@@ -92,8 +91,8 @@ def setup_logging(output_dir: str) -> logging.Logger:
 class TrainTransform:
     """
     Applied in __getitem__ on the DataLoader worker.
-    Augments the raw BGR crop, then runs the preprocessor to produce the
-    normalised single-channel tensor the model expects.
+    Augments the raw BGR crop, preprocessor converts to RGB and resizes,
+    then ImageNet normalisation is applied for MobileNetV2.
     """
 
     def __init__(self, aug_cfg: AugmentationConfig = None):
@@ -101,31 +100,37 @@ class TrainTransform:
         self.preprocessor = SevenSegmentScorePreprocessor(PreprocessorConfig())
         self.to_tensor = transforms.Compose(
             [
-                transforms.ToTensor(),  # HxW uint8 -> 1xHxW float [0,1]
-                transforms.Normalize(mean=[0.5], std=[0.5]),  # -> [-1, 1]
+                transforms.ToTensor(),  # HxWx3 uint8 -> 3xHxW float [0,1]
+                transforms.Normalize(  # ImageNet mean/std — matches pretrained weights
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225],
+                ),
             ]
         )
 
     def __call__(self, image):
-        image = self.augmenter.augment(image)
-        image = self.preprocessor.process(image)  # -> HxW uint8 grayscale
+        image = self.augmenter.augment(image)  # BGR uint8
+        image = self.preprocessor.process(image)  # RGB uint8, padded to output_size
         return self.to_tensor(image)
 
 
 class ValTransform:
-    """No augmentation — just preprocess and normalise."""
+    """No augmentation — preprocess to RGB and apply ImageNet normalisation."""
 
     def __init__(self):
         self.preprocessor = SevenSegmentScorePreprocessor(PreprocessorConfig())
         self.to_tensor = transforms.Compose(
             [
                 transforms.ToTensor(),
-                transforms.Normalize(mean=[0.5], std=[0.5]),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225],
+                ),
             ]
         )
 
     def __call__(self, image):
-        image = self.preprocessor.process(image)
+        image = self.preprocessor.process(image)  # RGB uint8
         return self.to_tensor(image)
 
 
@@ -136,32 +141,13 @@ class ValTransform:
 
 def build_model(input_size: int) -> nn.Module:
     """
-    MobileNetV2 pretrained on ImageNet, adapted for:
-      - Single-channel (grayscale) input via a learned 1->3 channel projection
-      - 16-class output head
-    The first conv layer is replaced rather than averaging channels so the
-    model can learn an optimal grayscale-to-feature mapping rather than
-    assuming equal channel weighting.
+    MobileNetV2 pretrained on ImageNet with standard 3-channel RGB input.
+    Only the classifier head is replaced for 16-class output — all pretrained
+    convolutional weights are preserved and fine-tuned from their ImageNet state.
     """
     model = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT)
 
-    # Replace first conv: 3-channel -> 1-channel input
-    old_conv = model.features[0][0]
-    model.features[0][0] = nn.Conv2d(
-        1,
-        old_conv.out_channels,
-        kernel_size=old_conv.kernel_size,
-        stride=old_conv.stride,
-        padding=old_conv.padding,
-        bias=False,
-    )
-    # Initialise by averaging the pretrained RGB weights across channels
-    with torch.no_grad():
-        model.features[0][0].weight = nn.Parameter(
-            old_conv.weight.mean(dim=1, keepdim=True)
-        )
-
-    # Replace classifier head for 16 classes
+    # Replace only the classifier head — backbone stays fully pretrained
     in_features = model.classifier[1].in_features
     model.classifier[1] = nn.Linear(in_features, NUM_CLASSES)
 
@@ -496,26 +482,16 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-
-    def main():
-        args = parse_args()
-        cfg = TrainingConfig(
-            train_lmdb=args.train_lmdb,
-            val_lmdb=args.val_lmdb,
-            output_dir=args.output_dir,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            lr=args.lr,
-            num_workers=args.num_workers,
-            use_amp=not args.no_amp,
-            confusion_matrix_every_n_epochs=args.cm_every,
-        )
-        train(cfg)
-
-    import cProfile
-
-    cProfile.run("main()", "profile.stats")
-    stats = pstats.Stats("profile.stats")
-    stats.strip_dirs()
-    stats.sort_stats("tottime")
-    stats.print_stats(20)
+    args = parse_args()
+    cfg = TrainingConfig(
+        train_lmdb=args.train_lmdb,
+        val_lmdb=args.val_lmdb,
+        output_dir=args.output_dir,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        lr=args.lr,
+        num_workers=args.num_workers,
+        use_amp=not args.no_amp,
+        confusion_matrix_every_n_epochs=args.cm_every,
+    )
+    train(cfg)

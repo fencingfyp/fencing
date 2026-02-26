@@ -35,10 +35,8 @@ class SevenSegmentReader:
         self,
         checkpoint_path: str = "src/seven_segment/model.pt",
         preprocessor_config: PreprocessorConfig = None,
-        otsu_ratio: float = 0.5,
         device: str = None,
     ):
-        self.otsu_ratio = otsu_ratio
         self.preprocessor = SevenSegmentScorePreprocessor(
             preprocessor_config or PreprocessorConfig()
         )
@@ -46,8 +44,11 @@ class SevenSegmentReader:
         self.model = self._load_model(checkpoint_path)
         self.transform = transforms.Compose(
             [
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.5], std=[0.5]),
+                transforms.ToTensor(),  # HxWx3 uint8 -> 3xHxW float [0,1]
+                transforms.Normalize(  # ImageNet mean/std — matches pretrained weights
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225],
+                ),
             ]
         )
 
@@ -61,7 +62,7 @@ class SevenSegmentReader:
         Returns (predicted_class, confidence) where confidence is the
         softmax probability of the predicted class.
         """
-        tensor = self._preprocess(image).unsqueeze(0).to(self.device)  # 1x1xHxW
+        tensor = self._preprocess(image).unsqueeze(0).to(self.device)
         scores, classes = self._infer(tensor)
         return int(classes[0]), float(scores[0])
 
@@ -121,7 +122,7 @@ class SevenSegmentReader:
 
     def _preprocess(self, image: np.ndarray) -> torch.Tensor:
         """Apply preprocessor pipeline and convert to normalised tensor."""
-        processed = self.preprocessor.process(image, otsu_ratio=self.otsu_ratio)
+        processed = self.preprocessor.process(image)
         return self.transform(processed)  # 1xHxW float
 
     @torch.inference_mode()
@@ -139,17 +140,10 @@ class SevenSegmentReader:
 
 
 def _build_model() -> nn.Module:
-    model = models.mobilenet_v2(weights=None)  # weights loaded from checkpoint
+    model = models.mobilenet_v2(weights=None)
 
-    old_conv = model.features[0][0]
-    model.features[0][0] = nn.Conv2d(
-        1,
-        old_conv.out_channels,
-        kernel_size=old_conv.kernel_size,
-        stride=old_conv.stride,
-        padding=old_conv.padding,
-        bias=False,
-    )
+    # Replace only the classifier head — backbone stays fully pretrained
     in_features = model.classifier[1].in_features
     model.classifier[1] = nn.Linear(in_features, NUM_CLASSES)
+
     return model
