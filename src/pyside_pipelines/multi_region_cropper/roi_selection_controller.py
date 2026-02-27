@@ -13,21 +13,19 @@ from .label_config import LabelConfig
 class ROISelectionPipeline:
     """
     UI-only pipeline. Prompts the user to select 4 corners per label in
-    sequence and produces DefinedRegion objects. Knows nothing about
-    tracking internals — strategy and tuning live in LabelConfig.
+    sequence and produces DefinedRegion objects.
     """
 
     def __init__(
         self,
         first_frame: np.ndarray,
         ui: PysideUi,
-        label_configs: dict[str, LabelConfig],
+        labels: list[str],
         on_finished: Callable[[list[DefinedRegion]], None] | None = None,
     ):
         self.first_frame = first_frame.copy()
         self.ui = ui
-        self.label_configs = label_configs
-        self.labels = list(label_configs.keys())
+        self.labels = labels
         self.region_index = 0
         self.defined_regions: list[DefinedRegion] = []
         self._on_finished = on_finished
@@ -54,15 +52,11 @@ class ROISelectionPipeline:
             )
 
         label = self.labels[self.region_index]
-        config = self.label_configs[label]
 
         self.defined_regions.append(
             DefinedRegion(
                 label=label,
                 quad_np=Quadrilateral(positions).numpy(),
-                output_factory=config.output_factory,
-                tracking_strategy=config.tracking_strategy,
-                mask_margin=config.mask_margin,
             )
         )
 

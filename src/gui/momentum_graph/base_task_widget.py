@@ -233,4 +233,3 @@ class BaseTaskWidget(QWidget):
             self.cancel()
         self.cleanup()
         return super().closeEvent(event)
-        return super().closeEvent(event)

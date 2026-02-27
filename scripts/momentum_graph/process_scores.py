@@ -202,7 +202,7 @@ def main():
             pd.to_numeric(df["right_score"], errors="coerce").to_numpy(),
         ]
     )
-    pred = raw_pred  # for demo purposes, show raw predictions instead of processed
+    # pred = raw_pred  # for demo purposes, show raw predictions instead of processed
 
     # Rewrite the predictions CSV with cleaned data in this format: frame_id,left_score,right_score,left_confidence,right_confidence. set confidence to 1.0
     frame_ids = np.arange(len(pred))

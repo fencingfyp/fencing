@@ -8,12 +8,14 @@ from src.model.tracker.CompositeTracker import CompositeTracker
 from src.model.tracker.OrbTracker import OrbTracker
 from src.model.tracker.TargetTracker import TargetTracker
 from src.model.tracker.TrackingStrategy import TrackingStrategy
+from src.pyside_pipelines.multi_region_cropper.tracking_config import TrackingConfig
 
 from .DefinedRegion import DefinedRegion
 
 
 def build_tracker(
     defined_regions: list[DefinedRegion],
+    tracking_configs: dict[str, TrackingConfig],
     first_frame: np.ndarray,
 ) -> TargetTracker:
     """
@@ -27,7 +29,8 @@ def build_tracker(
     Callers (e.g. MultiRegionProcessingPipeline) don't need to know which
     concrete type they receive — they interact solely via TargetTracker.
     """
-    strategies = {r.tracking_strategy for r in defined_regions}
+    strategies = {tc.tracking_strategy for tc in tracking_configs.values()}
+
     needs_orb = TrackingStrategy.ORB in strategies
     needs_akaze = TrackingStrategy.AKAZE in strategies
 
@@ -37,10 +40,16 @@ def build_tracker(
     if needs_orb and needs_akaze:
         composite = CompositeTracker(orb, akaze)
         for region in defined_regions:
-            sub = orb if region.tracking_strategy is TrackingStrategy.ORB else akaze
+            sub = (
+                orb
+                if tracking_configs[region.label].tracking_strategy
+                is TrackingStrategy.ORB
+                else akaze
+            )
             kwargs = (
-                {"mask_margin": region.mask_margin}
-                if region.tracking_strategy is TrackingStrategy.ORB
+                {"mask_margin": tracking_configs[region.label].mask_margin}
+                if tracking_configs[region.label].tracking_strategy
+                is TrackingStrategy.ORB
                 else {}
             )
             composite._register(
@@ -56,8 +65,8 @@ def build_tracker(
     tracker = orb if needs_orb else akaze
     for region in defined_regions:
         kwargs = (
-            {"mask_margin": region.mask_margin}
-            if region.tracking_strategy is TrackingStrategy.ORB
+            {"mask_margin": tracking_configs[region.label].mask_margin}
+            if tracking_configs[region.label].tracking_strategy is TrackingStrategy.ORB
             else {}
         )
         tracker.add_target(

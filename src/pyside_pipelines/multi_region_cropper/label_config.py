@@ -1,13 +1,11 @@
-# src/pyside_pipelines/multi_region_cropper/label_config.py
-
 from dataclasses import dataclass, field
-from typing import Callable
 
-from src.model.tracker.TrackingStrategy import TrackingStrategy
+from src.pyside_pipelines.multi_region_cropper.output.output_config import OutputConfig
+
+from .tracking_config import TrackingConfig
 
 
 @dataclass
 class LabelConfig:
-    output_factory: Callable
-    tracking_strategy: TrackingStrategy = TrackingStrategy.ORB
-    mask_margin: float = field(default=0.2)
+    output_configs: list[OutputConfig]
+    tracking: TrackingConfig = field(default_factory=TrackingConfig)

@@ -361,7 +361,7 @@ class OcrController(QObject):
 
         if cropped_frames != original_frames:
             raise ValueError(
-                "Cropped video frame count does not match original video frame count."
+                f"Cropped video frame count ({cropped_frames}) does not match original video frame count ({original_frames})."
             )
 
 
@@ -384,5 +384,4 @@ if __name__ == "__main__":
     stats = pstats.Stats("profile.stats")
     stats.strip_dirs()
     stats.sort_stats("tottime")
-    stats.print_stats(10)
     stats.print_stats(10)

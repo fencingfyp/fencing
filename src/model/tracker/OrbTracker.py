@@ -19,7 +19,7 @@ class OrbTarget(KeypointTarget):
         bf: cv2.BFMatcher,
         clahe: cv2.CLAHE,
         mask_margin: float = 0.2,
-        detection_scale: float = 0.5,
+        detection_scale: float = 0.8,
     ):
         self.orb = orb
         self.bf = bf
@@ -165,27 +165,32 @@ class OrbTarget(KeypointTarget):
         return self.last_quad
 
     def is_tracking_well(self) -> bool:
-        return self.last_inliers is not None and self.last_inliers > 80
+        return (
+            self.last_inliers is not None
+            and self.last_inliers > OrbTracker._LITE_INLIERS_THRESHOLD
+        )
 
     def is_struggling(self) -> bool:
-        return self.last_inliers is None or self.last_inliers < 50
+        return (
+            self.last_inliers is None
+            or self.last_inliers < OrbTracker._FULL_INLIERS_THRESHOLD
+        )
 
 
 class OrbTracker(TargetTracker):
     # Hysteresis thresholds for switching between full/lite detection
-    _LITE_INLIERS_THRESHOLD = 80  # all targets must exceed this to switch to lite
-    _FULL_INLIERS_THRESHOLD = 50  # any target below this forces switch back to full
+    _LITE_INLIERS_THRESHOLD = 100  # all targets must exceed this to switch to lite
+    _FULL_INLIERS_THRESHOLD = 80  # any target below this forces switch back to full
 
     def __init__(self, detection_scale: float = 0.5):
         self.orb_full = cv2.ORB_create(
             2000, scaleFactor=1.2, nlevels=8, fastThreshold=10
         )
         self.orb_lite = cv2.ORB_create(
-            1000,
+            1700,
             scaleFactor=1.2,
             nlevels=6,
             fastThreshold=15,
-            scoreType=cv2.ORB_FAST_SCORE,
         )
         self.bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
         self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))

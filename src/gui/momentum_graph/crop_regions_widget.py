@@ -7,29 +7,32 @@ from PySide6.QtWidgets import QApplication
 
 from src.gui.util.task_graph import MomentumGraphTasksToIds
 from src.model.FileManager import FileRole
-from src.model.tracker.TrackingStrategy import TrackingStrategy
 from src.pyside.MatchContext import MatchContext
+from src.pyside_pipelines.multi_region_cropper.label_config import LabelConfig
 from src.pyside_pipelines.multi_region_cropper.multi_region_crop_pipeline import (
     MultiRegionProcessingPipeline,
 )
-from src.pyside_pipelines.multi_region_cropper.output.csv_oneshot_quad_output import (
-    CsvOneShotQuadOutput,
-)
-from src.pyside_pipelines.multi_region_cropper.output.rectified_video_output import (
-    RectifiedVideoOutput,
+from src.pyside_pipelines.multi_region_cropper.output.output_config import (
+    CsvOneShotQuadOutputConfig,
+    RectifiedOutputConfig,
 )
 from src.pyside_pipelines.multi_region_cropper.roi_selection_controller import (
-    LabelConfig,
     ROISelectionPipeline,
 )
+from src.pyside_pipelines.multi_region_cropper.tracking_config import TrackingConfig
 
 from .base_task_widget import BaseTaskWidget
+
+SCOREBOARD_LABEL = "scoreboard"
+SCORE_LIGHTS_LABEL = "score lights"
+PISTE_LABEL = "piste"
 
 
 class CropRegionsWidget(BaseTaskWidget):
     def __init__(self, match_context: MatchContext, parent=None):
         super().__init__(match_context, parent)
         self.cap: cv2.VideoCapture | None = None
+        self.path = None
         self.is_running = False
         self.roi_pipeline: ROISelectionPipeline | None = None
         self.processing_pipeline: MultiRegionProcessingPipeline | None = None
@@ -41,6 +44,7 @@ class CropRegionsWidget(BaseTaskWidget):
 
         video_path = self.match_context.file_manager.get_original_video()
         self.cap = cv2.VideoCapture(str(video_path))
+        self.path = video_path
         ret, frame = self.cap.read()
         if not ret:
             raise ValueError(f"Failed to read video from {video_path}")
@@ -54,64 +58,37 @@ class CropRegionsWidget(BaseTaskWidget):
         if not self.cap or self.is_running:
             return
         self.is_running = True
+        fm = self.match_context.file_manager
 
         self.run_started.emit(MomentumGraphTasksToIds.CROP_REGIONS)
 
-        label_configs = {
-            "scoreboard": LabelConfig(
-                output_factory=lambda quad, fps: [
-                    RectifiedVideoOutput(
-                        self.match_context.file_manager.get_path(
-                            FileRole.CROPPED_SCOREBOARD
-                        ),
-                        fps,
-                        quad,
+        self.label_configs = {
+            SCOREBOARD_LABEL: LabelConfig(
+                output_configs=[
+                    RectifiedOutputConfig(
+                        SCOREBOARD_LABEL, fm.get_path(FileRole.CROPPED_SCOREBOARD)
                     ),
                 ],
-                tracking_strategy=TrackingStrategy.ORB,
-                mask_margin=0.3,
+                tracking=TrackingConfig(mask_margin=0.2),
             ),
-            "score lights": LabelConfig(
-                output_factory=lambda quad, fps: [
-                    RectifiedVideoOutput(
-                        self.match_context.file_manager.get_path(
-                            FileRole.CROPPED_SCORE_LIGHTS
-                        ),
-                        fps,
-                        quad,
-                    )
+            SCORE_LIGHTS_LABEL: LabelConfig(
+                output_configs=[
+                    RectifiedOutputConfig(
+                        SCORE_LIGHTS_LABEL, fm.get_path(FileRole.CROPPED_SCORE_LIGHTS)
+                    ),
                 ],
-                mask_margin=0.3,
+                tracking=TrackingConfig(mask_margin=0.2),
             ),
-            # "timer": LabelConfig(
-            #     output_factory=lambda quad, fps: [
-            #         RectifiedVideoOutput(
-            #             self.match_context.file_manager.get_path(
-            #                 FileRole.CROPPED_TIMER
-            #             ),
-            #             fps,
-            #             quad,
-            #         )
-            #     ],
-            # ),
-            "piste": LabelConfig(
-                output_factory=lambda quad, fps: [
-                    CsvOneShotQuadOutput(
-                        self.match_context.file_manager.get_path(
-                            FileRole.RAW_PISTE_QUADS
-                        ),
-                        quad,
+            PISTE_LABEL: LabelConfig(
+                output_configs=[
+                    CsvOneShotQuadOutputConfig(
+                        PISTE_LABEL, fm.get_path(FileRole.RAW_PISTE_QUADS)
                     ),
-                    RectifiedVideoOutput(
-                        self.match_context.file_manager.get_path(
-                            FileRole.CROPPED_PISTE
-                        ),
-                        fps,
-                        quad,
+                    RectifiedOutputConfig(
+                        PISTE_LABEL, fm.get_path(FileRole.CROPPED_PISTE)
                     ),
                 ],
-                tracking_strategy=TrackingStrategy.ORB,
-                mask_margin=1,
+                tracking=TrackingConfig(mask_margin=1.0),
             ),
         }
 
@@ -121,11 +98,11 @@ class CropRegionsWidget(BaseTaskWidget):
             self.ui.write("Failed to read first frame for ROI selection.")
             self.is_running = False
             return
-
+        self.cap.release()
         self.roi_pipeline = ROISelectionPipeline(
             first_frame=first_frame,
             ui=self.ui,
-            label_configs=label_configs,
+            labels=list(self.label_configs.keys()),
             on_finished=self._on_rois_defined,
         )
         self.roi_pipeline.start()
@@ -135,13 +112,15 @@ class CropRegionsWidget(BaseTaskWidget):
     # -------------------------
     def _on_rois_defined(self, defined_regions):
         self.t0 = time.time()
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset video to start
         self.processing_pipeline = MultiRegionProcessingPipeline(
-            cap=self.cap,
+            video_path=str(self.path),
             defined_regions=defined_regions,
+            label_configs=self.label_configs,  # carries tracking + output configs
             ui=self.ui,
             on_finished=self.on_finished,
+            sequential=True,
         )
+
         self.processing_pipeline.start()
 
     @override
@@ -169,24 +148,39 @@ class CropRegionsWidget(BaseTaskWidget):
             self.processing_pipeline = None
         return super().cancel()
 
+    @override
+    def cleanup(self):
+        if self.processing_pipeline:
+            self.processing_pipeline._cleanup()
+            self.processing_pipeline = None
+        return super().cleanup()
+
+
+def main():
+    app = QApplication(sys.argv)
+    match_context = MatchContext()
+    widget = CropRegionsWidget(match_context)
+    match_context.set_file("matches_data/sabre_2.mp4")
+    widget.show()
+    sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     import cProfile
+    import faulthandler
     import pstats
     import sys
 
     from PySide6.QtWidgets import QApplication
 
-    def main():
-        app = QApplication(sys.argv)
-        match_context = MatchContext()
-        widget = CropRegionsWidget(match_context)
-        match_context.set_file("matches_data/foil_2.mp4")
-        widget.show()
-        sys.exit(app.exec())
+    faulthandler.enable()
 
-    cProfile.run("main()", "profile.stats")
-    stats = pstats.Stats("profile.stats")
+    profiler = cProfile.Profile()
+    profiler.enable()
+    main()
+    profiler.disable()  # app.exec() has returned, Qt is done
+
+    stats = pstats.Stats(profiler)
     stats.strip_dirs()
     stats.sort_stats("tottime")
-    stats.print_stats(20)
+    stats.print_stats(15)
