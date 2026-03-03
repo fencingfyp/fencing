@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from PySide6.QtCore import QObject, Signal
 
 from src.gui.task_dependencies import TASK_DEPENDENCIES

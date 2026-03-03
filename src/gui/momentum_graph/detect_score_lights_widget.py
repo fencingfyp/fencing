@@ -257,6 +257,7 @@ class ProcessingStage:
         )
         self.csv_writer = csv.writer(self.csv_file)
         self.csv_writer.writerow(["frame_id", "left_light", "right_light"])
+        self.ui.show_loading("Processing score lights...")
         self.ui.schedule(self._process_frames)
 
     def _process_frames(self):
@@ -279,10 +280,13 @@ class ProcessingStage:
         )
 
         for frame, left_on, right_on in zip(batch, left_results, right_results):
-            self.ui.write(
-                f"Processed frame {self.current_frame_id}/{self.total_frames}: "
-                f"left={left_on}, right={right_on}",
-                silent=True,
+            self.ui.update_loading(
+                (
+                    self.current_frame_id / self.total_frames
+                    if self.total_frames > 0
+                    else 0.0
+                ),
+                f"Processing frame {self.current_frame_id}/{self.total_frames}...",
             )
             self.csv_writer.writerow(
                 [self.current_frame_id, int(left_on), int(right_on)]
@@ -293,6 +297,7 @@ class ProcessingStage:
 
     def finish(self):
         self.cancel()
+        self.ui.hide_loading()
         self.completed_callback()
 
     def cancel(self):

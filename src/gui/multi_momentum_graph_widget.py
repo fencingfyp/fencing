@@ -132,7 +132,7 @@ class MultiMomentumGraphWidget(QWidget):
 
     def _load_momentum(self, match: MatchContext) -> pd.DataFrame | None:
         try:
-            path = match.file_manager.get_path(FileRole.MOMENTUM_DATA)
+            path = match.file_manager.get_path(FileRole.RAW_MOMENTUM_DATA)
             return pd.read_csv(path)
         except Exception:
             return None

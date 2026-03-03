@@ -214,6 +214,7 @@ class OcrController(QObject):
         )
 
         self._phase = Phase.COLLECTING
+        self.ui.show_loading("Collecting frames...")
         self.t0 = time.time()
         self.timer.start(0)
 
@@ -237,9 +238,9 @@ class OcrController(QObject):
             self._begin_inference()
             return
 
-        self.ui.write(
+        self.ui.update_loading(
+            self.current_frame_id / self.frame_count if self.frame_count > 0 else 0.0,
             f"Collecting frame {self.current_frame_id}/{self.frame_count}...",
-            silent=True,
         )
 
         if self.current_frame_id % DO_OCR_EVERY_N_FRAMES == 0:
@@ -285,14 +286,15 @@ class OcrController(QObject):
             r_score, r_conf = results[pair_start + 1]
             self._results[ocr_frame_idx] = [l_score, r_score, l_conf, r_conf]
 
-        self.ui.write(
+        self.ui.update_loading(
+            end / len(self._pending_rois) if len(self._pending_rois) > 0 else 0.0,
             f"Inference: {end}/{len(self._pending_rois)} crops processed...",
-            silent=True,
         )
 
         self._batch_index = end
         if self._batch_index >= len(self._pending_rois):
             self._write_csv()
+            self.ui.hide_loading()
             self.stop()
 
     # ------------------------------------------------------------------

@@ -60,7 +60,7 @@ class GenerateMomentumGraphWidget(BaseTaskWidget):
                 "ocr_csv": file_manager.get_path(FileRole.RAW_SCORES),
                 "score_lights_csv": file_manager.get_path(FileRole.RAW_LIGHTS),
                 "video": file_manager.get_original_video(),
-                "output_csv": file_manager.get_path(FileRole.MOMENTUM_DATA),
+                "output_csv": file_manager.get_path(FileRole.RAW_MOMENTUM_DATA),
             },
             ui=self.ui,
             parent=self,

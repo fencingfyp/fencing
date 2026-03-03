@@ -6,7 +6,8 @@ CROPPED_TIMER_VIDEO_NAME = "cropped_timer.mp4"
 OCR_OUTPUT_CSV_NAME = "raw_scores.csv"
 DETECT_LIGHTS_OUTPUT_CSV_NAME = "raw_lights.csv"
 PERIODS_JSON_NAME = "periods.json"
-MOMENTUM_DATA_CSV_NAME = "momentum_data.csv"
+RAW_MOMENTUM_DATA_CSV_NAME = "raw_momentum_data.csv"
+PROCESSED_MOMENTUM_DATA_CSV_NAME = "processed_momentum_data.csv"
 MOMENTUM_GRAPH_IMAGE_NAME = "momentum_graph.png"
 
 # Heat map

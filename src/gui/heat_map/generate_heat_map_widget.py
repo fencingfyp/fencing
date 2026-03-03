@@ -130,7 +130,7 @@ class GenerateHeatMapWidget(BaseTaskWidget):
         )
 
         momentum_csv_path = self.match_context.file_manager.get_path(
-            FileRole.MOMENTUM_DATA
+            FileRole.RAW_MOMENTUM_DATA
         )
         momentum_frames = load_momentum_diffs(momentum_csv_path)
 

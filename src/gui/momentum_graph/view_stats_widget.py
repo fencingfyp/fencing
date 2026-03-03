@@ -124,7 +124,7 @@ class ViewStatsWidget(BaseTaskWidget):
 
         try:
             momentum_df = load_momentum_df(
-                self.match_context.file_manager.get_path(FileRole.MOMENTUM_DATA)
+                self.match_context.file_manager.get_path(FileRole.RAW_MOMENTUM_DATA)
             )
             periods = load_periods(
                 self.match_context.file_manager.get_path(FileRole.PERIODS)
@@ -151,8 +151,14 @@ class ViewStatsWidget(BaseTaskWidget):
         self.ui.show_additional("data", pixmap_to_np(pixmap))
 
         # Save to file
-        output_path = self.match_context.file_manager.get_path(FileRole.MOMENTUM_GRAPH)
-        pixmap.save(str(output_path))
+        csv_output_path = self.match_context.file_manager.get_path(
+            FileRole.PROCESSED_MOMENTUM_DATA
+        )
+        timing_df.to_csv(csv_output_path, index=False)
+        image_output_path = self.match_context.file_manager.get_path(
+            FileRole.MOMENTUM_GRAPH
+        )
+        pixmap.save(str(image_output_path))
         self.is_running = False
         self.run_completed.emit(TasksToIds.VIEW_STATS.value)
 

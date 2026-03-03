@@ -81,6 +81,7 @@ class MultiRegionProcessingPipeline:
         self._run_sequentially = sequential
 
     def start(self):
+        self.ui.show_loading("Starting processing...")
         if self._test_tracker or self._run_sequentially:
             self.tracker = self._test_tracker or build_tracker_from_configs(
                 self._region_configs, self.video_path
@@ -126,8 +127,15 @@ class MultiRegionProcessingPipeline:
             pass
 
         if self.ui:
-            percent = (self._frames_completed / self.total_frames) * 100
-            self.ui.write(f"Processing ({percent:.1f}%)", silent=True)
+            pct = (
+                (self._frames_completed / self.total_frames)
+                if self.total_frames > 0
+                else 0.0
+            )
+            self.ui.update_loading(
+                pct,
+                f"Processing... ({self._frames_completed}/{self.total_frames} frames)",
+            )
 
         if all(not p.is_alive() for p in self._processes):
             self._concatenate_and_finish()
@@ -243,8 +251,9 @@ class MultiRegionProcessingPipeline:
                             size=5,
                         )
                     )
-        self.ui.write(
-            f"Processing frame {self.frame_id}/{self.total_frames}...", silent=True
+        self.ui.update_loading(
+            self.frame_id / self.total_frames if self.total_frames > 0 else 0.0,
+            f"Processing frame {self.frame_id}/{self.total_frames}",
         )
         self.ui.set_fresh_frame(frame)
         self.ui.draw_objects(draw_quads + pts)
@@ -272,5 +281,6 @@ class MultiRegionProcessingPipeline:
 
     def _finish(self):
         self._cleanup()
+        self.ui.hide_loading()
         if self.on_finished:
             self.on_finished()

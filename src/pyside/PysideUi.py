@@ -9,6 +9,7 @@ from src.gui.n_point_picker import NPointPicker
 from src.gui.util.actions_panel_widget import ActionsPanelWidget
 from src.gui.util.conversion import np_to_pixmap
 from src.gui.util.fencer_selection_controller import FencerSelectionController
+from src.gui.util.loading_overlay import LoadingOverlay
 from src.model.Quadrilateral import Quadrilateral
 from src.model.Ui import Ui
 from src.pyside.video_renderer import VideoRenderer
@@ -36,6 +37,7 @@ class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
         self.action_panel = action_panel
         self.text_label = text_label
         self.video_renderer = VideoRenderer(video_label)
+        self._loading_overlay = LoadingOverlay(video_label)
 
         self._additional_windows: dict[int | str, QWidget] = {}
 
@@ -112,6 +114,18 @@ class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
 
     def draw_objects(self, drawables: list):
         self.video_renderer.render(drawables)
+
+    def show_loading(self, message: str = "Loading...", progress: float | None = None):
+        """None progress = spinner, 0.0-1.0 = progress bar."""
+        self._loading_overlay.show_loading(message, progress)
+
+    def update_loading(self, progress: float, message: str | None = None):
+        if message is not None:
+            self._loading_overlay.set_message(message)
+        self._loading_overlay.set_progress(progress)
+
+    def hide_loading(self):
+        self._loading_overlay.hide_loading()
 
     # ------------------------------------------------------------------
     # Other interactive API

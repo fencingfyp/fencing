@@ -66,6 +66,7 @@ class TrackPosesWidget(BaseTaskWidget):
                 time.time() - self.t0
             )
         )
+        self.ui.hide_loading()
         self.run_completed.emit(TasksToIds.TRACK_POSES.value)
 
     def cancel(self):
@@ -122,7 +123,7 @@ def extract_rows(frame_idx: int, result, track_ids: dict[int, int]) -> list:
 
 
 class _RollerWorker(QThread):
-    progress = Signal(str, bool)  # message, silent
+    progress = Signal(float)
     finished = Signal()
     error = Signal(str)
 
@@ -205,8 +206,8 @@ class _RollerWorker(QThread):
                     if rows:
                         writer.writerows(rows)
 
-                pct = int((frame_idx / total_frames) * 100)
-                self.progress.emit(f"Progress: {pct}%", True)
+                pct = frame_idx / total_frames if total_frames > 0 else 0.0
+                self.progress.emit(pct)
 
         finally:
             cap.release()
@@ -267,12 +268,13 @@ class Roller:
             self.device,
         )
         self._worker.progress.connect(
-            lambda msg, silent: self.ui.write(msg, silent=silent)
+            lambda pct: self.ui.update_loading(pct, "Processing video...")
         )
         self._worker.finished.connect(self.on_finished)
         self._worker.error.connect(lambda e: self.ui.write(f"Error: {e}"))
         self._worker.start()
-        self.ui.write("Processing video...")
+        self.ui.write("", silent=True)  # clear previous messages
+        self.ui.show_loading("Processing video...")
 
     # ------------------------------------------------------------------
     # Cleanup
