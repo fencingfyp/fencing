@@ -17,6 +17,7 @@ from src.util.file_names import (
     MOMENTUM_GRAPH_IMAGE_NAME,
     OCR_OUTPUT_CSV_NAME,
     PERIODS_JSON_NAME,
+    RAW_PISTE_QUADS_CSV_NAME,
 )
 
 from .crop_regions_widget import CropRegionsWidget
@@ -33,6 +34,7 @@ TASK_DEPENDENCIES = [
         [
             CROPPED_SCOREBOARD_VIDEO_NAME,
             CROPPED_SCORE_LIGHTS_VIDEO_NAME,
+            RAW_PISTE_QUADS_CSV_NAME,
             # CROPPED_TIMER_VIDEO_NAME,
         ],
     ),

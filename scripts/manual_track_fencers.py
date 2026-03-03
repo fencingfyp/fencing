@@ -186,6 +186,8 @@ def reprocess_csv(
         with open(input_csv, "r") as input_csv:
             # skip header
             next(input_csv)
+            csv_writer = csv.writer(output_csv)
+            csv_writer.writerow(get_header_row())  # write header to output
             # Process each frame's detections and write to the output CSV
             while input_csv:
                 line = input_csv.readline()
@@ -201,8 +203,7 @@ def reprocess_csv(
                 parts = line.strip().split(",")
                 # Replace the fencer ID with 0 for left and 1 for right
                 parts[1] = str(fencer_dir)
-                line = ",".join(parts) + "\n"
-                output_csv.write(line)
+                csv_writer.writerow(parts)
 
 
 def main():

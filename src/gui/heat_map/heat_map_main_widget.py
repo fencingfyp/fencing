@@ -20,6 +20,7 @@ from src.util.file_names import (
     MOMENTUM_DATA_CSV_NAME,
     OCR_OUTPUT_CSV_NAME,
     PROCESSED_POSE_DATA_CSV_NAME,
+    RAW_PISTE_QUADS_CSV_NAME,
     RAW_POSE_DATA_CSV_NAME,
 )
 
@@ -52,7 +53,7 @@ TASK_DEPENDENCIES = [
         [
             CROPPED_SCOREBOARD_VIDEO_NAME,
             CROPPED_SCORE_LIGHTS_VIDEO_NAME,
-            CROPPED_TIMER_VIDEO_NAME,
+            RAW_PISTE_QUADS_CSV_NAME,
         ],
     ),
     Task(

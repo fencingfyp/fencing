@@ -1,15 +1,18 @@
 import csv
 import os
 import time
+from types import SimpleNamespace
 from typing import override
 
 import cv2
+import numpy as np
+from PySide6.QtCore import QThread, Signal
 from ultralytics import YOLO
+from ultralytics.trackers.bot_sort import BOTSORT
 
-from scripts.estimate_poses import extract_rows, get_header_row
+from scripts.estimate_poses import get_header_row
 from src.gui.momentum_graph.base_task_widget import BaseTaskWidget
 from src.gui.util.task_graph import HeatMapTasksToIds
-from src.model import Ui
 from src.model.FileManager import FileRole
 from src.pyside.MatchContext import MatchContext
 from src.pyside.PysideUi import PysideUi
@@ -38,12 +41,12 @@ class TrackPosesWidget(BaseTaskWidget):
         self.run_started.emit(HeatMapTasksToIds.TRACK_POSES)
 
         input_video_path = self.match_context.file_manager.get_original_video()
-        model_path = os.path.join("models", "yolo", "yolo26n-pose.pt")
+        model_path = os.path.join("models", "yolo", "yolo26l-pose.pt")
 
         self.t0 = time.time()
 
         # Create controller
-        self.controller = PoseToCsvController(
+        self.controller = Roller(
             ui=self.ui,
             input_path=input_video_path,
             output_path=self.match_context.file_manager.get_path(FileRole.RAW_POSE),
@@ -70,12 +73,178 @@ class TrackPosesWidget(BaseTaskWidget):
             self.controller.cancel()
 
 
-class PoseToCsvController:
-    """
-    Controller for processing a video with YOLO pose+tracking and writing to CSV.
+BATCH_SIZE = 8
 
-    Drives processing via ui.run_loop(step_callback).
+BOTSORT_ARGS = SimpleNamespace(
+    tracker_type="botsort",
+    track_high_thresh=0.25,
+    track_low_thresh=0.1,
+    new_track_thresh=0.25,
+    track_buffer=30,
+    match_thresh=0.8,
+    fuse_score=True,
+    gmc_method="sparseOptFlow",
+    proximity_thresh=0.5,
+    appearance_thresh=0.8,
+    with_reid=False,
+    model="auto",
+)
+
+
+# ------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------
+
+
+def extract_rows(frame_idx: int, result, track_ids: dict[int, int]) -> list:
     """
+    result: single YOLO Results object for one frame
+    track_ids: det_ind -> track_id from BOTSORT output
+    """
+    output = []
+    if not hasattr(result, "boxes") or result.boxes is None:
+        return output
+    for i, (box, kps) in enumerate(zip(result.boxes, result.keypoints)):
+        if int(box.cls.item()) != 0:
+            continue
+        track_id = track_ids.get(i, -1)
+        x1, y1, x2, y2 = [float(v) for v in box.xyxy[0].tolist()]
+        row = [frame_idx, track_id, float(box.conf.item()), x1, y1, x2, y2]
+        for (x, y), v in zip(kps.xy[0].tolist(), kps.conf[0].tolist()):
+            row.extend([x, y, v])
+        output.append(row)
+    return output
+
+
+# ------------------------------------------------------------------
+# Worker thread
+# ------------------------------------------------------------------
+
+
+class _RollerWorker(QThread):
+    progress = Signal(str, bool)  # message, silent
+    finished = Signal()
+    error = Signal(str)
+
+    def __init__(self, input_path, output_path, model_path, device):
+        super().__init__()
+        self.input_path = input_path
+        self.output_path = output_path
+        self.model_path = model_path
+        self.device = device
+        self._cancelled = False
+
+    def run(self):
+        try:
+            self._process()
+        except Exception as e:
+            self.error.emit(str(e))
+        finally:
+            self.finished.emit()
+
+    def _process(self):
+        model = YOLO(self.model_path, task="pose")
+
+        cap = cv2.VideoCapture(self.input_path)
+        if not cap.isOpened():
+            self.error.emit(f"Error opening video file: {self.input_path}")
+            return
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, BATCH_SIZE * 2)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+
+        tracker = BOTSORT(BOTSORT_ARGS, frame_rate=int(fps))
+
+        csv_file = open(self.output_path, "w", newline="")
+        writer = csv.writer(csv_file)
+        writer.writerow(get_header_row())
+
+        frame_idx = 0
+        try:
+            while not self._cancelled:
+                # Read a batch of frames
+                frames = []
+                frame_indices = []
+                for _ in range(BATCH_SIZE):
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    frames.append(frame)
+                    frame_indices.append(frame_idx)
+                    frame_idx += 1
+
+                if not frames:
+                    break
+
+                # Batch inference
+                batch_results = model.predict(
+                    frames,
+                    verbose=False,
+                    device=self.device,
+                    half=True,
+                    batch=BATCH_SIZE,
+                )
+
+                # Feed each frame into BOTSORT sequentially
+                for result, frame, fidx in zip(batch_results, frames, frame_indices):
+                    result.boxes = (
+                        result.boxes.cpu() if result.boxes is not None else None
+                    )
+                    result.keypoints = (
+                        result.keypoints.cpu() if result.keypoints is not None else None
+                    )
+                    tracks = tracker.update(result.boxes, frame)
+
+                    track_ids = {}
+                    if len(tracks) > 0:
+                        for track in tracks:
+                            det_ind = int(track[7])
+                            track_ids[det_ind] = int(track[4])
+
+                    rows = extract_rows(fidx, result, track_ids)
+                    if rows:
+                        writer.writerows(rows)
+
+                pct = int((frame_idx / total_frames) * 100)
+                self.progress.emit(f"Progress: {pct}%", True)
+
+        finally:
+            cap.release()
+            csv_file.close()
+
+    def cancel(self):
+        self._cancelled = True
+
+
+# ------------------------------------------------------------------
+# Roller
+# ------------------------------------------------------------------
+
+
+class Roller:
+    """
+    Controller for processing a video with YOLO pose + offline BOTSORT tracking,
+    writing results to CSV.
+
+    Runs in a QThread to keep the Qt event loop responsive during inference.
+    Frames are read in batches of BATCH_SIZE for native YOLO batch inference.
+    BOTSORT processes each frame sequentially to maintain correct track state.
+    """
+
+    def __init__(
+        self,
+        ui: PysideUi,
+        input_path: str,
+        output_path: str,
+        model_path: str,
+    ):
+        self.ui = ui
+        self.input_path = input_path
+        self.output_path = output_path
+        self.model_path = model_path
+        self.device = get_device()
+        self._on_finished = None
+        self._worker: _RollerWorker | None = None
 
     def set_on_finished(self, callback):
         self._on_finished = callback
@@ -85,105 +254,35 @@ class PoseToCsvController:
         if self._on_finished:
             self._on_finished()
 
-    def __init__(
-        self,
-        ui: PysideUi,
-        input_path: str,
-        output_path: str,
-        model_path: str,
-    ):
-        self.ui: PysideUi = ui
-        self.input_path = input_path
-        self.output_path = output_path
-        self.model_path = model_path
-
-        self.cap: cv2.VideoCapture | None = None
-        self.model: YOLO | None = None
-        self.device = get_device()
-        self.writer = None
-        self.csv_file = None
-
-        self.frame_idx = 0
-        self.total_frames = None
-
-        self._on_finished = None
-
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def start(self):
-        """Initialise resources and start processing loop."""
-
         self.ui.write("Loading YOLO model...")
-        self.model = YOLO(self.model_path, task="pose")
-
-        self.cap = cv2.VideoCapture(self.input_path)
-        if not self.cap.isOpened():
-            self.ui.write(f"Error opening video file: {self.input_path}")
-            return
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 16)
-        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-        self.csv_file = open(self.output_path, "w", newline="")
-        self.writer = csv.writer(self.csv_file)
-
-        # Write header
-        self.writer.writerow(get_header_row())
-
+        self._worker = _RollerWorker(
+            self.input_path,
+            self.output_path,
+            self.model_path,
+            self.device,
+        )
+        self._worker.progress.connect(
+            lambda msg, silent: self.ui.write(msg, silent=silent)
+        )
+        self._worker.finished.connect(self.on_finished)
+        self._worker.error.connect(lambda e: self.ui.write(f"Error: {e}"))
+        self._worker.start()
         self.ui.write("Processing video...")
-        self.ui.schedule(self._step)
-
-    # ------------------------------------------------------------------
-    # Loop step
-    # ------------------------------------------------------------------
-
-    def _step(self):
-        """
-        Returns:
-            True  -> continue loop
-            False -> stop loop
-        """
-
-        ret, frame = self.cap.read()
-        if not ret:
-            self.on_finished()
-            return
-
-        results = self.model.track(
-            frame,
-            persist=True,
-            verbose=False,
-            device=self.device,
-            tracker="bytetrack.yaml",
-            half=True,
-        )
-
-        # Write CSV rows
-        rows = extract_rows(results, self.frame_idx)
-        if rows:
-            self.writer.writerows(rows)
-
-        self.ui.write(
-            f"Processed frame {self.frame_idx+1}/{self.total_frames}", silent=True
-        )
-
-        self.frame_idx += 1
-        self.ui.schedule(self._step)
 
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
 
     def cancel(self):
-        if self.cap is not None:
-            self.cap.release()
-
-        if self.csv_file is not None:
-            self.csv_file.close()
-
-        if hasattr(self, "model") and self.model is not None:
-            del self.model
+        if self._worker is not None:
+            self._worker.cancel()
+            self._worker.wait()  # block until thread exits cleanly before releasing resources
+            self._worker = None
 
 
 if __name__ == "__main__":
@@ -197,7 +296,7 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
         match_context = MatchContext()
         widget = TrackPosesWidget(match_context)
-        match_context.set_file("matches_data/foil_2.mp4")
+        match_context.set_file("matches_data/sabre_7.mp4")
         widget.show()
         sys.exit(app.exec())
 

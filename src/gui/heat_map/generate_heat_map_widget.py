@@ -18,8 +18,11 @@ from src.model.FileManager import FileRole
 from src.model.FrameInfoManager import FrameInfoManager
 from src.model.Quadrilateral import Quadrilateral
 from src.pyside.MatchContext import MatchContext
-from src.pyside_pipelines.multi_region_cropper.output.csv_oneshot_quad_output import (
-    row_mapper as piste_csv_row_mapper,
+from src.pyside_pipelines.multi_region_cropper.output.csv_quad_output import (
+    get_header_row as quad_get_header_row,
+)
+from src.pyside_pipelines.multi_region_cropper.output.csv_quad_output import (
+    row_mapper as quad_row_mapper,
 )
 
 from ..momentum_graph.base_task_widget import BaseTaskWidget
@@ -67,6 +70,10 @@ def generate_heat_map_data(
                 # scoring_order.append((frame_id, "right", right_third))
 
         elif momentum_change == 0:
+            if len(fencer_thirds[frame_id]) != 2:
+                print(
+                    f"Warning: fencer_thirds for frame {frame_id}: {fencer_thirds[frame_id]} does not have length 2"
+                )
             left_third, right_third = fencer_thirds[frame_id]
 
             # left first for simultaneous
@@ -84,13 +91,13 @@ def generate_heat_map_data(
     return heat_map
 
 
-def load_piste_data(piste_csv_path) -> Quadrilateral:
-    with open(piste_csv_path, "r") as f:
-        reader = csv.reader(f)
-        next(reader)  # skip header
-        row = next(reader)  # assume only one row of data
-        return piste_csv_row_mapper(row)
-    raise ValueError(f"No piste data found in {piste_csv_path}")
+def load_piste_data(piste_csv_path, fps) -> FrameInfoManager:
+    return FrameInfoManager(
+        piste_csv_path,
+        fps=fps,
+        header_format=quad_get_header_row(),
+        row_mapper=quad_row_mapper,
+    )
 
 
 class GenerateHeatMapWidget(BaseTaskWidget):
@@ -108,13 +115,20 @@ class GenerateHeatMapWidget(BaseTaskWidget):
 
         self.run_started.emit(HeatMapTasksToIds.GENERATE_HEAT_MAP)
 
-        fencer_thirds = obtain_fencer_thirds_array(
-            input_video=self.match_context.file_manager.get_original_video(),
-            input_csv=self.match_context.file_manager.get_path(FileRole.PROCESSED_POSE),
-            engarde_quad=load_piste_data(
-                self.match_context.file_manager.get_path(FileRole.RAW_PISTE_QUADS)
-            ),
+        fps, total_frames = get_fps_and_total_frames(
+            self.match_context.file_manager.get_original_video()
         )
+
+        fencer_thirds = obtain_fencer_thirds_array(
+            input_csv=self.match_context.file_manager.get_path(FileRole.PROCESSED_POSE),
+            engarde_quad_frame_manager=load_piste_data(
+                self.match_context.file_manager.get_path(FileRole.RAW_PISTE_QUADS),
+                fps,
+            ),
+            fps=fps,
+            total_frames=total_frames,
+        )
+
         momentum_csv_path = self.match_context.file_manager.get_path(
             FileRole.MOMENTUM_DATA
         )
@@ -349,16 +363,15 @@ def get_fps_and_total_frames(video_path: str) -> tuple[float, int]:
 
 
 def obtain_fencer_thirds_array(
-    input_video: str,
     input_csv: str,
-    engarde_quad: Quadrilateral,
+    engarde_quad_frame_manager: FrameInfoManager,
+    fps: float,
+    total_frames: int,
 ) -> np.ndarray:
-    fps, total_frames = get_fps_and_total_frames(input_video)
-    frame_manager = FrameInfoManager(
+    fencer_pose_frame_manager = FrameInfoManager(
         input_csv, fps, get_header_row_for_fencer_poses_csv(), fencer_poses_row_mapper
     )
 
-    mapper = PisteMapper(engarde_quad)
     classifier = FencerClassifier()
 
     output = np.zeros(
@@ -366,10 +379,18 @@ def obtain_fencer_thirds_array(
     )  # store (left_third, right_third)
 
     for frame_id in range(total_frames):
-        detections = frame_manager.get_frame_and_advance(frame_id)
-        if detections is None:
+        detections = fencer_pose_frame_manager.get_frame_and_advance(frame_id)
+        engarde_quad = (
+            engarde_quad_frame_manager.get_frame_and_advance(frame_id)
+            .get("quad")
+            .get("quad")
+        )  # extract Quadrilateral from dict
+
+        if engarde_quad is None or detections is None:
             output[frame_id] = (classifier.prev_left_third, classifier.prev_right_third)
             continue
+
+        mapper = PisteMapper(engarde_quad=engarde_quad)
 
         left_third, right_third = classifier.classify(
             mapper,
@@ -379,12 +400,13 @@ def obtain_fencer_thirds_array(
         output[frame_id] = (left_third, right_third)
 
     # write to file for debugging
-    # with open("matches_data/epee_3.data/fencer_thirds_debug.csv", "w", newline="") as f:
+    # with open(
+    #     "matches_data/sabre_6.data/fencer_thirds_debug.csv", "w", newline=""
+    # ) as f:
     #     writer = csv.writer(f)
     #     writer.writerow(["frame_id", "left_third", "right_third"])
     #     for frame_id in range(total_frames):
     #         writer.writerow([frame_id, *output[frame_id]])
-
     return output
 
 
@@ -399,7 +421,7 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
         match_context = MatchContext()
         widget = GenerateHeatMapWidget(match_context)
-        match_context.set_file("matches_data/epee_3.mp4")
+        match_context.set_file("matches_data/sabre_6.mp4")
         widget.show()
         sys.exit(app.exec())
 

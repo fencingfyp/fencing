@@ -14,6 +14,7 @@ from src.pyside_pipelines.multi_region_cropper.multi_region_crop_pipeline import
 )
 from src.pyside_pipelines.multi_region_cropper.output.output_config import (
     CsvOneShotQuadOutputConfig,
+    CsvQuadOutputConfig,
     RectifiedOutputConfig,
 )
 from src.pyside_pipelines.multi_region_cropper.roi_selection_controller import (
@@ -81,7 +82,7 @@ class CropRegionsWidget(BaseTaskWidget):
             ),
             PISTE_LABEL: LabelConfig(
                 output_configs=[
-                    CsvOneShotQuadOutputConfig(
+                    CsvQuadOutputConfig(
                         PISTE_LABEL, fm.get_path(FileRole.RAW_PISTE_QUADS)
                     ),
                     RectifiedOutputConfig(
@@ -118,7 +119,7 @@ class CropRegionsWidget(BaseTaskWidget):
             label_configs=self.label_configs,  # carries tracking + output configs
             ui=self.ui,
             on_finished=self.on_finished,
-            sequential=True,
+            # sequential=True,
         )
 
         self.processing_pipeline.start()

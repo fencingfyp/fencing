@@ -219,9 +219,6 @@ class FencerAssignmentController:
     def on_finish(self):
         self.cancel()
 
-        if self._on_finished_callback:
-            self._on_finished_callback()
-
         # write to output
         reprocess_csv(
             input_csv=self.input_csv_path,
@@ -229,6 +226,9 @@ class FencerAssignmentController:
             right_fencer_ids=self.right_ids,
             output_csv_path=self.output_csv_path,
         )
+
+        if self._on_finished_callback:
+            self._on_finished_callback()
 
     def set_on_finished(self, callback):
         self._on_finished_callback = callback
