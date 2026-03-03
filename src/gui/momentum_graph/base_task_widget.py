@@ -11,8 +11,8 @@ from src.pyside.PysideUi import PysideUi
 
 
 class BaseTaskWidget(QWidget):
-    run_started = Signal(object)
-    run_completed = Signal(object)
+    run_started = Signal(str)
+    run_completed = Signal(str)
 
     def __init__(self, match_context: MatchContext, parent=None):
         super().__init__(parent)

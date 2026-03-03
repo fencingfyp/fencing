@@ -12,7 +12,7 @@ from scripts.manual_track_fencers import (
 from scripts.manual_track_fencers import row_mapper as fencer_poses_row_mapper
 from scripts.visualise_fencers_on_piste import LEFT_FENCER_ID, RIGHT_FENCER_ID
 from src.gui.util.conversion import pixmap_to_np
-from src.gui.util.task_graph import HeatMapTasksToIds
+from src.gui.util.task_graph import TasksToIds
 from src.model import FrameInfoManager
 from src.model.FileManager import FileRole
 from src.model.FrameInfoManager import FrameInfoManager
@@ -113,7 +113,7 @@ class GenerateHeatMapWidget(BaseTaskWidget):
         if not self.match_context.file_manager:
             return
 
-        self.run_started.emit(HeatMapTasksToIds.GENERATE_HEAT_MAP)
+        self.run_started.emit(TasksToIds.GENERATE_HEAT_MAP.value)
 
         fps, total_frames = get_fps_and_total_frames(
             self.match_context.file_manager.get_original_video()
@@ -142,7 +142,7 @@ class GenerateHeatMapWidget(BaseTaskWidget):
 
     def _on_finished(self):
         self.ui.write("Heat map generation completed.")
-        self.run_completed.emit(HeatMapTasksToIds.GENERATE_HEAT_MAP)
+        self.run_completed.emit(TasksToIds.GENERATE_HEAT_MAP.value)
 
     def cancel(self):
         pass

@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 from src.gui.util.actions_panel_widget import TaskAction
-from src.gui.util.task_graph import MomentumGraphTasksToIds
+from src.gui.util.task_graph import TasksToIds
 from src.gui.video_player_widget import VideoPlayerWidget
 from src.model.FileManager import FileRole
 from src.pyside.MatchContext import MatchContext
@@ -82,6 +82,7 @@ class SelectPeriodsWidget(BaseTaskWidget):
         if not self.match_context.file_manager.get_working_directory():
             return
         self.is_running = True
+        self.run_started.emit(TasksToIds.SELECT_PERIODS.value)
 
         video_path = self.match_context.file_manager.get_original_video()
         self.save_path = self.match_context.file_manager.get_path(FileRole.PERIODS)
@@ -185,7 +186,7 @@ class SelectPeriodsWidget(BaseTaskWidget):
                 indent=2,
             )
 
-        self.run_completed.emit(MomentumGraphTasksToIds.SELECT_PERIODS)
+        self.run_completed.emit(TasksToIds.SELECT_PERIODS.value)
         self.info.setText("Selection finished.")
         self.is_running = False
         self.deactivate()

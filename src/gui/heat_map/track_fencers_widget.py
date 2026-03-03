@@ -7,7 +7,7 @@ from scripts.manual_track_fencers import (
     reprocess_csv,
     row_mapper,
 )
-from src.gui.util.task_graph import HeatMapTasksToIds
+from src.gui.util.task_graph import TasksToIds
 from src.model import FrameInfoManager
 from src.model.FileManager import FileRole
 from src.pyside.MatchContext import MatchContext
@@ -35,7 +35,7 @@ class TrackFencersWidget(BaseTaskWidget):
         if not self.match_context.file_manager:
             return
 
-        self.run_started.emit(HeatMapTasksToIds.TRACK_FENCERS)
+        self.run_started.emit(TasksToIds.TRACK_FENCERS.value)
 
         input_video_path = self.match_context.file_manager.get_original_video()
         input_csv_path = self.match_context.file_manager.get_path(FileRole.RAW_POSE)
@@ -59,7 +59,7 @@ class TrackFencersWidget(BaseTaskWidget):
 
     def _on_finished(self):
         self.ui.write("Fencer tracking completed.")
-        self.run_completed.emit(HeatMapTasksToIds.TRACK_FENCERS)
+        self.run_completed.emit(TasksToIds.TRACK_FENCERS.value)
 
     def cancel(self):
         self.ui.cancel_running_subtasks()

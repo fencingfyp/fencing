@@ -12,7 +12,7 @@ from ultralytics.trackers.bot_sort import BOTSORT
 
 from scripts.estimate_poses import get_header_row
 from src.gui.momentum_graph.base_task_widget import BaseTaskWidget
-from src.gui.util.task_graph import HeatMapTasksToIds
+from src.gui.util.task_graph import TasksToIds
 from src.model.FileManager import FileRole
 from src.pyside.MatchContext import MatchContext
 from src.pyside.PysideUi import PysideUi
@@ -38,7 +38,7 @@ class TrackPosesWidget(BaseTaskWidget):
 
         self.is_running = True
 
-        self.run_started.emit(HeatMapTasksToIds.TRACK_POSES)
+        self.run_started.emit(TasksToIds.TRACK_POSES.value)
 
         input_video_path = self.match_context.file_manager.get_original_video()
         model_path = os.path.join("models", "yolo", "yolo26l-pose.pt")
@@ -66,7 +66,7 @@ class TrackPosesWidget(BaseTaskWidget):
                 time.time() - self.t0
             )
         )
-        self.run_completed.emit(HeatMapTasksToIds.TRACK_POSES)
+        self.run_completed.emit(TasksToIds.TRACK_POSES.value)
 
     def cancel(self):
         if hasattr(self, "controller"):

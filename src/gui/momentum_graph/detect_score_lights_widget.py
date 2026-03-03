@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
 from src.gui.momentum_graph.base_task_widget import InstructionLabel
 from src.gui.util.actions_panel_widget import TaskAction
-from src.gui.util.task_graph import MomentumGraphTasksToIds
+from src.gui.util.task_graph import TasksToIds
 from src.gui.video_player_widget import VideoPlayerWidget
 from src.model import Quadrilateral
 from src.model.AutoPatchLightDetector import SinglePatchAutoDetector
@@ -50,7 +50,7 @@ class DetectScoreLightsWidget(BaseTaskWidget):
 
         # Start ROI selection
         self.is_running = True
-        self.run_started.emit(MomentumGraphTasksToIds.DETECT_SCORE_LIGHTS)
+        self.run_started.emit(TasksToIds.DETECT_SCORE_LIGHTS.value)
         self.roi_stage.start(frame=cv2.VideoCapture(video_path).read()[1])
 
     def _on_roi_selected(self, left_quad, right_quad):
@@ -75,7 +75,7 @@ class DetectScoreLightsWidget(BaseTaskWidget):
             )
         )
         self.is_running = False
-        self.run_completed.emit(MomentumGraphTasksToIds.DETECT_SCORE_LIGHTS)
+        self.run_completed.emit(TasksToIds.DETECT_SCORE_LIGHTS.value)
 
     def cancel(self):
         self.time_stage.deactivate()

@@ -43,10 +43,15 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
-from src.pyside.MatchContext import MatchContext
+from src.model.FileManager import FileManager
+
+from .abstract_task_graph import AbstractTaskGraph, GraphLayout, TaskState
 
 
-class MomentumGraphTasksToIds(Enum):
+class TasksToIds(Enum):
+    TRACK_POSES = "track_poses"
+    TRACK_FENCERS = "track_fencers"
+    GENERATE_HEAT_MAP = "generate_heat_map"
     CROP_REGIONS = "Identify Scoreboard, Timer and Piste"
     PERFORM_OCR = "Extract Scoring"
     DETECT_SCORE_LIGHTS = "Detect Score Lights"
@@ -55,20 +60,23 @@ class MomentumGraphTasksToIds(Enum):
     VIEW_STATS = "View Stats"
 
 
+class MomentumGraphTasksToIds(Enum):
+    CROP_REGIONS = TasksToIds.CROP_REGIONS.value
+    PERFORM_OCR = TasksToIds.PERFORM_OCR.value
+    DETECT_SCORE_LIGHTS = TasksToIds.DETECT_SCORE_LIGHTS.value
+    GENERATE_MOMENTUM_GRAPH = TasksToIds.GENERATE_MOMENTUM_GRAPH.value
+    SELECT_PERIODS = TasksToIds.SELECT_PERIODS.value
+    VIEW_STATS = TasksToIds.VIEW_STATS.value
+
+
 class HeatMapTasksToIds(Enum):
-    TRACK_POSES = "track_poses"
-    TRACK_FENCERS = "track_fencers"
-    GENERATE_HEAT_MAP = "generate_heat_map"
-    CROP_REGIONS = "Identify Scoreboard, Timer and Piste"
-    PERFORM_OCR = "Extract Scoring"
-    DETECT_SCORE_LIGHTS = "Detect Score Lights"
-    GENERATE_MOMENTUM_GRAPH = "Generate Momentum Graph"
-
-
-class TaskState(Enum):
-    LOCKED = 0
-    READY = 1
-    DONE = 2
+    TRACK_POSES = TasksToIds.TRACK_POSES.value
+    TRACK_FENCERS = TasksToIds.TRACK_FENCERS.value
+    GENERATE_HEAT_MAP = TasksToIds.GENERATE_HEAT_MAP.value
+    CROP_REGIONS = TasksToIds.CROP_REGIONS.value
+    PERFORM_OCR = TasksToIds.PERFORM_OCR.value
+    DETECT_SCORE_LIGHTS = TasksToIds.DETECT_SCORE_LIGHTS.value
+    GENERATE_MOMENTUM_GRAPH = TasksToIds.GENERATE_MOMENTUM_GRAPH.value
 
 
 @dataclass
@@ -77,12 +85,6 @@ class GraphNode:
     state: TaskState
     deps: list[str]
     children: list[str]
-
-
-@dataclass
-class GraphLayout:
-    layers: list[list[str]]  # left → right columns
-    edges: list[tuple[str, str]]  # (from, to)
 
 
 class Task:
@@ -94,122 +96,119 @@ class Task:
         self.state = TaskState.LOCKED
 
 
-class TaskGraph(QObject):
+class TaskGraph(AbstractTaskGraph):
     task_changed = Signal(str)
     graph_changed = Signal()
 
     def __init__(
         self,
         tasks: list[Task],
-        match_context: MatchContext,
+        file_manager: FileManager,
         parent=None,
     ):
         super().__init__(parent)
 
         self.tasks: dict[str, Task] = {t.id: t for t in tasks}
-        self.match_context = match_context
+        self.file_manager = file_manager
+        self.working_dir: Path | None = None
 
-        # build children adjacency
         for t in tasks:
             for dep in t.deps:
                 self.tasks[dep].children.append(t.id)
 
-        self.match_context.match_changed.connect(self._on_match_changed)
-
-    # ---------- public API ----------
+    # ===============================
+    # Public API (unchanged)
+    # ===============================
 
     def state(self, tid: str) -> TaskState:
         return self.tasks[tid].state
 
     def rerun(self, tid: str):
-        """User reruns a task → invalidate all downstream."""
-        self._invalidate_downstream(tid)
+        self.invalidate_downstream(tid)
         self.tasks[tid].state = TaskState.READY
-        self._recompute_children(tid)
+        self.recompute_children(tid)
         self.graph_changed.emit()
 
     def mark_finished(self, tid: str):
-        """Call when a task finishes running."""
-        self._update_single_task(tid)
-        self._recompute_children(tid)
+        self.update_single_task(tid)
+        self.recompute_children(tid)
         self.graph_changed.emit()
 
     def set_working_directory(self, working_dir: str):
-        """Set or change the working directory and rescan all tasks."""
         self.working_dir = Path(working_dir)
-        self._initial_scan()
+        self.initial_scan()
         self.graph_changed.emit()
 
     def get_task_states(self) -> dict[str, str]:
-        """Get mapping of task ID → state name."""
         return {tid: task.state.name for tid, task in self.tasks.items()}
 
     def get_index_map(self) -> dict[str, int]:
-        """Get mapping of task ID → topological index (1-based)."""
-        topo_order = self.topological_order()
-        return {tid: i + 1 for i, tid in enumerate(topo_order)}  # 1-based
-
-    # ---------- core logic ----------
-
-    def _on_match_changed(self):
-        self._initial_scan()
-        self.graph_changed.emit()
-
-    def _initial_scan(self):
-        """Initial pass: check only each node + direct deps."""
-        for tid in self.tasks:
-            self._update_single_task(tid)
-
-        # unlock layers in topological order-ish
-        for tid in self.tasks:
-            self._recompute_children(tid)
-
-    def _outputs_exist(self, task: Task) -> bool:
-        return all(self.match_context.file_manager.file_exists(p) for p in task.outputs)
-
-    def _deps_done(self, task: Task) -> bool:
-        return all(self.tasks[d].state == TaskState.DONE for d in task.deps)
-
-    def _update_single_task(self, tid: str):
-        task = self.tasks[tid]
-
-        if not self._deps_done(task):
-            task.state = TaskState.LOCKED
-            return
-
-        if self._outputs_exist(task):
-            task.state = TaskState.DONE
-        else:
-            task.state = TaskState.READY
-
-        self.task_changed.emit(tid)
-
-    def _recompute_children(self, tid: str):
-        """Re-evaluate only direct children — propagation handles the rest."""
-        for child_id in self.tasks[tid].children:
-            child = self.tasks[child_id]
-
-            old = child.state
-            self._update_single_task(child_id)
-
-            # if this changed, propagate further
-            if child.state != old:
-                self._recompute_children(child_id)
-
-    def _invalidate_downstream(self, tid: str):
-        for child_id in self.tasks[tid].children:
-            child = self.tasks[child_id]
-            if child.state in (TaskState.DONE, TaskState.READY):
-                child.state = TaskState.LOCKED
-                self.task_changed.emit(child_id)
-                self._invalidate_downstream(child_id)
+        topo = self.topological_order()
+        return {tid: i + 1 for i, tid in enumerate(topo)}
 
     def snapshot(self) -> GraphLayout:
         layers = self._topological_layers()
         edges = [(t.id, c) for t in self.tasks.values() for c in t.children]
         return GraphLayout(layers, edges)
 
-    def _topological_layers(self) -> list[list[str]]:
+    # ===============================
+    # Exposed Core Methods
+    # ===============================
+
+    def initial_scan(self):
+        for tid in self.tasks:
+            self.update_single_task(tid)
+
+        for tid in self.tasks:
+            self.recompute_children(tid)
+
+    def update_single_task(self, tid: str):
+        task = self.tasks[tid]
+
+        if not self.deps_done(task):
+            task.state = TaskState.LOCKED
+            return
+
+        if self.outputs_exist(task):
+            task.state = TaskState.DONE
+        else:
+            task.state = TaskState.READY
+
+        self.task_changed.emit(tid)
+
+    def recompute_children(self, tid: str):
+        for child_id in self.tasks[tid].children:
+            child = self.tasks[child_id]
+            old = child.state
+            self.update_single_task(child_id)
+            if child.state != old:
+                self.recompute_children(child_id)
+
+    def invalidate_downstream(self, tid: str):
+        for child_id in self.tasks[tid].children:
+            child = self.tasks[child_id]
+            if child.state in (TaskState.DONE, TaskState.READY):
+                child.state = TaskState.LOCKED
+                self.task_changed.emit(child_id)
+                self.invalidate_downstream(child_id)
+
+    # ===============================
+    # Helpers
+    # ===============================
+
+    def outputs_exist(self, task: Task) -> bool:
+        if not self.file_manager:
+            return False
+        return all(self.file_manager.file_exists(p) for p in task.outputs)
+
+    def deps_done(self, task: Task) -> bool:
+        return all(self.tasks[d].state == TaskState.DONE for d in task.deps)
+
+    def _on_match_changed(self):
+        self.initial_scan()
+        self.graph_changed.emit()
+
+    def _topological_layers(self):
         depth: dict[str, int] = {}
 
         def compute_depth(tid: str) -> int:
@@ -224,13 +223,13 @@ class TaskGraph(QObject):
         for tid in self.tasks:
             compute_depth(tid)
 
-        layers: dict[int, list[str]] = defaultdict(list)
+        layers = defaultdict(list)
         for tid, d in depth.items():
             layers[d].append(tid)
 
         return [layers[i] for i in sorted(layers)]
 
-    def topological_order(self) -> list[str]:
+    def topological_order(self):
         visited = set()
         order = []
 

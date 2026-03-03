@@ -29,7 +29,7 @@ from scripts.momentum_graph.perform_ocr import (
     regularise_rectangle,
 )
 from src.gui.momentum_graph.base_task_widget import BaseTaskWidget
-from src.gui.util.task_graph import MomentumGraphTasksToIds
+from src.gui.util.task_graph import TasksToIds
 from src.model import Quadrilateral
 from src.model.drawable.quadrilateral_drawable import QuadrilateralDrawable
 from src.model.FileManager import FileRole
@@ -82,7 +82,7 @@ class PerformOcrWidget(BaseTaskWidget):
         if self.is_running or not self.match_context.file_manager:
             return
 
-        self.run_started.emit(MomentumGraphTasksToIds.PERFORM_OCR)
+        self.run_started.emit(TasksToIds.PERFORM_OCR.value)
         super().run_task()
 
         if self.controller:
@@ -106,7 +106,7 @@ class PerformOcrWidget(BaseTaskWidget):
         self.controller.start()
 
     def _on_finished(self):
-        self.run_completed.emit(MomentumGraphTasksToIds.PERFORM_OCR)
+        self.run_completed.emit(TasksToIds.PERFORM_OCR.value)
         self.is_running = False
 
 

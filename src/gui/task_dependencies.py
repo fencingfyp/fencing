@@ -1,0 +1,74 @@
+from src.gui.util.task_graph import Task, TasksToIds
+from src.util.file_names import (
+    CROPPED_SCORE_LIGHTS_VIDEO_NAME,
+    CROPPED_SCOREBOARD_VIDEO_NAME,
+    DETECT_LIGHTS_OUTPUT_CSV_NAME,
+    MOMENTUM_DATA_CSV_NAME,
+    MOMENTUM_GRAPH_IMAGE_NAME,
+    OCR_OUTPUT_CSV_NAME,
+    PERIODS_JSON_NAME,
+    PROCESSED_POSE_DATA_CSV_NAME,
+    RAW_PISTE_QUADS_CSV_NAME,
+    RAW_POSE_DATA_CSV_NAME,
+)
+
+TASK_DEPENDENCIES = [
+    Task(
+        TasksToIds.TRACK_POSES.value,
+        [RAW_POSE_DATA_CSV_NAME],
+        deps=[],
+    ),
+    Task(
+        TasksToIds.TRACK_FENCERS.value,
+        [PROCESSED_POSE_DATA_CSV_NAME],
+        deps=[TasksToIds.TRACK_POSES.value],
+    ),
+    Task(
+        TasksToIds.GENERATE_HEAT_MAP.value,
+        [],
+        deps=[
+            TasksToIds.TRACK_FENCERS.value,
+            TasksToIds.GENERATE_MOMENTUM_GRAPH.value,
+            TasksToIds.CROP_REGIONS.value,
+        ],
+    ),
+    Task(
+        TasksToIds.CROP_REGIONS.value,
+        [
+            CROPPED_SCOREBOARD_VIDEO_NAME,
+            CROPPED_SCORE_LIGHTS_VIDEO_NAME,
+            RAW_PISTE_QUADS_CSV_NAME,
+        ],
+    ),
+    Task(
+        TasksToIds.PERFORM_OCR.value,
+        [OCR_OUTPUT_CSV_NAME],
+        deps=[TasksToIds.CROP_REGIONS.value],
+    ),
+    Task(
+        TasksToIds.DETECT_SCORE_LIGHTS.value,
+        [DETECT_LIGHTS_OUTPUT_CSV_NAME],
+        deps=[TasksToIds.CROP_REGIONS.value],
+    ),
+    Task(
+        TasksToIds.GENERATE_MOMENTUM_GRAPH.value,
+        [MOMENTUM_DATA_CSV_NAME],
+        deps=[
+            TasksToIds.PERFORM_OCR.value,
+            TasksToIds.DETECT_SCORE_LIGHTS.value,
+        ],
+    ),
+    Task(
+        TasksToIds.SELECT_PERIODS.value,
+        [PERIODS_JSON_NAME],
+        deps=[],
+    ),
+    Task(
+        TasksToIds.VIEW_STATS.value,
+        [MOMENTUM_GRAPH_IMAGE_NAME],
+        deps=[
+            TasksToIds.GENERATE_MOMENTUM_GRAPH.value,
+            TasksToIds.SELECT_PERIODS.value,
+        ],
+    ),
+]

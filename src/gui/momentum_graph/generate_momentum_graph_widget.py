@@ -18,7 +18,7 @@ from scripts.momentum_graph.util.extract_score_increases import (
     extract_score_increases_np,
 )
 from src.gui.util.conversion import pixmap_to_np
-from src.gui.util.task_graph import MomentumGraphTasksToIds
+from src.gui.util.task_graph import TasksToIds
 from src.model.FileManager import FileRole
 from src.pyside.MatchContext import MatchContext
 from src.pyside.PysideUi import PysideUi
@@ -39,7 +39,7 @@ class GenerateMomentumGraphWidget(BaseTaskWidget):
 
     def _on_finished(self):
         self.ui.write("Momentum graph generated.")
-        self.run_completed.emit(MomentumGraphTasksToIds.GENERATE_MOMENTUM_GRAPH)
+        self.run_completed.emit(TasksToIds.GENERATE_MOMENTUM_GRAPH.value)
 
     @override
     @Slot()
@@ -52,7 +52,7 @@ class GenerateMomentumGraphWidget(BaseTaskWidget):
 
         file_manager = self.match_context.file_manager
 
-        self.run_started.emit(MomentumGraphTasksToIds.GENERATE_MOMENTUM_GRAPH)
+        self.run_started.emit(TasksToIds.GENERATE_MOMENTUM_GRAPH.value)
 
         # Create controller
         self.controller = MomentumGraphController(

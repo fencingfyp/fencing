@@ -10,7 +10,7 @@ import pandas as pd
 from PySide6.QtGui import QPixmap
 
 from src.gui.util.conversion import pixmap_to_np
-from src.gui.util.task_graph import MomentumGraphTasksToIds
+from src.gui.util.task_graph import TasksToIds
 from src.model.FileManager import FileRole
 from src.pyside.MatchContext import MatchContext
 
@@ -119,7 +119,7 @@ class ViewStatsWidget(BaseTaskWidget):
             self.ui.write("Failed to retrieve FPS from video.")
             return
 
-        self.run_started.emit(MomentumGraphTasksToIds.VIEW_STATS)
+        self.run_started.emit(TasksToIds.VIEW_STATS.value)
         self.is_running = True
 
         try:
@@ -154,7 +154,7 @@ class ViewStatsWidget(BaseTaskWidget):
         output_path = self.match_context.file_manager.get_path(FileRole.MOMENTUM_GRAPH)
         pixmap.save(str(output_path))
         self.is_running = False
-        self.run_completed.emit(MomentumGraphTasksToIds.VIEW_STATS)
+        self.run_completed.emit(TasksToIds.VIEW_STATS.value)
 
 
 if __name__ == "__main__":

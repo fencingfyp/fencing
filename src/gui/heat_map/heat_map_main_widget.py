@@ -9,72 +9,15 @@ from src.gui.momentum_graph.generate_momentum_graph_widget import (
 )
 from src.gui.momentum_graph.perform_ocr_widget import PerformOcrWidget
 from src.gui.navbar.app_navigator import AppNavigator, View
-from src.gui.util.task_graph import HeatMapTasksToIds, Task, TaskGraph, TaskState
+from src.gui.task_dependencies import TASK_DEPENDENCIES
+from src.gui.util.task_graph import HeatMapTasksToIds, TaskGraph, TaskState, TasksToIds
 from src.gui.util.task_graph_navbar import TaskGraphLocalNav
+from src.gui.util.task_graph_view import TaskGraphView
 from src.pyside.MatchContext import MatchContext
-from src.util.file_names import (
-    CROPPED_SCORE_LIGHTS_VIDEO_NAME,
-    CROPPED_SCOREBOARD_VIDEO_NAME,
-    CROPPED_TIMER_VIDEO_NAME,
-    DETECT_LIGHTS_OUTPUT_CSV_NAME,
-    MOMENTUM_DATA_CSV_NAME,
-    OCR_OUTPUT_CSV_NAME,
-    PROCESSED_POSE_DATA_CSV_NAME,
-    RAW_PISTE_QUADS_CSV_NAME,
-    RAW_POSE_DATA_CSV_NAME,
-)
 
 from .heat_map_overview_widget import HeatMapOverviewWidget
 from .track_fencers_widget import TrackFencersWidget
 from .track_poses_widget import TrackPosesWidget
-
-TASK_DEPENDENCIES = [
-    Task(
-        HeatMapTasksToIds.TRACK_POSES.value,
-        [RAW_POSE_DATA_CSV_NAME],
-        deps=[],
-    ),
-    Task(
-        HeatMapTasksToIds.TRACK_FENCERS.value,
-        [PROCESSED_POSE_DATA_CSV_NAME],
-        deps=[HeatMapTasksToIds.TRACK_POSES.value],
-    ),
-    Task(
-        HeatMapTasksToIds.GENERATE_HEAT_MAP.value,
-        [],
-        deps=[
-            HeatMapTasksToIds.TRACK_FENCERS.value,
-            HeatMapTasksToIds.GENERATE_MOMENTUM_GRAPH.value,
-            HeatMapTasksToIds.CROP_REGIONS.value,
-        ],
-    ),
-    Task(
-        HeatMapTasksToIds.CROP_REGIONS.value,
-        [
-            CROPPED_SCOREBOARD_VIDEO_NAME,
-            CROPPED_SCORE_LIGHTS_VIDEO_NAME,
-            RAW_PISTE_QUADS_CSV_NAME,
-        ],
-    ),
-    Task(
-        HeatMapTasksToIds.PERFORM_OCR.value,
-        [OCR_OUTPUT_CSV_NAME],
-        deps=[HeatMapTasksToIds.CROP_REGIONS.value],
-    ),
-    Task(
-        HeatMapTasksToIds.DETECT_SCORE_LIGHTS.value,
-        [DETECT_LIGHTS_OUTPUT_CSV_NAME],
-        deps=[HeatMapTasksToIds.CROP_REGIONS.value],
-    ),
-    Task(
-        HeatMapTasksToIds.GENERATE_MOMENTUM_GRAPH.value,
-        [MOMENTUM_DATA_CSV_NAME],
-        deps=[
-            HeatMapTasksToIds.PERFORM_OCR.value,
-            HeatMapTasksToIds.DETECT_SCORE_LIGHTS.value,
-        ],
-    ),
-]
 
 
 def navigation(nav: AppNavigator, match_ctx: MatchContext):
@@ -94,8 +37,11 @@ class HeatMapMainWidget(QWidget):
         self.match_context = match_context
         self.working_directory = None
 
-        self.task_graph: TaskGraph = TaskGraph(TASK_DEPENDENCIES, match_context)
-        self.task_graph.graph_changed.connect(self._update_navbar_states)
+        self.task_graph: TaskGraph = match_context.task_graph
+        self.task_view: TaskGraphView = TaskGraphView(
+            self.task_graph, {id.value for id in HeatMapTasksToIds}
+        )
+        self.task_view.graph_changed.connect(self._update_navbar_states)
 
         self.local_navbar = self.initialise_navbar()
 
@@ -108,7 +54,7 @@ class HeatMapMainWidget(QWidget):
         root.addWidget(self.stack, 1)
         self.setLayout(root)
 
-        self.overview_widget = HeatMapOverviewWidget(self.task_graph)
+        self.overview_widget = HeatMapOverviewWidget(self.task_view)
         self.stack.addWidget(self.overview_widget)
         self.overview_widget.task_selected.connect(self._open_task)
 
@@ -118,7 +64,7 @@ class HeatMapMainWidget(QWidget):
         self.match_context.match_changed.connect(self._on_match_changed)
 
     def initialise_navbar(self):
-        ordered_tasks = self.task_graph.topological_order()
+        ordered_tasks = self.task_view.topological_order()
         navbar = TaskGraphLocalNav(ordered_tasks)
         navbar.task_requested.connect(self._open_task)
         navbar.overview_requested.connect(lambda: self._switch_to(self.overview_widget))
@@ -127,40 +73,38 @@ class HeatMapMainWidget(QWidget):
 
     def initialise_task_widgets(self):
         self.tasks_to_widgets = {}
-        self.tasks_to_widgets[HeatMapTasksToIds.CROP_REGIONS.value] = CropRegionsWidget(
+        self.tasks_to_widgets[TasksToIds.CROP_REGIONS.value] = CropRegionsWidget(
             self.match_context
         )
-        self.tasks_to_widgets[HeatMapTasksToIds.PERFORM_OCR.value] = PerformOcrWidget(
+        self.tasks_to_widgets[TasksToIds.PERFORM_OCR.value] = PerformOcrWidget(
             self.match_context
         )
-        self.tasks_to_widgets[HeatMapTasksToIds.DETECT_SCORE_LIGHTS.value] = (
+        self.tasks_to_widgets[TasksToIds.DETECT_SCORE_LIGHTS.value] = (
             DetectScoreLightsWidget(self.match_context)
         )
-        self.tasks_to_widgets[HeatMapTasksToIds.GENERATE_MOMENTUM_GRAPH.value] = (
+        self.tasks_to_widgets[TasksToIds.GENERATE_MOMENTUM_GRAPH.value] = (
             GenerateMomentumGraphWidget(self.match_context)
         )
-        self.tasks_to_widgets[HeatMapTasksToIds.GENERATE_HEAT_MAP.value] = (
+        self.tasks_to_widgets[TasksToIds.GENERATE_HEAT_MAP.value] = (
             GenerateHeatMapWidget(self.match_context)
         )
-        self.tasks_to_widgets[HeatMapTasksToIds.TRACK_POSES.value] = TrackPosesWidget(
+        self.tasks_to_widgets[TasksToIds.TRACK_POSES.value] = TrackPosesWidget(
             self.match_context
         )
-        self.tasks_to_widgets[HeatMapTasksToIds.TRACK_FENCERS.value] = (
-            TrackFencersWidget(self.match_context)
+        self.tasks_to_widgets[TasksToIds.TRACK_FENCERS.value] = TrackFencersWidget(
+            self.match_context
         )
 
         for task_id, widget in self.tasks_to_widgets.items():
             self.stack.addWidget(widget)
             widget.run_completed.connect(
-                lambda tid=task_id: self.task_graph.mark_finished(tid.value)
+                lambda tid=task_id: self.task_view.mark_finished(tid)
             )
-            widget.run_started.connect(
-                lambda tid=task_id: self.task_graph.rerun(tid.value)
-            )
+            widget.run_started.connect(lambda tid=task_id: self.task_view.rerun(tid))
 
     def _update_navbar_states(self):
         for tid in self.tasks_to_widgets:
-            state = self.task_graph.state(tid)
+            state = self.task_view.state(tid)
             self.local_navbar.update_task_state(tid, state)
 
     def _on_exit_requested(self):
@@ -175,7 +119,7 @@ class HeatMapMainWidget(QWidget):
 
     @Slot(str)
     def _open_task(self, task_id: str):
-        if self.task_graph.state(task_id) != TaskState.LOCKED:
+        if self.task_view.state(task_id) != TaskState.LOCKED:
             self._switch_to(self.tasks_to_widgets[task_id])
 
 

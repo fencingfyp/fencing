@@ -5,7 +5,7 @@ import cv2
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QApplication
 
-from src.gui.util.task_graph import MomentumGraphTasksToIds
+from src.gui.util.task_graph import TasksToIds
 from src.model.FileManager import FileRole
 from src.pyside.MatchContext import MatchContext
 from src.pyside_pipelines.multi_region_cropper.label_config import LabelConfig
@@ -61,7 +61,7 @@ class CropRegionsWidget(BaseTaskWidget):
         self.is_running = True
         fm = self.match_context.file_manager
 
-        self.run_started.emit(MomentumGraphTasksToIds.CROP_REGIONS)
+        self.run_started.emit(TasksToIds.CROP_REGIONS.value)
 
         self.label_configs = {
             SCOREBOARD_LABEL: LabelConfig(
@@ -133,7 +133,7 @@ class CropRegionsWidget(BaseTaskWidget):
 
     def on_finished(self):
         self.is_running = False
-        self.run_completed.emit(MomentumGraphTasksToIds.CROP_REGIONS)
+        self.run_completed.emit(TasksToIds.CROP_REGIONS.value)
         self.ui.write("Cropping regions completed.")
         print(f"CropRegionsWidget finished in {time.time() - self.t0:.2f} seconds.")
 
