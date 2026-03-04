@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import List
 
 import cv2
 import pandas as pd
-from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from src.gui.base_task_widget.ui.PysideUi import PysideUi
