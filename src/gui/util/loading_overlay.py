@@ -1,20 +1,9 @@
-from PySide6.QtCore import QRectF, Qt, QTimer
+from PySide6.QtCore import QEvent, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import QLabel, QWidget
 
 
 class LoadingOverlay(QWidget):
-    """
-    Semi-transparent loading overlay that sits on top of a QLabel.
-
-    Usage:
-        overlay = LoadingOverlay(video_label)
-        overlay.show_loading("Initialising model...")    # spinner
-        overlay.show_loading("Calibrating…", progress=0.0)  # determinate bar
-        overlay.set_progress(0.6)
-        overlay.hide_loading()
-    """
-
     def __init__(self, parent: QLabel):
         super().__init__(parent)
         self._bg_color = QColor(10, 10, 18, 195)
@@ -24,12 +13,14 @@ class LoadingOverlay(QWidget):
         self._sub_color = QColor(130, 130, 160)
 
         self._message = "Loading..."
-        self._progress = None  # None = spinner, float = bar
+        self._progress = None
         self._spin_angle = 0.0
 
         self._spin_timer = QTimer(self)
         self._spin_timer.setInterval(16)
         self._spin_timer.timeout.connect(self._tick_spinner)
+
+        parent.installEventFilter(self)
 
         self._fit_to_parent()
         self.hide()
@@ -52,7 +43,6 @@ class LoadingOverlay(QWidget):
         self.hide()
 
     def set_progress(self, value):
-        """0.0-1.0 for determinate bar, None to switch back to spinner."""
         self._progress = value
         if value is None:
             self._spin_timer.start()
@@ -74,9 +64,10 @@ class LoadingOverlay(QWidget):
         self._spin_angle = (self._spin_angle + 4.0) % 360.0
         self.update()
 
-    def resizeEvent(self, event):
-        self._fit_to_parent()
-        super().resizeEvent(event)
+    def eventFilter(self, obj, event):
+        if obj is self.parent() and event.type() == QEvent.Resize:
+            self._fit_to_parent()
+        return super().eventFilter(obj, event)
 
     def paintEvent(self, event):
         w, h = self.width(), self.height()
@@ -87,7 +78,6 @@ class LoadingOverlay(QWidget):
         cx, cy = w // 2, h // 2
 
         if self._progress is None:
-            # indeterminate spinner
             r = max(24.0, min(min(w, h) * 0.10, 56.0))
             thickness = max(3, r * 0.12)
             rect = QRectF(cx - r, cy - r - 28, r * 2, r * 2)
@@ -102,7 +92,6 @@ class LoadingOverlay(QWidget):
             p.setPen(arc_pen)
             p.drawArc(rect, int(-self._spin_angle * 16), int(250 * 16))
         else:
-            # determinate bar
             bar_w = min(w * 0.65, 320.0)
             bar_h = max(6.0, min(h * 0.025, 14.0))
             bar_x = cx - bar_w / 2
@@ -130,7 +119,6 @@ class LoadingOverlay(QWidget):
                 pct_text,
             )
 
-        # message
         font_size = max(10, min(int(h * 0.028), 18))
         msg_font = QFont("Courier New", font_size)
         msg_font.setLetterSpacing(QFont.AbsoluteSpacing, 1.5)

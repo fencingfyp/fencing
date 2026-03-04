@@ -1,7 +1,7 @@
 # src/pyside/video_renderer.py
 import cv2
 import numpy as np
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QLabel
 
@@ -23,14 +23,21 @@ class VideoRenderer(QObject):
         self._frame: np.ndarray | None = None
         self._drawables: list[Drawable] = []
 
-        # Scaling factors for mapping primitives and mouse clicks
-        self._draw_scale = 1.0  # scale applied when drawing on scaled frame
-        self._display_scale = 1.0  # final scale from original frame → label
+        self._draw_scale = 1.0
+        self._display_scale = 1.0
         self._offset_x = 0
         self._offset_y = 0
 
         self.video_label.setMouseTracking(True)
         self.video_label.mousePressEvent = self._on_mouse_press
+
+        self.video_label.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if obj is self.video_label and event.type() == QEvent.Resize:
+            if self._frame is not None:
+                self._redraw()
+        return super().eventFilter(obj, event)
 
     def _on_mouse_press(self, event):
         if self._frame is None:
