@@ -1,13 +1,17 @@
 import sys
 from typing import List
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QUrl, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from src.gui.navbar.app_navigator import AppNavigator, View
 from src.model.FileManager import FileManager
 
 from .select_match_dialog import SelectMatchDialog
+
+FEEDBACK_FORM_URL = "https://forms.gle/HUzQw4kAScirmgUf8"
+BUG_REPORT_FORM_URL = "https://forms.gle/QEiH8tLXRMjn2Npz5"
 
 
 def navigation(nav: AppNavigator, match_ctx: FileManager):
@@ -21,10 +25,11 @@ def navigation(nav: AppNavigator, match_ctx: FileManager):
 class HomeWidget(QWidget):
     """
     Home page widget.
-
     Provides:
     - Open single match
     - Compare multiple matches
+    - Submit feedback
+    - Report a bug
     - Extension point for future actions
     """
 
@@ -38,9 +43,10 @@ class HomeWidget(QWidget):
 
         # --- widgets ---
         self.title_label = QLabel("Select an action:")
-
         self.open_single_button = QPushButton("Open Match")
         self.compare_button = QPushButton("Compare Matches")
+        self.feedback_button = QPushButton("Submit Feedback")
+        self.bug_report_button = QPushButton("Report a Bug")
 
         # --- layout ---
         layout = QVBoxLayout(self)
@@ -48,15 +54,18 @@ class HomeWidget(QWidget):
         layout.addWidget(self.open_single_button)
         layout.addWidget(self.compare_button)
         layout.addStretch()
+        layout.addWidget(self.feedback_button)
+        layout.addWidget(self.bug_report_button)
 
         # --- signals ---
         self.open_single_button.clicked.connect(self._open_single_match)
         self.compare_button.clicked.connect(self._compare_matches)
+        self.feedback_button.clicked.connect(self._open_feedback_form)
+        self.bug_report_button.clicked.connect(self._open_bug_report_form)
 
     # ------------------------------------------------------------------
     # Single match flow
     # ------------------------------------------------------------------
-
     def _open_single_match(self):
         dialog = SelectMatchDialog(self, multi_select=False)
         dialog.submitted.connect(self._on_single_selected)
@@ -69,7 +78,6 @@ class HomeWidget(QWidget):
     # ------------------------------------------------------------------
     # Multi match comparison flow
     # ------------------------------------------------------------------
-
     def _compare_matches(self):
         dialog = SelectMatchDialog(self, multi_select=True)
         dialog.submitted.connect(self._on_multiple_selected)
@@ -78,8 +86,18 @@ class HomeWidget(QWidget):
     def _on_multiple_selected(self, file_paths: List[str]):
         for path in file_paths:
             FileManager.create_sidecar(path)
-
         self.multiple_selected.emit(file_paths)
+
+    # ------------------------------------------------------------------
+    # Feedback flows
+    # ------------------------------------------------------------------
+    def _open_feedback_form(self):
+        QDesktopServices.openUrl(QUrl(FEEDBACK_FORM_URL))  # TODO: set FEEDBACK_FORM_URL
+
+    def _open_bug_report_form(self):
+        QDesktopServices.openUrl(
+            QUrl(BUG_REPORT_FORM_URL)
+        )  # TODO: set BUG_REPORT_FORM_URL
 
 
 if __name__ == "__main__":

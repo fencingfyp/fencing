@@ -209,8 +209,8 @@ class ProcessingStage:
         self.right_positions = None
         self.csv_file = None
         self.csv_writer = None
-        self.current_frame_id = 0
-        self.total_frames = 0
+        self.current_frame_id = None
+        self.total_frames = None
         self.completed_callback = None
 
     def set_paths(self, cropped_lights_video_path: str, output_csv_path: str):
@@ -255,6 +255,8 @@ class ProcessingStage:
             "w",
             newline="",
         )
+        self.current_frame_id = 0
+        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.csv_writer = csv.writer(self.csv_file)
         self.csv_writer.writerow(["frame_id", "left_light", "right_light"])
         self.ui.show_loading("Processing score lights...")
@@ -314,5 +316,4 @@ if __name__ == "__main__":
     widget = DetectScoreLightsWidget(match_context)
     match_context.set_file("matches_data/sabre_2.mp4")
     widget.show()
-    app.exec()
     app.exec()

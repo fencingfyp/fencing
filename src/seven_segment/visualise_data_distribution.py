@@ -1,3 +1,9 @@
+"""How to run:
+python src/seven_segment/visualise_data_distribution.py path/to/dataset1 path/to/dataset2 ...
+Each dataset folder should have subfolders named 0, 1, ..., 15 containing the cropped images (.png) for each class.
+The script will print counts and percentages, and show bar charts for each dataset and a combined total.
+"""
+
 import argparse
 import os
 from collections import defaultdict

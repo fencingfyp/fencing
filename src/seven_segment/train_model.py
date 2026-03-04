@@ -1,3 +1,17 @@
+"""
+This is a script to train a seven-segment score classifier using PyTorch. It loads training and validation data from LMDB datasets, applies data augmentation and preprocessing, and fine-tunes a MobileNetV2 model pretrained on ImageNet. The script includes features like weighted sampling to handle class imbalance, mixed precision training for speed, learning rate scheduling, early stopping, and confusion matrix logging.
+How to run:
+python src/seven_segment/train_model.py --train-lmdb path/to/train.lmdb --val-lmdb path/to/val.lmdb --output-dir path/to/output [options]
+Each LMDB dataset should contain pre-cropped images of the seven-segment display, with labels from 0 to 15 corresponding to the score classes. The output directory will be created if it doesn't exist, and will contain training logs, the best model checkpoint, and confusion matrix images.
+Options:
+--epochs N           Number of training epochs (default: 50)
+--batch-size N       Batch size for training and validation (default: 64)
+--lr LR              Initial learning rate (default: 1e-3)
+--num-workers N      Number of DataLoader worker processes (default: 4)
+--no-amp             Disable mixed precision training (useful if you encounter issues with certain GPUs)
+--cm-every N         Save a confusion matrix every N epochs (default: 5)
+"""
+
 import argparse
 import logging
 import os
