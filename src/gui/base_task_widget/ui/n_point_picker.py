@@ -3,6 +3,8 @@ from PySide6.QtCore import QObject, Qt
 from src.gui.base_task_widget.actions_panel_widget import ActionsPanelWidget, TaskAction
 from src.model.drawable.labelled_points_drawable import LabelledPointsDrawable
 
+from .video_renderer import VideoRenderer
+
 LABELS = ["TL", "TR", "BR", "BL"]
 
 
@@ -13,7 +15,7 @@ class NPointPicker(QObject):
 
     def __init__(
         self,
-        renderer,
+        renderer: VideoRenderer,
         text_label,
         action_panel: ActionsPanelWidget,
         prompts: list[str],
@@ -141,4 +143,5 @@ class NPointPicker(QObject):
 
     def finish(self):
         self.deactivate()
+        self.on_done(self.picked_points)
         self.on_done(self.picked_points)

@@ -1,4 +1,5 @@
 import json
+import os
 from dataclasses import dataclass
 from typing import List, Optional, override
 
@@ -98,6 +99,8 @@ class SelectPeriodsWidget(BaseTaskWidget):
     @override
     def cancel(self):
         self.deactivate()
+        if self.save_path and os.path.exists(self.save_path):
+            os.remove(self.save_path)
         super().cancel()
 
     # ------------------- lifecycle -------------------

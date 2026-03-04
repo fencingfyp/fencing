@@ -1,4 +1,5 @@
 import csv
+import os
 import time
 from typing import override
 
@@ -295,15 +296,20 @@ class ProcessingStage:
         self.ui.schedule(self._process_frames)
 
     def finish(self):
-        self.cancel()
+        self.cleanup()
         self.ui.hide_loading()
         self.completed_callback()
 
-    def cancel(self):
+    def cleanup(self):
         if self.cap:
             self.cap.release()
         if self.csv_file:
             self.csv_file.close()
+
+    def cancel(self):
+        self.cleanup()
+        if self.output_csv_path and os.path.exists(self.output_csv_path):
+            os.remove(self.output_csv_path)
 
 
 if __name__ == "__main__":

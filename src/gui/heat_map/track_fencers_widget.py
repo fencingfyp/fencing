@@ -1,3 +1,4 @@
+import os
 from typing import override
 
 from scripts.manual_track_fencers import (
@@ -62,6 +63,8 @@ class TrackFencersWidget(BaseTaskWidget):
 
     def cancel(self):
         self.ui.cancel_running_subtasks()
+        if hasattr(self, "controller"):
+            self.controller.cancel()
         return super().cancel()
 
 
@@ -216,7 +219,7 @@ class FencerAssignmentController:
     # ------------------------------------------------------------------
 
     def on_finish(self):
-        self.cancel()
+        self.cleanup()
 
         # write to output
         reprocess_csv(
@@ -232,10 +235,15 @@ class FencerAssignmentController:
     def set_on_finished(self, callback):
         self._on_finished_callback = callback
 
-    def cancel(self):
+    def cleanup(self):
         self.cancelled = True
         if self.cap is not None:
             self.cap.release()
+
+    def cancel(self):
+        self.cleanup()
+        if os.path.exists(self.output_csv_path):
+            os.remove(self.output_csv_path)
 
 
 if __name__ == "__main__":

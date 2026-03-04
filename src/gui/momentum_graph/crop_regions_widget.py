@@ -1,3 +1,4 @@
+import os
 import time
 from typing import override
 
@@ -145,6 +146,15 @@ class CropRegionsWidget(BaseTaskWidget):
         if self.processing_pipeline:
             self.processing_pipeline.cancel()
             self.processing_pipeline = None
+        for output_config in self.label_configs[SCOREBOARD_LABEL].output_configs:
+            if os.path.exists(output_config.output_path):
+                os.remove(output_config.output_path)
+        for output_config in self.label_configs[SCORE_LIGHTS_LABEL].output_configs:
+            if os.path.exists(output_config.output_path):
+                os.remove(output_config.output_path)
+        for output_config in self.label_configs[PISTE_LABEL].output_configs:
+            if os.path.exists(output_config.output_path):
+                os.remove(output_config.output_path)
         return super().cancel()
 
     @override
@@ -174,10 +184,11 @@ if __name__ == "__main__":
 
     faulthandler.enable()
 
+    # this is needed because of multiprocessing
     profiler = cProfile.Profile()
     profiler.enable()
     main()
-    profiler.disable()  # app.exec() has returned, Qt is done
+    profiler.disable()
 
     stats = pstats.Stats(profiler)
     stats.strip_dirs()

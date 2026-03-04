@@ -67,6 +67,7 @@ class TrackPosesWidget(BaseTaskWidget):
             )
         )
         self.ui.hide_loading()
+        self.controller.cleanup()  # ensure worker thread is cleaned up
         self.run_completed.emit(TasksToIds.TRACK_POSES.value)
 
     def cancel(self):
@@ -251,7 +252,7 @@ class Roller:
         self._on_finished = callback
 
     def on_finished(self):
-        self.cancel()
+        self.cleanup()
         if self._on_finished:
             self._on_finished()
 
@@ -279,12 +280,17 @@ class Roller:
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
-
-    def cancel(self):
+    def cleanup(self):
         if self._worker is not None:
             self._worker.cancel()
             self._worker.wait()  # block until thread exits cleanly before releasing resources
             self._worker = None
+
+    def cancel(self):
+        self.cleanup()
+        # delete intermediate video if it exists
+        if os.path.exists(self.output_path):
+            os.remove(self.output_path)
 
 
 if __name__ == "__main__":

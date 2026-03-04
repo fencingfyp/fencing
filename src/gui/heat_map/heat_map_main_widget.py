@@ -54,7 +54,6 @@ class HeatMapMainWidget(QWidget):
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        # root.addWidget(self.local_navbar)
         root.addWidget(self.stack, 1)
         self.setLayout(root)
 
@@ -125,6 +124,10 @@ class HeatMapMainWidget(QWidget):
     def _open_task(self, task_id: str):
         if self.task_view.state(task_id) != TaskState.LOCKED:
             self._switch_to(self.tasks_to_widgets[task_id])
+
+    def showEvent(self, event):
+        self._switch_to(self.overview_widget)
+        return super().showEvent(event)
 
 
 if __name__ == "__main__":
