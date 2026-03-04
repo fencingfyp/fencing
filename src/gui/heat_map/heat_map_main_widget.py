@@ -10,10 +10,14 @@ from src.gui.momentum_graph.generate_momentum_graph_widget import (
 )
 from src.gui.momentum_graph.perform_ocr_widget import PerformOcrWidget
 from src.gui.navbar.app_navigator import AppNavigator, View
-from src.gui.task_dependencies import TASK_DEPENDENCIES
-from src.gui.util.task_graph import HeatMapTasksToIds, TaskGraph, TaskState, TasksToIds
-from src.gui.util.task_graph_navbar import TaskGraphLocalNav
-from src.gui.util.task_graph_view import TaskGraphView
+from src.gui.task_graph.task_graph import (
+    HeatMapTasksToIds,
+    TaskGraph,
+    TaskState,
+    TasksToIds,
+)
+from src.gui.task_graph.task_graph_navbar import TaskGraphLocalNav
+from src.gui.task_graph.task_graph_view import TaskGraphView
 
 from .heat_map_overview_widget import HeatMapOverviewWidget
 from .track_fencers_widget import TrackFencersWidget
@@ -129,6 +133,11 @@ if __name__ == "__main__":
     from PySide6.QtWidgets import QApplication
 
     app = QApplication(sys.argv)
+    match_context = MatchContext()
+    widget = HeatMapMainWidget(match_context)
+    match_context.set_file("matches_data/sabre_2.mp4")
+    widget.show()
+    sys.exit(app.exec())
     match_context = MatchContext()
     widget = HeatMapMainWidget(match_context)
     match_context.set_file("matches_data/sabre_2.mp4")

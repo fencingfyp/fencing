@@ -1,4 +1,4 @@
-from src.gui.util.task_graph import Task, TasksToIds
+from src.gui.task_graph.task_graph import Task, TasksToIds
 from src.util.file_names import (
     CROPPED_SCORE_LIGHTS_VIDEO_NAME,
     CROPPED_SCOREBOARD_VIDEO_NAME,

@@ -5,7 +5,6 @@ from PySide6.QtCore import QEvent, QObject, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QLabel
 
-from src.model.drawable.box_drawable import BoxDrawable
 from src.model.drawable.detections_drawable import DetectionsDrawable
 from src.model.drawable.drawable import Drawable
 from src.model.drawable.points_drawable import PointsDrawable

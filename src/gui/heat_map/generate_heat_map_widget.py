@@ -11,10 +11,10 @@ from scripts.manual_track_fencers import (
 )
 from scripts.manual_track_fencers import row_mapper as fencer_poses_row_mapper
 from scripts.visualise_fencers_on_piste import LEFT_FENCER_ID, RIGHT_FENCER_ID
-from src.gui.base_task_widget import BaseTaskWidget
+from src.gui.base_task_widget.base_task_widget import BaseTaskWidget
 from src.gui.MatchContext import MatchContext
+from src.gui.task_graph.task_graph import TasksToIds
 from src.gui.util.conversion import pixmap_to_np
-from src.gui.util.task_graph import TasksToIds
 from src.model import FrameInfoManager
 from src.model.FileManager import FileRole
 from src.model.FrameInfoManager import FrameInfoManager

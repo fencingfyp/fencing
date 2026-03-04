@@ -1,8 +1,8 @@
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QPushButton, QVBoxLayout, QWidget
 
-from src.gui.util.task_graph import TaskState
-from src.gui.util.task_graph_scene import TASK_STATE_CSS
+from .task_graph import TaskState
+from .task_graph_scene import TASK_STATE_CSS
 
 
 class TaskGraphLocalNav(QWidget):

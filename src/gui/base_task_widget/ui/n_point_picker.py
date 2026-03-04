@@ -1,6 +1,6 @@
 from PySide6.QtCore import QObject, Qt
 
-from src.gui.util.actions_panel_widget import ActionsPanelWidget, TaskAction
+from src.gui.base_task_widget.actions_panel_widget import ActionsPanelWidget, TaskAction
 from src.model.drawable.labelled_points_drawable import LabelledPointsDrawable
 
 LABELS = ["TL", "TR", "BR", "BL"]

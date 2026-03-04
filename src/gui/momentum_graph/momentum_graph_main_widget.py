@@ -4,18 +4,12 @@ import pstats
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QWidget
 
-from src.gui.base_task_widget import BaseTaskWidget
+from src.gui.base_task_widget.base_task_widget import BaseTaskWidget
 from src.gui.MatchContext import MatchContext
 from src.gui.navbar.app_navigator import AppNavigator, View
-from src.gui.task_dependencies import TASK_DEPENDENCIES
-from src.gui.util.task_graph import (
-    MomentumGraphTasksToIds,
-    TaskGraph,
-    TaskState,
-    TasksToIds,
-)
-from src.gui.util.task_graph_navbar import TaskGraphLocalNav
-from src.gui.util.task_graph_view import TaskGraphView
+from src.gui.task_graph.task_graph import MomentumGraphTasksToIds, TaskState, TasksToIds
+from src.gui.task_graph.task_graph_navbar import TaskGraphLocalNav
+from src.gui.task_graph.task_graph_view import TaskGraphView
 
 from .crop_regions_widget import CropRegionsWidget
 from .detect_score_lights_widget import DetectScoreLightsWidget

@@ -11,10 +11,10 @@ from ultralytics import YOLO
 from ultralytics.trackers.bot_sort import BOTSORT
 
 from scripts.estimate_poses import get_header_row
-from src.gui.base_task_widget import BaseTaskWidget
+from src.gui.base_task_widget.base_task_widget import BaseTaskWidget
+from src.gui.base_task_widget.ui.PysideUi import PysideUi
 from src.gui.MatchContext import MatchContext
-from src.gui.PysideUi import PysideUi
-from src.gui.util.task_graph import TasksToIds
+from src.gui.task_graph.task_graph import TasksToIds
 from src.model.FileManager import FileRole
 from src.util.gpu import get_device
 

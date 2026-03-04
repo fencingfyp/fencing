@@ -2,9 +2,8 @@ from PySide6.QtCore import Signal, Slot
 from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QGraphicsView, QVBoxLayout, QWidget
 
-from src.gui.util.task_graph_scene import TaskGraphScene
-
 from .abstract_task_graph import AbstractTaskGraph
+from .task_graph_scene import TaskGraphScene
 
 
 class TaskGraphWidget(QWidget):

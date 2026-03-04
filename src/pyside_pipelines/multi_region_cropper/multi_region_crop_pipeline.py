@@ -6,10 +6,9 @@ import tempfile
 from typing import Callable
 
 import cv2
-import numpy as np
 from PySide6.QtCore import QTimer
 
-from src.gui.PysideUi import PysideUi
+from src.gui.base_task_widget.ui.PysideUi import PysideUi
 from src.model.drawable.points_drawable import PointsDrawable
 from src.model.drawable.quadrilateral_drawable import QuadrilateralDrawable
 from src.model.tracker.DefinedRegion import DefinedRegion
@@ -21,7 +20,6 @@ from src.pyside_pipelines.multi_region_cropper._worker import (
     run_worker,
 )
 from src.pyside_pipelines.multi_region_cropper.label_config import LabelConfig
-from src.pyside_pipelines.multi_region_cropper.output.output_config import OutputConfig
 from src.pyside_pipelines.multi_region_cropper.region_state import RegionState
 
 

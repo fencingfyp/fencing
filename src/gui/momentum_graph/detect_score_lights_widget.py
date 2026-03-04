@@ -6,12 +6,12 @@ import cv2
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
 
-from src.gui.base_task_widget import BaseTaskWidget, InstructionLabel
+from src.gui.base_task_widget.actions_panel_widget import TaskAction
+from src.gui.base_task_widget.base_task_widget import BaseTaskWidget, InstructionLabel
+from src.gui.base_task_widget.ui.PysideUi import PysideUi
 from src.gui.MatchContext import MatchContext
-from src.gui.PysideUi import PysideUi
-from src.gui.util.actions_panel_widget import TaskAction
-from src.gui.util.task_graph import TasksToIds
-from src.gui.video_player_widget import VideoPlayerWidget
+from src.gui.task_graph.task_graph import TasksToIds
+from src.gui.util.video_player_widget import VideoPlayerWidget
 from src.model import Quadrilateral
 from src.model.AutoPatchLightDetector import SinglePatchAutoDetector
 from src.model.FileManager import FileRole

@@ -41,7 +41,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import Signal
 
 from src.model.FileManager import FileManager
 

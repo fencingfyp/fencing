@@ -5,14 +5,14 @@ from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
-from src.gui.n_point_picker import NPointPicker
-from src.gui.util.actions_panel_widget import ActionsPanelWidget
+from src.gui.base_task_widget.actions_panel_widget import ActionsPanelWidget
 from src.gui.util.conversion import np_to_pixmap
-from src.gui.util.fencer_selection_controller import FencerSelectionController
-from src.gui.util.loading_overlay import LoadingOverlay
 from src.model.Quadrilateral import Quadrilateral
 from src.model.Ui import Ui
 
+from .fencer_selection_controller import FencerSelectionController
+from .loading_overlay import LoadingOverlay
+from .n_point_picker import NPointPicker
 from .video_renderer import VideoRenderer
 
 
@@ -179,5 +179,6 @@ class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
     # ------------------------------------------------------------------
 
     def schedule(self, callback, delay_ms=0):
+        QTimer.singleShot(delay_ms, callback)
         QTimer.singleShot(delay_ms, callback)
         QTimer.singleShot(delay_ms, callback)

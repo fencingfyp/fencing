@@ -1,7 +1,7 @@
 from PySide6.QtCore import QObject, Signal
 
-from src.gui.task_dependencies import TASK_DEPENDENCIES
-from src.gui.util.task_graph import TaskGraph
+from src.gui.task_graph.task_dependencies import TASK_DEPENDENCIES
+from src.gui.task_graph.task_graph import TaskGraph
 from src.model.FileManager import FileManager
 
 

@@ -3,11 +3,12 @@ from typing import override
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import QCheckBox, QLabel, QStackedWidget, QVBoxLayout, QWidget
 
-from src.gui.instruction_label import InstructionLabel
+from src.gui.base_task_widget.actions_panel_widget import ActionsPanelWidget
+from src.gui.base_task_widget.ui.PysideUi import PysideUi
 from src.gui.MatchContext import MatchContext
-from src.gui.pre_run_panel import PreRunPanel
-from src.gui.PysideUi import PysideUi
-from src.gui.util.actions_panel_widget import ActionsPanelWidget
+
+from .instruction_label import InstructionLabel
+from .pre_run_panel import PreRunPanel
 
 
 class BaseTaskWidget(QWidget):
@@ -232,4 +233,5 @@ class BaseTaskWidget(QWidget):
         if self.is_running:
             self.cancel()
         self.cleanup()
+        return super().closeEvent(event)
         return super().closeEvent(event)

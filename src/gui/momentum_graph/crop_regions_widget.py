@@ -5,16 +5,15 @@ import cv2
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QApplication
 
-from src.gui.base_task_widget import BaseTaskWidget
+from src.gui.base_task_widget.base_task_widget import BaseTaskWidget
 from src.gui.MatchContext import MatchContext
-from src.gui.util.task_graph import TasksToIds
+from src.gui.task_graph.task_graph import TasksToIds
 from src.model.FileManager import FileRole
 from src.pyside_pipelines.multi_region_cropper.label_config import LabelConfig
 from src.pyside_pipelines.multi_region_cropper.multi_region_crop_pipeline import (
     MultiRegionProcessingPipeline,
 )
 from src.pyside_pipelines.multi_region_cropper.output.output_config import (
-    CsvOneShotQuadOutputConfig,
     CsvQuadOutputConfig,
     RectifiedOutputConfig,
 )

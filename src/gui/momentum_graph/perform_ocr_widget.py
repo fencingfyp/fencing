@@ -28,10 +28,10 @@ from scripts.momentum_graph.perform_ocr import (
     extract_roi,
     regularise_rectangle,
 )
-from src.gui.base_task_widget import BaseTaskWidget
+from src.gui.base_task_widget.base_task_widget import BaseTaskWidget
+from src.gui.base_task_widget.ui.PysideUi import PysideUi
 from src.gui.MatchContext import MatchContext
-from src.gui.PysideUi import PysideUi
-from src.gui.util.task_graph import TasksToIds
+from src.gui.task_graph.task_graph import TasksToIds
 from src.model.FileManager import FileRole
 from src.model.reader.EasyOcrReader import EasyOcrReader
 from src.model.reader.SevenSegmentReader import SevenSegmentReader

@@ -3,13 +3,13 @@ from dataclasses import dataclass
 from typing import List, Optional, override
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from src.gui.base_task_widget import BaseTaskWidget
+from src.gui.base_task_widget.actions_panel_widget import TaskAction
+from src.gui.base_task_widget.base_task_widget import BaseTaskWidget
 from src.gui.MatchContext import MatchContext
-from src.gui.util.actions_panel_widget import TaskAction
-from src.gui.util.task_graph import TasksToIds
-from src.gui.video_player_widget import VideoPlayerWidget
+from src.gui.task_graph.task_graph import TasksToIds
+from src.gui.util.video_player_widget import VideoPlayerWidget
 from src.model.FileManager import FileRole
 
 

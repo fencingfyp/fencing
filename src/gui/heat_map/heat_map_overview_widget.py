@@ -1,8 +1,8 @@
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
-from src.gui.util.task_graph import TaskGraph, TaskState
-from src.gui.util.task_graph_widget import TaskGraphWidget
+from src.gui.task_graph.task_graph import TaskGraph, TaskState
+from src.gui.task_graph.task_graph_widget import TaskGraphWidget
 
 
 class HeatMapOverviewWidget(QWidget):
