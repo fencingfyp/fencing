@@ -1,5 +1,5 @@
 import networkx as nx
-from networkx.drawing.nx_agraph import graphviz_layout
+from networkx.drawing.nx_pydot import graphviz_layout
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPalette, QPen
 from PySide6.QtWidgets import (
@@ -207,11 +207,12 @@ class TaskGraphScene(QGraphicsScene):
 
         # Build DAG for layout
         G = nx.DiGraph()
+        G.graph["graph"] = {"rankdir": "LR"}
         for src, dst in layout.edges:
             G.add_edge(src, dst)
 
         # Compute positions via Graphviz (left→right)
-        pos = graphviz_layout(G, prog="dot", args="-Grankdir=LR")
+        pos = graphviz_layout(G, prog="dot")
 
         # Scale & offset positions
         if not pos:

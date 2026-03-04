@@ -1,6 +1,6 @@
+from dataclasses import dataclass
 from enum import Enum
 
-from attr import dataclass
 from PySide6.QtCore import QObject, Signal
 
 

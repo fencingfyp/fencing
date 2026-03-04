@@ -1,49 +1,101 @@
-# YOLO Pose + Tracking Video Processor
+# Fencing Video Analysis Tool (FVAT)
 
-This project provides utilities to process videos or images with a YOLO pose and tracking model, export detections to CSV, and visualise them back on the original media.
+## Installation Guide
 
-## Features
+---
 
-- Run YOLO pose+track inference on:
-  - Videos (frame by frame)
-  - Single images
-- Save results in a structured **CSV** format:
-- Each row = one detected person in one frame  
-- 17 keypoints per detection, each with `(x, y, visibility)`  
-- Stream results directly to CSV per frame (avoids OOM on long videos)
-- Replay results by loading CSV + original video
-- Adjustable playback FPS for visualisation
-- Interactive piste marking:
-- On the first frame, user clicks **Top Left, Top Right, Bottom Left, Bottom Right** corners of the piste
-- Each click is confirmed by pressing **Enter**
-- Points are drawn and indexed on screen
+## 1. Install Conda (Mamba Recommended)
 
-## Usage
+Install **Miniforge** (recommended, includes conda and supports mamba):
 
-### 1. Process a video or image
+- macOS (Apple Silicon / Intel):  
+  https://github.com/conda-forge/miniforge
+
+- Windows: download the installer and follow the setup wizard  
+- Linux: use the `.sh` installer provided on the release page  
+
+After installation, open a new terminal.
+
+---
+
+## 2. Create Environment
+
+Using mamba (recommended):
+
 ```bash
-python process_video.py input.mp4 --model yolov8n.pt --fps 30 --output out_folder
+mamba create -n fvat python=3.13
+mamba activate fvat
 ```
 
-- `--model` : YOLO model to use
-- `--fps` : Target FPS for processing output (default: 30)
-- `--output`: Folder to store CSV (default: script folder)
+If you do not have mamba:
 
-### 2. Mark piste and fencer IDs
 ```bash
-python mark_video.py csv_path video_path --save-video --output-path outputs/output.mp4
+conda create -n fvat python=3.13
+conda activate fvat
 ```
-- `--save-video` : Save video to output path
-- `--output-path`: File to store video (default: script folder)
 
+---
+## 3. Install Graphviz (System Dependency)
 
-## Dependencies
-### Mamba/Conda
+Graphviz must be installed on your system.
+
+### macOS
+```bash
+brew install graphviz
+```
+
+### Ubuntu / Debian
+```bash
+sudo apt install graphviz
+```
+
+### Windows
+Download and install from:
+https://graphviz.org/download/
+
+After installation, verify it is available:
+```bash
+dot -V
+```
+
+---
+## 4. Install Python Dependencies
+Inside the activated environment:
+```bash
+pip install \
+pyside6 \
+opencv-python \
+numpy \
+pandas \
+ultralytics \
+easyocr \
+graphviz
+```
+
+---
+## 5. Run the Application
+Navigate to the project root directory:
+```bash
+cd path/to/FVAT
+```
+Then run:
+```bash
+python -m scripts.app
+```
+
+---
+## Dependencies Summary
+### Conda
 python 3.13
-pyside6
 
 ### Pip
-???
+pyside6
+opencv-python
+numpy
+pandas
+ultralytics
+easyocr
 graphviz
-pygraphviz
-nx
+
+### System
+Graphviz 
