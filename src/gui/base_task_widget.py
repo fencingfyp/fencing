@@ -4,10 +4,10 @@ from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import QCheckBox, QLabel, QStackedWidget, QVBoxLayout, QWidget
 
 from src.gui.instruction_label import InstructionLabel
+from src.gui.MatchContext import MatchContext
 from src.gui.pre_run_panel import PreRunPanel
+from src.gui.PysideUi import PysideUi
 from src.gui.util.actions_panel_widget import ActionsPanelWidget
-from src.pyside.MatchContext import MatchContext
-from src.pyside.PysideUi import PysideUi
 
 
 class BaseTaskWidget(QWidget):

@@ -17,14 +17,13 @@ from scripts.momentum_graph.util.evaluate_score_events import (
 from scripts.momentum_graph.util.extract_score_increases import (
     extract_score_increases_np,
 )
+from src.gui.base_task_widget import BaseTaskWidget
+from src.gui.MatchContext import MatchContext
+from src.gui.PysideUi import PysideUi
 from src.gui.util.conversion import pixmap_to_np
 from src.gui.util.task_graph import TasksToIds
 from src.model.FileManager import FileRole
-from src.pyside.MatchContext import MatchContext
-from src.pyside.PysideUi import PysideUi
 from src.util.io import setup_input_video_io
-
-from .base_task_widget import BaseTaskWidget
 
 
 class GenerateMomentumGraphWidget(BaseTaskWidget):

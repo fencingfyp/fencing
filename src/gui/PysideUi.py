@@ -12,7 +12,8 @@ from src.gui.util.fencer_selection_controller import FencerSelectionController
 from src.gui.util.loading_overlay import LoadingOverlay
 from src.model.Quadrilateral import Quadrilateral
 from src.model.Ui import Ui
-from src.pyside.video_renderer import VideoRenderer
+
+from .video_renderer import VideoRenderer
 
 
 class ABCQObjectMeta(type(QObject), type(ABC)):
@@ -178,4 +179,5 @@ class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
     # ------------------------------------------------------------------
 
     def schedule(self, callback, delay_ms=0):
+        QTimer.singleShot(delay_ms, callback)
         QTimer.singleShot(delay_ms, callback)

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 from src.gui.heat_map.heat_map_main_widget import navigation as heatmap_nav_register
 from src.gui.home_widget import navigation as select_nav_register
 from src.gui.manage_match_widget import navigation as manage_nav_register
+from src.gui.MatchContext import MatchContext
 from src.gui.momentum_graph.momentum_graph_main_widget import (
     navigation as momentum_nav_register,
 )
@@ -22,7 +23,6 @@ from src.gui.multi_momentum_graph_widget import (
 from src.gui.navbar.app_navigator import AppNavigator
 from src.gui.navbar.global_navbar import GlobalNavbar
 from src.gui.navbar.navigation_controller import View
-from src.pyside.MatchContext import MatchContext
 
 
 class MainWindow(QMainWindow):

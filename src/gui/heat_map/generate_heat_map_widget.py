@@ -11,21 +11,20 @@ from scripts.manual_track_fencers import (
 )
 from scripts.manual_track_fencers import row_mapper as fencer_poses_row_mapper
 from scripts.visualise_fencers_on_piste import LEFT_FENCER_ID, RIGHT_FENCER_ID
+from src.gui.base_task_widget import BaseTaskWidget
+from src.gui.MatchContext import MatchContext
 from src.gui.util.conversion import pixmap_to_np
 from src.gui.util.task_graph import TasksToIds
 from src.model import FrameInfoManager
 from src.model.FileManager import FileRole
 from src.model.FrameInfoManager import FrameInfoManager
 from src.model.Quadrilateral import Quadrilateral
-from src.pyside.MatchContext import MatchContext
 from src.pyside_pipelines.multi_region_cropper.output.csv_quad_output import (
     get_header_row as quad_get_header_row,
 )
 from src.pyside_pipelines.multi_region_cropper.output.csv_quad_output import (
     row_mapper as quad_row_mapper,
 )
-
-from ..momentum_graph.base_task_widget import BaseTaskWidget
 
 
 def load_momentum_diffs(path) -> pd.DataFrame:

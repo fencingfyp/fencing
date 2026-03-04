@@ -2,12 +2,10 @@ from typing import Callable
 
 import numpy as np
 
+from src.gui.PysideUi import PysideUi
 from src.model.Quadrilateral import Quadrilateral
 from src.model.tracker.DefinedRegion import DefinedRegion
-from src.pyside.PysideUi import PysideUi
 from src.util.utils import generate_select_quadrilateral_instructions
-
-from .label_config import LabelConfig
 
 
 class ROISelectionPipeline:

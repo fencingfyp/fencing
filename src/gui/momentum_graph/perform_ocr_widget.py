@@ -28,17 +28,15 @@ from scripts.momentum_graph.perform_ocr import (
     extract_roi,
     regularise_rectangle,
 )
-from src.gui.momentum_graph.base_task_widget import BaseTaskWidget
+from src.gui.base_task_widget import BaseTaskWidget
+from src.gui.MatchContext import MatchContext
+from src.gui.PysideUi import PysideUi
 from src.gui.util.task_graph import TasksToIds
-from src.model import Quadrilateral
-from src.model.drawable.quadrilateral_drawable import QuadrilateralDrawable
 from src.model.FileManager import FileRole
 from src.model.reader.EasyOcrReader import EasyOcrReader
 from src.model.reader.SevenSegmentReader import SevenSegmentReader
-from src.pyside.MatchContext import MatchContext
-from src.pyside.PysideUi import PysideUi
 from src.util.gpu import get_device
-from src.util.io import setup_input_video_io, setup_output_file
+from src.util.io import setup_input_video_io
 from src.util.utils import generate_select_quadrilateral_instructions
 
 MAX_FRAMES = 200_000

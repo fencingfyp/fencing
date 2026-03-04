@@ -2,6 +2,7 @@ from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QStackedWidget, QWidget
 
 from src.gui.heat_map.generate_heat_map_widget import GenerateHeatMapWidget
+from src.gui.MatchContext import MatchContext
 from src.gui.momentum_graph.crop_regions_widget import CropRegionsWidget
 from src.gui.momentum_graph.detect_score_lights_widget import DetectScoreLightsWidget
 from src.gui.momentum_graph.generate_momentum_graph_widget import (
@@ -13,7 +14,6 @@ from src.gui.task_dependencies import TASK_DEPENDENCIES
 from src.gui.util.task_graph import HeatMapTasksToIds, TaskGraph, TaskState, TasksToIds
 from src.gui.util.task_graph_navbar import TaskGraphLocalNav
 from src.gui.util.task_graph_view import TaskGraphView
-from src.pyside.MatchContext import MatchContext
 
 from .heat_map_overview_widget import HeatMapOverviewWidget
 from .track_fencers_widget import TrackFencersWidget

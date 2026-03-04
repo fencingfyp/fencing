@@ -5,9 +5,10 @@ import cv2
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QApplication
 
+from src.gui.base_task_widget import BaseTaskWidget
+from src.gui.MatchContext import MatchContext
 from src.gui.util.task_graph import TasksToIds
 from src.model.FileManager import FileRole
-from src.pyside.MatchContext import MatchContext
 from src.pyside_pipelines.multi_region_cropper.label_config import LabelConfig
 from src.pyside_pipelines.multi_region_cropper.multi_region_crop_pipeline import (
     MultiRegionProcessingPipeline,
@@ -21,8 +22,6 @@ from src.pyside_pipelines.multi_region_cropper.roi_selection_controller import (
     ROISelectionPipeline,
 )
 from src.pyside_pipelines.multi_region_cropper.tracking_config import TrackingConfig
-
-from .base_task_widget import BaseTaskWidget
 
 SCOREBOARD_LABEL = "scoreboard"
 SCORE_LIGHTS_LABEL = "score lights"

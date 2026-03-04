@@ -1,7 +1,6 @@
 import sys
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 from typing import Callable, List, Optional
 
 from PySide6.QtCore import Signal
@@ -9,10 +8,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
-    QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
@@ -51,6 +47,7 @@ class SelectMatchDialog(QDialog):
     ):
         super().__init__(parent)
         self.setWindowTitle("Select Match")
+        self.setMinimumSize(480, 320)
 
         self.multi_select = multi_select
         self.validator = validator or self._default_validator

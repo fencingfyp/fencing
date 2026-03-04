@@ -9,12 +9,12 @@ import numpy as np
 import pandas as pd
 from PySide6.QtGui import QPixmap
 
+from src.gui.base_task_widget import BaseTaskWidget
+from src.gui.MatchContext import MatchContext
 from src.gui.util.conversion import pixmap_to_np
 from src.gui.util.task_graph import TasksToIds
 from src.model.FileManager import FileRole
-from src.pyside.MatchContext import MatchContext
 
-from .base_task_widget import BaseTaskWidget
 from .generate_momentum_graph_widget import get_momentum_graph_pixmap
 
 

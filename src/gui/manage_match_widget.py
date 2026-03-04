@@ -3,9 +3,9 @@ import sys
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtWidgets import QApplication, QWidget
 
+from src.gui.MatchContext import MatchContext
 from src.gui.navbar.app_navigator import AppNavigator
 from src.gui.navbar.navigation_controller import View
-from src.pyside.MatchContext import MatchContext
 
 from .ui_manage_match_widget import Ui_ManageMatchWidget
 

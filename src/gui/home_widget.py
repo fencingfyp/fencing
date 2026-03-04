@@ -6,9 +6,9 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from src.gui.navbar.app_navigator import AppNavigator, View
-from src.model.FileManager import FileManager
+from src.model.FileManager import FileManager, FileRole
 
-from .select_match_dialog import SelectMatchDialog
+from .select_match_dialog import SelectMatchDialog, ValidationResult, ValidationState
 
 FEEDBACK_FORM_URL = "https://forms.gle/HUzQw4kAScirmgUf8"
 BUG_REPORT_FORM_URL = "https://forms.gle/QEiH8tLXRMjn2Npz5"
@@ -79,7 +79,9 @@ class HomeWidget(QWidget):
     # Multi match comparison flow
     # ------------------------------------------------------------------
     def _compare_matches(self):
-        dialog = SelectMatchDialog(self, multi_select=True)
+        dialog = SelectMatchDialog(
+            self, multi_select=True, validator=self._validate_multiple_selection
+        )
         dialog.submitted.connect(self._on_multiple_selected)
         dialog.open()
 
@@ -88,16 +90,32 @@ class HomeWidget(QWidget):
             FileManager.create_sidecar(path)
         self.multiple_selected.emit(file_paths)
 
+    def _validate_multiple_selection(self, file_paths: List[str]) -> ValidationResult:
+        if len(file_paths) < 2:
+            return ValidationResult(
+                ValidationState.REJECT,
+                "Please select at least 2 video files for comparison.",
+            )
+        for file in file_paths:
+            file_manager = FileManager(file)
+            has_required_files = file_manager.file_exists(
+                FileRole.RAW_MOMENTUM_DATA
+            ) and file_manager.file_exists(FileRole.PERIODS)
+            if not has_required_files:
+                return ValidationResult(
+                    ValidationState.REJECT,
+                    f"File '{file}' is missing required data. Please ensure momentum data and periods have been generated for all selected matches.",
+                )
+        return ValidationResult(ValidationState.ACCEPT)
+
     # ------------------------------------------------------------------
     # Feedback flows
     # ------------------------------------------------------------------
     def _open_feedback_form(self):
-        QDesktopServices.openUrl(QUrl(FEEDBACK_FORM_URL))  # TODO: set FEEDBACK_FORM_URL
+        QDesktopServices.openUrl(QUrl(FEEDBACK_FORM_URL))
 
     def _open_bug_report_form(self):
-        QDesktopServices.openUrl(
-            QUrl(BUG_REPORT_FORM_URL)
-        )  # TODO: set BUG_REPORT_FORM_URL
+        QDesktopServices.openUrl(QUrl(BUG_REPORT_FORM_URL))
 
 
 if __name__ == "__main__":

@@ -9,14 +9,14 @@ import pandas as pd
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
+from src.gui.MatchContext import MatchContext
 from src.gui.momentum_graph.generate_momentum_graph_widget import (
     get_momentum_graph_pixmap,
 )
 from src.gui.navbar.navigation_controller import NavigationController, View
+from src.gui.PysideUi import PysideUi
 from src.gui.util.conversion import pixmap_to_np
 from src.model.FileManager import FileRole
-from src.pyside.MatchContext import MatchContext
-from src.pyside.PysideUi import PysideUi
 
 
 def navigation(nav: NavigationController, match_ctx: MatchContext):

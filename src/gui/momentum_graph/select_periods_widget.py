@@ -5,13 +5,12 @@ from typing import List, Optional, override
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
+from src.gui.base_task_widget import BaseTaskWidget
+from src.gui.MatchContext import MatchContext
 from src.gui.util.actions_panel_widget import TaskAction
 from src.gui.util.task_graph import TasksToIds
 from src.gui.video_player_widget import VideoPlayerWidget
 from src.model.FileManager import FileRole
-from src.pyside.MatchContext import MatchContext
-
-from .base_task_widget import BaseTaskWidget
 
 
 @dataclass
