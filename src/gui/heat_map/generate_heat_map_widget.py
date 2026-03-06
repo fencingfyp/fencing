@@ -41,16 +41,31 @@ def load_momentum_diffs(path) -> pd.DataFrame:
     return df_diff
 
 
+from dataclasses import dataclass
+from enum import Enum
+
+
+class AttackType(Enum):
+    SIMPLE = "simple"
+    COUNTER = "counter"
+    PARRY = "parry"
+    # Future types can be added here, e.g.:
+    # COMPOUND = "compound"
+    # COUNTER = "counter"
+
+
+@dataclass
+class ScoringEvent:
+    frame_id: int
+    fencer: str  # "left" | "right"
+    third: str  # "left" | "centre" | "right"
+    attack_type: AttackType
+
+
 def generate_heat_map_data(
     fencer_thirds: np.ndarray, momentum_frames: pd.DataFrame
-) -> dict[str, dict[str, int]]:
-    heat_map = {
-        "left": {"left": 0, "right": 0},
-        "centre": {"left": 0, "right": 0},
-        "right": {"left": 0, "right": 0},
-    }
-
-    # scoring_order = []  # accumulate scorer order
+) -> list[ScoringEvent]:
+    scoring_events: list[ScoringEvent] = []
 
     for i in range(len(momentum_frames)):
         frame_id = momentum_frames.iloc[i]["frame_id"]
@@ -59,35 +74,34 @@ def generate_heat_map_data(
         if momentum_change == 1:
             left_third, _ = fencer_thirds[frame_id]
             if left_third:
-                heat_map[left_third]["left"] += 1
-                # scoring_order.append((frame_id, "left", left_third))
+                scoring_events.append(
+                    ScoringEvent(frame_id, "left", left_third, AttackType.SIMPLE)
+                )
 
         elif momentum_change == -1:
             _, right_third = fencer_thirds[frame_id]
             if right_third:
-                heat_map[right_third]["right"] += 1
-                # scoring_order.append((frame_id, "right", right_third))
+                scoring_events.append(
+                    ScoringEvent(frame_id, "right", right_third, AttackType.SIMPLE)
+                )
 
         elif momentum_change == 0:
             if len(fencer_thirds[frame_id]) != 2:
                 print(
-                    f"Warning: fencer_thirds for frame {frame_id}: {fencer_thirds[frame_id]} does not have length 2"
+                    f"Warning: fencer_thirds for frame {frame_id}: "
+                    f"{fencer_thirds[frame_id]} does not have length 2"
                 )
             left_third, right_third = fencer_thirds[frame_id]
-
-            # left first for simultaneous
             if left_third:
-                heat_map[left_third]["left"] += 1
-                # scoring_order.append((frame_id, "left", left_third))
-
+                scoring_events.append(
+                    ScoringEvent(frame_id, "left", left_third, AttackType.SIMPLE)
+                )
             if right_third:
-                heat_map[right_third]["right"] += 1
-                # scoring_order.append((frame_id, "right", right_third))
-    # print("Scoring order:")
-    # for idx, (frame_id, fencer, third) in enumerate(scoring_order, 1):
-    #     print(f"{idx}. {int(frame_id/25)} ({fencer}) - {third}")
+                scoring_events.append(
+                    ScoringEvent(frame_id, "right", right_third, AttackType.SIMPLE)
+                )
 
-    return heat_map
+    return scoring_events
 
 
 def load_piste_data(piste_csv_path, fps) -> FrameInfoManager:
@@ -147,61 +161,98 @@ class GenerateHeatMapWidget(BaseTaskWidget):
         pass
 
 
+import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.ticker import MaxNLocator
 from PySide6.QtGui import QImage, QPixmap
 
 
-def heatmap_to_pixmap(heat_map, figsize=(6, 4), title="Heat Map"):
-    categories = list(heat_map.keys())
-    subcats = list(next(iter(heat_map.values())).keys())
+def heatmap_to_pixmap(
+    scoring_events: list[ScoringEvent], figsize=(6, 4), title="Heat Map"
+):
+    thirds = ["left", "centre", "right"]
+    fencers = ["left", "right"]
+    fencer_colors = {"left": "steelblue", "right": "indianred"}
 
-    values = {sub: [heat_map[c][sub] for c in categories] for sub in subcats}
-
-    x = np.arange(len(categories))
-    width = 0.35
+    attack_markers = {
+        AttackType.SIMPLE: ("x", "Attack", 80),
+        AttackType.COUNTER: ("o", "Counter", 60),
+        AttackType.PARRY: ("*", "Parry", 100),
+    }
 
     fig, ax = plt.subplots(figsize=figsize)
     canvas = FigureCanvas(fig)
 
-    colors = ["steelblue", "indianred"]
+    third_positions = {t: i for i, t in enumerate(thirds)}
+    fencer_offsets = {"left": -0.2, "right": 0.2}
 
-    for i, sub in enumerate(subcats):
-        bars = ax.bar(
-            x - width / 2 + i * width,
-            values[sub],
-            width,
-            label=sub,
-            color=colors[i],
+    # Group events by (third, fencer, attack_type) → count
+    counts: dict[tuple, int] = {}
+    for event in scoring_events:
+        key = (event.third, event.fencer, event.attack_type)
+        counts[key] = counts.get(key, 0) + 1
+
+    # Stack events vertically per (third, fencer) column
+    column_heights: dict[tuple, float] = {}  # tracks next y position per column
+
+    for (third, fencer, attack_type), count in counts.items():
+        marker, _, marker_size = attack_markers[attack_type]
+        color = fencer_colors[fencer]
+        x = third_positions[third] + fencer_offsets[fencer]
+        y_base = column_heights.get((third, fencer), 0)
+
+        for j in range(count):
+            y = y_base + j + 0.5
+            ax.scatter(x, y, marker=marker, color=color, s=marker_size, zorder=3)
+
+        ax.text(
+            x, y_base + count + 0.1, str(count), ha="center", va="bottom", fontsize=8
         )
+        column_heights[(third, fencer)] = y_base + count
 
-        # Faster text placement (no annotate)
-        for bar in bars:
-            height = bar.get_height()
-            ax.text(
-                bar.get_x() + bar.get_width() / 2,
-                height,
-                str(height),
-                ha="center",
-                va="bottom",
-            )
+    # --- Legends ---
+    # Fencer color legend
+    fencer_handles = [
+        mlines.Line2D(
+            [],
+            [],
+            color=c,
+            marker="s",
+            linestyle="None",
+            markersize=8,
+            label=f"{f.capitalize()} fencer",
+        )
+        for f, c in fencer_colors.items()
+    ]
+    # Attack type shape legend
+    shape_handles = [
+        mlines.Line2D(
+            [], [], color="grey", marker=m, linestyle="None", markersize=8, label=label
+        )
+        for _, (m, label, _) in attack_markers.items()
+    ]
 
-    ax.set_xticks(x)
-    ax.set_xticklabels(categories)
+    legend1 = ax.legend(handles=fencer_handles, loc="upper left", fontsize=8)
+    ax.add_artist(legend1)
+    ax.legend(handles=shape_handles, loc="upper right", fontsize=8)
+
+    ax.set_xticks(range(len(thirds)))
+    ax.set_xticklabels([t.capitalize() for t in thirds])
     ax.set_ylabel("Count")
     ax.set_title(title)
-    ax.legend()
+    ax.set_xlim(-0.6, len(thirds) - 0.4)
+    max_height = max(column_heights.values(), default=1)
+    ax.set_ylim(0, max_height + 1.5)
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
 
-    fig.subplots_adjust(bottom=0.2)
-
+    fig.subplots_adjust(bottom=0.15)
     canvas.draw()
-    width, height = canvas.get_width_height()
-    image = QImage(canvas.buffer_rgba(), width, height, QImage.Format_ARGB32)
+    w, h = canvas.get_width_height()
+    image = QImage(canvas.buffer_rgba(), w, h, QImage.Format_ARGB32)
     pixmap = QPixmap.fromImage(image)
-
     plt.close(fig)
-
     return pixmap
 
 
