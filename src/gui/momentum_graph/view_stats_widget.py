@@ -142,8 +142,9 @@ class ViewStatsWidget(BaseTaskWidget):
         start_frame = int((periods[0]["start_ms"] / 1000) * self.fps)
         timing_df = compute_time_between_points(momentum_df, start_frame, self.fps)
         avg_time = compute_average_delta_time(timing_df)
+        final_score = compute_final_score(momentum_df["momentum"].to_numpy())
         self.ui.write(
-            f"Average time between momentum data points: {avg_time:.2f} seconds"
+            f"Average time between momentum data points: {avg_time:.2f} seconds. Final score: {final_score[0]} - {final_score[1]}."
         )
 
         # Show table as image
@@ -163,6 +164,19 @@ class ViewStatsWidget(BaseTaskWidget):
         self.run_completed.emit(TasksToIds.VIEW_STATS.value)
 
 
+def compute_final_score(momentum_values: np.ndarray) -> tuple[int, int]:
+    """Given a graph of momentum values, compute the final score.
+    The score is determined by counting how many times the momentum increases (left) vs decreases (right).
+    If momentum change is 0, both fencers scored."""
+    if len(momentum_values) == 0:
+        return 0, 0
+    score_changes = np.diff(momentum_values)
+    left = np.count_nonzero(score_changes >= 0)
+    right = np.count_nonzero(score_changes <= 0)
+
+    return left, right
+
+
 if __name__ == "__main__":
     import sys
 
@@ -171,6 +185,6 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     match_context = MatchContext()
     widget = ViewStatsWidget(match_context)
-    match_context.set_file("matches_data/sabre_2.mp4")
+    match_context.set_file("matches_data/epee_3.mp4")
     widget.show()
     sys.exit(app.exec())
