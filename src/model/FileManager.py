@@ -43,6 +43,9 @@ class FileRole(StrEnum):
     RAW_PISTE_QUADS = RAW_PISTE_QUADS_CSV_NAME
     CROPPED_PISTE = CROPPED_PISTE_VIDEO_NAME
 
+    # OTHER
+    TAG_DB = "tags.db"
+
 
 class FileManager:
     """

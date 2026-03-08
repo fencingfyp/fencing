@@ -1,13 +1,25 @@
 import sys
 
-from PySide6.QtCore import Signal, Slot
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from src.gui.MatchContext import MatchContext
 from src.gui.navbar.app_navigator import AppNavigator
 from src.gui.navbar.navigation_controller import View
+from src.model.FileManager import FileRole
 
-from .ui_manage_match_widget import Ui_ManageMatchWidget
+from .tag_manager_widget import TagManagerWidget
+from .taggable_video_player_widget import TaggableVideoPlayerWidget
 
 
 def navigation(nav: AppNavigator, match_ctx: MatchContext):
@@ -25,26 +37,63 @@ class ManageMatchWidget(QWidget):
 
     def __init__(self, ctx: MatchContext, parent=None):
         super().__init__(parent)
-
         self.ctx = ctx
         self.ctx.match_changed.connect(self.handle_match_changed)
+        self._build_ui()
+        self.actionMapButton.setEnabled(False)  # Not implemented yet
 
-        self.ui = Ui_ManageMatchWidget()
-        self.ui.setupUi(self)
+    def _build_ui(self):
+        # Widgets
+        self.matchName = QLabel("matchName")
+        self.matchName.setFont(QFont("", 25))
 
-        self.ui.actionMapButton.setEnabled(False)  # Not implemented yet
+        self.videoPlayerWidget = TaggableVideoPlayerWidget()
+
+        self.momentumGraphButton = QPushButton("Momentum Graph")
+        self.heatMapButton = QPushButton("Heat Map")
+        self.actionMapButton = QPushButton("Action Map")
+
+        # Tag panel
+        self._tag_manager = TagManagerWidget()
+        self._tag_manager.setFixedWidth(220)
+        self.videoPlayerWidget.tag_requested.connect(self._tag_manager.add_tag)
+        self._tag_manager.time_selected.connect(
+            self.videoPlayerWidget.set_frame_position
+        )
+
+        # Button row
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(self.momentumGraphButton)
+        button_layout.addWidget(self.heatMapButton)
+        button_layout.addWidget(self.actionMapButton)
+        button_layout.addStretch()
+
+        # Left column
+        left_layout = QVBoxLayout()
+        left_layout.addWidget(self.matchName)
+        left_layout.addWidget(self.videoPlayerWidget)
+        left_layout.addLayout(button_layout)
+
+        # Root layout
+        root_layout = QHBoxLayout(self)
+        root_layout.addLayout(left_layout)
+        root_layout.addWidget(self._tag_manager)
+
+        # Connections
+        self.momentumGraphButton.clicked.connect(self.on_momentumGraphButton_clicked)
+        self.heatMapButton.clicked.connect(self.on_heatMapButton_clicked)
 
     # -------- context reactions --------
+
     @Slot()
-    def handle_match_changed(self):  # on_* triggers autowiring
+    def handle_match_changed(self):
         if not self.ctx.match_name:
             return
-
-        self.ui.matchName.setText(self.ctx.match_name)
-
+        self.matchName.setText(self.ctx.match_name)
         video_path = self.ctx.file_manager.get_original_video()
         print(f"Loading video preview from {video_path}")
-        self.ui.videoPlayerWidget.set_video_source(video_path)
+        self.videoPlayerWidget.set_video_source(video_path)
+        self._tag_manager.set_db_path(self.ctx.file_manager.get_path(FileRole.TAG_DB))
 
     @Slot()
     def on_momentumGraphButton_clicked(self):
@@ -60,6 +109,7 @@ if __name__ == "__main__":
     match_context = MatchContext()
 
     widget = ManageMatchWidget(match_context)
-    match_context.set_file("matches_data/epee_3/epee_3.mp4")
+    match_context.set_file("matches_data/epee_3.mp4")
     widget.show()
+    sys.exit(app.exec())
     sys.exit(app.exec())

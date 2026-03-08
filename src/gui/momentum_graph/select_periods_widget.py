@@ -34,12 +34,12 @@ class PeriodSelectorController:
     def mark_start(self):
         if self.current_start_ms is not None:
             return
-        self.current_start_ms = self.player.video_frame.get_current_time_msec()
+        self.current_start_ms = self.player.get_current_time_msec()
 
     def mark_end(self):
         if self.current_start_ms is None:
             return
-        end_ms = self.player.video_frame.get_current_time_msec()
+        end_ms = self.player.get_current_time_msec()
         if end_ms <= self.current_start_ms:
             return
         self.periods.append(Period(self.current_start_ms, end_ms))
@@ -219,7 +219,7 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
         match_context = MatchContext()
         widget = SelectPeriodsWidget(match_context)
-        match_context.set_file("matches_data/sabre_4.mp4")
+        match_context.set_file("matches_data/sabre_6.mp4")
         widget.show()
         sys.exit(app.exec())
 
