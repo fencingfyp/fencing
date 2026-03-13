@@ -92,6 +92,15 @@ class FencerSelectionController(QObject):
             )
         )
 
+        # actions.append(
+        #     TaskAction(
+        #         id="skip_1_minute",
+        #         label=f"Skip 1 Minute (M)",
+        #         shortcut=Qt.Key.Key_M,
+        #         callback=self._skip_1_minute,
+        #     )
+        # )
+
         self.action_panel.set_actions(actions)
 
     # ----------------------- input handlers -----------------------

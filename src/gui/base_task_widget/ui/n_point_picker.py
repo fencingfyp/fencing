@@ -144,4 +144,3 @@ class NPointPicker(QObject):
     def finish(self):
         self.deactivate()
         self.on_done(self.picked_points)
-        self.on_done(self.picked_points)

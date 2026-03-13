@@ -145,7 +145,6 @@ class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
     def get_n_points_async(self, frame, prompts: list[str], callback):
         if frame is None:
             return
-
         self.cancel_running_subtasks()
         self.set_fresh_frame(frame)
         self.point_picker = NPointPicker(
@@ -179,6 +178,4 @@ class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
     # ------------------------------------------------------------------
 
     def schedule(self, callback, delay_ms=0):
-        QTimer.singleShot(delay_ms, callback)
-        QTimer.singleShot(delay_ms, callback)
         QTimer.singleShot(delay_ms, callback)

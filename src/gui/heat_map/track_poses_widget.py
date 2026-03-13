@@ -79,9 +79,9 @@ BATCH_SIZE = 8
 
 BOTSORT_ARGS = SimpleNamespace(
     tracker_type="botsort",
-    track_high_thresh=0.25,
-    track_low_thresh=0.1,
-    new_track_thresh=0.25,
+    track_high_thresh=0.5,
+    track_low_thresh=0.5,
+    new_track_thresh=0.35,
     track_buffer=30,
     match_thresh=0.8,
     fuse_score=True,

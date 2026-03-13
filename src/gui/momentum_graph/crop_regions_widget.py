@@ -147,14 +147,14 @@ class CropRegionsWidget(BaseTaskWidget):
             self.processing_pipeline.cancel()
             self.processing_pipeline = None
         for output_config in self.label_configs[SCOREBOARD_LABEL].output_configs:
-            if os.path.exists(output_config.output_path):
-                os.remove(output_config.output_path)
+            if os.path.exists(output_config.path):
+                os.remove(output_config.path)
         for output_config in self.label_configs[SCORE_LIGHTS_LABEL].output_configs:
-            if os.path.exists(output_config.output_path):
-                os.remove(output_config.output_path)
+            if os.path.exists(output_config.path):
+                os.remove(output_config.path)
         for output_config in self.label_configs[PISTE_LABEL].output_configs:
-            if os.path.exists(output_config.output_path):
-                os.remove(output_config.output_path)
+            if os.path.exists(output_config.path):
+                os.remove(output_config.path)
         return super().cancel()
 
     @override

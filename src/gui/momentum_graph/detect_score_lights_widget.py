@@ -178,7 +178,7 @@ class TimeSelectionStage:
 
     def mark_frame(self):
         label = self.labels[self.index]
-        frame = self.player.video_frame.get_current_frame_number()
+        frame = self.player.get_current_frame_number()
         self.timestamps[label] = frame
         self.index += 1
 

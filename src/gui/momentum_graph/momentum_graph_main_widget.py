@@ -116,9 +116,12 @@ class MomentumGraphMainWidget(QWidget):
         if self.task_view.state(task_id) != TaskState.LOCKED:
             self._switch_to(self.tasks_to_widgets[task_id])
 
-    def showEvent(self, event):
-        self._switch_to(self.overview_widget)
-        return super().showEvent(event)
+    def hideEvent(self, event):
+        self._switch_to(
+            self.overview_widget
+        )  # this is needed here because switching on showEvent runs the showEvent of the
+        # widget being switched from, which might cause issues if the widget isn't supposed to be run.
+        return super().hideEvent(event)
 
 
 if __name__ == "__main__":
