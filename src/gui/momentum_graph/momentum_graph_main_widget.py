@@ -149,9 +149,3 @@ if __name__ == "__main__":
 
     # Print only top 10 functions
     stats.print_stats(10)
-    stats = pstats.Stats("profile.stats")
-    stats.strip_dirs()  # remove extraneous path info
-    stats.sort_stats("tottime")  # sort by total time
-
-    # Print only top 10 functions
-    stats.print_stats(10)

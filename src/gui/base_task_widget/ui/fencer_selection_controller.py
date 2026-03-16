@@ -92,14 +92,14 @@ class FencerSelectionController(QObject):
             )
         )
 
-        # actions.append(
-        #     TaskAction(
-        #         id="skip_1_minute",
-        #         label=f"Skip 1 Minute (M)",
-        #         shortcut=Qt.Key.Key_M,
-        #         callback=self._skip_1_minute,
-        #     )
-        # )
+        actions.append(
+            TaskAction(
+                id="skip_1_minute",
+                label=f"Skip 1 Minute (M)",
+                shortcut=Qt.Key.Key_M,
+                callback=self._skip_1_minute,
+            )
+        )
 
         self.action_panel.set_actions(actions)
 
@@ -137,7 +137,11 @@ class FencerSelectionController(QObject):
         self.stop()
 
     def _skip(self):
-        self.on_done(None)
+        self.on_done("skip")
+        self.stop()
+
+    def _skip_1_minute(self):
+        self.on_done("skip_1_minute")
         self.stop()
 
     # ----------------------- rendering -----------------------

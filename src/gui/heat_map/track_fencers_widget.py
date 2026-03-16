@@ -175,8 +175,10 @@ class FencerAssignmentController:
         )
 
     def _on_selection_done(self, left: bool, result):
-        if result is None:
+        if result == "skip":
             self._apply_skip(left)
+        elif result == "skip_1_minute":
+            self._apply_skip_1_minute(left)
         else:
             if left:
                 self.current_left_id = result
@@ -200,6 +202,13 @@ class FencerAssignmentController:
 
     def _apply_skip(self, left: bool):
         timer = self.internal_clock + NUM_FRAMES_TO_SKIP * self.ms_per_frame
+        if left:
+            self.left_timer = timer
+        else:
+            self.right_timer = timer
+
+    def _apply_skip_1_minute(self, left: bool):
+        timer = self.internal_clock + 60 * 1000 // self.ms_per_frame * self.ms_per_frame
         if left:
             self.left_timer = timer
         else:

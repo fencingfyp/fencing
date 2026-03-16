@@ -19,9 +19,9 @@ class TaskGraphLocalNav(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
-        self.overview_button = QPushButton("Overview")
+        # self.overview_button = QPushButton("Overview")
 
-        layout.addWidget(self.overview_button)
+        # layout.addWidget(self.overview_button)
         layout.addSpacing(12)
 
         # ---- task buttons ----
@@ -36,7 +36,7 @@ class TaskGraphLocalNav(QWidget):
         layout.addStretch()
 
         # ---- signals ----
-        self.overview_button.clicked.connect(self.overview_requested)
+        # self.overview_button.clicked.connect(self.overview_requested)
 
     # ---------- public API ----------
 

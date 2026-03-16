@@ -15,26 +15,26 @@ class TaskGraphWidget(QWidget):
         self.task_graph = task_graph
         self.task_graph.graph_changed.connect(self.update_states)
 
-        self.scene = TaskGraphScene()
-        self.view = QGraphicsView(self.scene)
-        self.view.setRenderHint(QPainter.Antialiasing)
-        self.view.setDragMode(QGraphicsView.NoDrag)
+        # self.scene = TaskGraphScene()
+        # self.view = QGraphicsView(self.scene)
+        # self.view.setRenderHint(QPainter.Antialiasing)
+        # self.view.setDragMode(QGraphicsView.NoDrag)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.view)
+        # layout = QVBoxLayout(self)
+        # layout.setContentsMargins(0, 0, 0, 0)
+        # layout.addWidget(self.view)
 
         # Build from public API only
         self.graph_layout = self.task_graph.snapshot()
         self.states = self.task_graph.get_task_states()
 
-        self.scene.render(
-            self.graph_layout,
-            self.states,
-            self.task_graph.get_index_map(),
-        )
+        # self.scene.render(
+        #     self.graph_layout,
+        #     self.states,
+        #     self.task_graph.get_index_map(),
+        # )
 
-        self._wire_clicks()
+        # self._wire_clicks()
 
     # ----------------------------
 
@@ -55,4 +55,4 @@ class TaskGraphWidget(QWidget):
     @Slot()
     def update_states(self):
         self.states = self.task_graph.get_task_states()
-        self.scene.update_nodes(self.states)
+        # self.scene.update_nodes(self.states)
