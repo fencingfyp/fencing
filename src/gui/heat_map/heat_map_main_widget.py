@@ -118,6 +118,11 @@ class HeatMapMainWidget(QWidget):
         self.match_name = self.match_context.file_manager.get_match_name()
 
     def _switch_to(self, widget: QWidget):
+        if self.stack.currentWidget() == widget:
+            # restart task if already on the widget
+            self.stack.setCurrentWidget(
+                self.overview_widget
+            )  # switch to overview widget to trigger showEvent of target widget
         self.stack.setCurrentWidget(widget)
 
     @Slot(str)
@@ -139,11 +144,6 @@ if __name__ == "__main__":
     from PySide6.QtWidgets import QApplication
 
     app = QApplication(sys.argv)
-    match_context = MatchContext()
-    widget = HeatMapMainWidget(match_context)
-    match_context.set_file("matches_data/sabre_2.mp4")
-    widget.show()
-    sys.exit(app.exec())
     match_context = MatchContext()
     widget = HeatMapMainWidget(match_context)
     match_context.set_file("matches_data/sabre_2.mp4")

@@ -300,6 +300,10 @@ def get_momentum_graph_pixmap(overlays):
             color=overlay.get("period_color", overlay.get("color", "tab:red")),
         )
 
+    # --- Enforce minimum y-axis range of -10 to +10 ---
+    current_min, current_max = ax.get_ylim()
+    ax.set_ylim(min(current_min, -10), max(current_max, 10))
+
     # --- Shared styling ---
     ax.axhline(0, linestyle="--", linewidth=1, color="gray", zorder=0)
 

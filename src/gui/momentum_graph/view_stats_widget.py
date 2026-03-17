@@ -7,7 +7,8 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QFontMetrics, QImage, QPainter, QPixmap
 
 from src.gui.base_task_widget.base_task_widget import BaseTaskWidget
 from src.gui.MatchContext import MatchContext
@@ -20,6 +21,7 @@ from .generate_momentum_graph_widget import get_momentum_graph_pixmap
 
 def dataframe_to_pixmap(df, dpi=100) -> QPixmap:
     fig, ax = plt.subplots()
+    fig.subplots_adjust(left=0, right=0.5, top=0.5, bottom=0)
     ax.axis("off")
     table = ax.table(
         cellText=df.values,
@@ -35,6 +37,52 @@ def dataframe_to_pixmap(df, dpi=100) -> QPixmap:
     pixmap = QPixmap()
     pixmap.loadFromData(buf.read(), "PNG")
     return pixmap
+
+
+def text_to_pixmap(text: str, fontsize=30) -> QPixmap:
+    font = QFont()
+    font.setPointSize(fontsize)
+    metrics = QFontMetrics(font)
+    rect = metrics.boundingRect(text)
+
+    pixmap = QPixmap(rect.width() + 20, rect.height() + 10)
+    pixmap.fill(Qt.GlobalColor.white)
+
+    painter = QPainter(pixmap)
+    painter.setFont(font)
+    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, text)
+    painter.end()
+
+    return pixmap
+
+
+def stack_pixmaps_vertically(pixmaps: list[QPixmap]) -> QPixmap:
+    """Stack a list of QPixmaps vertically into a single QPixmap."""
+    arrays = [pixmap_to_np(p) for p in pixmaps]
+    max_width = max(a.shape[1] for a in arrays)
+
+    padded = []
+    for a in arrays:
+        h, w = a.shape[:2]
+        if w < max_width:
+            pad_left = (max_width - w) // 2
+            pad_right = max_width - w - pad_left
+            a = np.pad(
+                a,
+                ((0, 0), (pad_left, pad_right), (0, 0)),
+                mode="constant",
+                constant_values=255,
+            )
+        padded.append(a)
+
+    combined = np.vstack(padded)
+    height, width, channels = combined.shape
+    bytes_per_line = channels * width
+    fmt = (
+        QImage.Format.Format_RGBA8888 if channels == 4 else QImage.Format.Format_RGB888
+    )
+    image = QImage(combined.tobytes(), width, height, bytes_per_line, fmt)
+    return QPixmap.fromImage(image)
 
 
 def load_momentum_df(path) -> pd.DataFrame:
@@ -92,7 +140,7 @@ class ViewStatsWidget(BaseTaskWidget):
 
     @override
     def setup(self):
-        self.ui.write("Press 'Run' to view the momentum graph statistics.")
+        # self.ui.write("Press 'Run' to view the momentum graph statistics.")
         self.run_task()
 
     @override
@@ -138,18 +186,25 @@ class ViewStatsWidget(BaseTaskWidget):
         graph_np = render_momentum_graph_with_periods(momentum_df, self.fps, periods)
         self.ui.set_fresh_frame(graph_np)
 
-        # Compute timing table
+        # Compute stats
         start_frame = int((periods[0]["start_ms"] / 1000) * self.fps)
         timing_df = compute_time_between_points(momentum_df, start_frame, self.fps)
         avg_time = compute_average_delta_time(timing_df)
         final_score = compute_final_score(momentum_df["momentum"].to_numpy())
-        self.ui.write(
-            f"Average time between momentum data points: {avg_time:.2f} seconds. Final score: {final_score[0]} - {final_score[1]}."
+
+        # Build stacked display: score label → table → avg label
+        score_pixmap = text_to_pixmap(
+            f"Final Score: {final_score[0]} - {final_score[1]}", fontsize=16
+        )
+        table_pixmap = dataframe_to_pixmap(timing_df)
+        avg_pixmap = text_to_pixmap(
+            f"Average time between points: {avg_time:.2f} sec", fontsize=14
         )
 
-        # Show table as image
-        pixmap = dataframe_to_pixmap(timing_df)
-        self.ui.show_additional("data", pixmap_to_np(pixmap))
+        combined_pixmap = stack_pixmaps_vertically(
+            [score_pixmap, table_pixmap, avg_pixmap]
+        )
+        self.ui.show_additional("data", pixmap_to_np(combined_pixmap))
 
         # Save to file
         csv_output_path = self.match_context.file_manager.get_path(
@@ -159,7 +214,7 @@ class ViewStatsWidget(BaseTaskWidget):
         image_output_path = self.match_context.file_manager.get_path(
             FileRole.MOMENTUM_GRAPH
         )
-        pixmap.save(str(image_output_path))
+        combined_pixmap.save(str(image_output_path))
         self.is_running = False
         self.run_completed.emit(TasksToIds.VIEW_STATS.value)
 
@@ -185,6 +240,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     match_context = MatchContext()
     widget = ViewStatsWidget(match_context)
-    match_context.set_file("matches_data/epee_3.mp4")
+    match_context.set_file("matches_data/bar.mp4")
     widget.show()
+    sys.exit(app.exec())
     sys.exit(app.exec())

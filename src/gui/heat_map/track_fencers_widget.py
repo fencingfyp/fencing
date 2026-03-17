@@ -95,8 +95,8 @@ class FencerAssignmentController:
         self.current_right_id = None
         self.left_ids = set()
         self.right_ids = set()
-        self.not_left_ids = set()
-        self.not_right_ids = set()
+        self.not_left_ids = set([-1])
+        self.not_right_ids = set([-1])
 
         self.left_timer = -1e9
         self.right_timer = -1e9

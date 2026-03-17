@@ -109,6 +109,11 @@ class MomentumGraphMainWidget(QWidget):
         self.match_name = self.match_context.file_manager.get_match_name()
 
     def _switch_to(self, widget: QWidget):
+        if self.stack.currentWidget() == widget:
+            # restart task if already on the widget
+            self.stack.setCurrentWidget(
+                self.overview_widget
+            )  # switch to overview widget to trigger showEvent of target widget
         self.stack.setCurrentWidget(widget)
 
     @Slot(str)

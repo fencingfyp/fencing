@@ -104,6 +104,14 @@ class CropRegionsWidget(BaseTaskWidget):
             ui=self.ui,
             labels=list(self.label_configs.keys()),
             on_finished=self._on_rois_defined,
+            instructions={
+                PISTE_LABEL: [
+                    "Select the end of the Left Fencer's en-garde line on their left side.",
+                    "Select the end of the Right Fencer's en-garde line on their right side.",
+                    "Select the end of the Right Fencer's en-garde line on their left side.",
+                    "Select the end of the Left Fencer's en-garde line on their right side.",
+                ]
+            },
         )
         self.roi_pipeline.start()
 

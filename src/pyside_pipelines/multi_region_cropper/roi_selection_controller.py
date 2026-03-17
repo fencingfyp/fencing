@@ -20,10 +20,12 @@ class ROISelectionPipeline:
         ui: PysideUi,
         labels: list[str],
         on_finished: Callable[[list[DefinedRegion]], None] | None = None,
+        instructions: dict[str, list[str]] | None = None,
     ):
         self.first_frame = first_frame.copy()
         self.ui = ui
         self.labels = labels
+        self.instructions = instructions or {}
         self.region_index = 0
         self.defined_regions: list[DefinedRegion] = []
         self._on_finished = on_finished
@@ -39,7 +41,11 @@ class ROISelectionPipeline:
         label = self.labels[self.region_index]
         self.ui.get_n_points_async(
             self.first_frame,
-            generate_select_quadrilateral_instructions(label),
+            (
+                generate_select_quadrilateral_instructions(label)
+                if label not in self.instructions
+                else self.instructions[label]
+            ),
             callback=self._on_corners_selected,
         )
 
