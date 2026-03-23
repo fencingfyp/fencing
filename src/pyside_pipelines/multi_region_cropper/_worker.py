@@ -130,14 +130,25 @@ def run_worker_inner(
     cap = cv2.VideoCapture(video_path)
     actual_start = max(0, start_frame - warmup_frames)
     cap.set(cv2.CAP_PROP_POS_FRAMES, actual_start)
+    frame_idx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
 
-    frame_idx = actual_start
+    log_path = os.path.join(chunk_dir, f"worker_{worker_idx}_diag.txt")
+
+    def wlog(msg):
+        with open(log_path, "a") as f:
+            f.write(msg + "\n")
+
+    frames_written = 0
+
     while frame_idx < end_frame:
         if cancel_flag.value:
             break
 
         ret, frame = cap.read()
         if not ret:
+            wlog(
+                f"cap.read() False at frame_idx={frame_idx}, end_frame={end_frame}, written={frames_written}"
+            )
             break
 
         quads = tracker.update_all(frame)
@@ -149,8 +160,13 @@ def run_worker_inner(
                     for output in outputs:
                         output.process(frame, quad.numpy(), frame_idx)
             progress_queue.put(1)
+            frames_written += 1
 
         frame_idx += 1
+
+    wlog(
+        f"loop done: frame_idx={frame_idx}, end_frame={end_frame}, written={frames_written}"
+    )
 
     cap.release()
     for outputs in region_outputs.values():

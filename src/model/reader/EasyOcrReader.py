@@ -10,20 +10,6 @@ Responsibilities:
     recognize() with pre-known bounding boxes, skipping CRAFT detection entirely.
     Both normal and seven-segment modes batch all crops into a single GPU call.
 
-Fallback strategy
------------------
-ch_sim is the primary model. Any crop that returns confidence == 0.0 is
-collected and passed to a second english-model pass in one batched GPU call.
-This handles ch_sim's known failure on seven-segment '3' without affecting
-throughput on well-recognised digits.
-
-1/7 disambiguation
-------------------
-Both models confidently misread seven-segment '7' as '1' across some videos
-because the vertical stroke dominates and neither model learned the blocky
-seven-segment top bar as a distinguishing feature. After inference, any crop
-read as '1' is checked for a significant horizontal dark run in the top band
-of the image. If one is found, the result is corrected to '7'.
 """
 
 from __future__ import annotations
@@ -92,6 +78,18 @@ class EasyOcrScorePreprocessor:
         """
         inner = gray[EDGE_MARGIN:-EDGE_MARGIN, EDGE_MARGIN:-EDGE_MARGIN]
         hist = cv2.calcHist([inner], [0], None, [256], [0, 256]).flatten()
+        # display the histogram for debugging
+        # import matplotlib.pyplot as plt
+
+        # plt.figure(figsize=(10, 4))
+        # plt.plot(hist)
+        # plt.title("Pixel Intensity Histogram")
+        # plt.xlabel("Pixel Intensity")
+        # plt.ylabel("Frequency")
+        # plt.xlim(0, 255)
+        # plt.grid()
+        # plt.show()
+
         hist_smooth = cv2.GaussianBlur(
             hist[None, :], (1, HIST_SMOOTH_KERNEL), 0
         ).flatten()

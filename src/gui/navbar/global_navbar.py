@@ -2,6 +2,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QFrame, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
+from src.gui.navbar.app_navigator import AppNavigator
 from src.gui.navbar.navigation_controller import NavNode
 
 
@@ -37,7 +38,7 @@ class GlobalNavbar(QWidget):
 
     # ---------------- navigation ----------------
 
-    def set_node(self, node: NavNode, controller):
+    def set_node(self, node: NavNode, controller: AppNavigator):
         self._clear_global()
         self._detach_local_navbar()
 

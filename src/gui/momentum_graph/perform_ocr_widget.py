@@ -172,7 +172,10 @@ class OcrController(QObject):
 
         self.ui.get_n_points_async(
             frame,
-            generate_select_quadrilateral_instructions("left fencer score display"),
+            generate_select_quadrilateral_instructions(
+                "left fencer score display",
+                additional_instruction="Remember to include the 2-digit region and a small margin around it.",
+            ),
             lambda pts: self._on_left_score_positions(frame, pts),
         )
 
@@ -180,7 +183,10 @@ class OcrController(QObject):
         self.left_score_positions = regularise_rectangle(pts)
         self.ui.get_n_points_async(
             frame,
-            generate_select_quadrilateral_instructions("right fencer score display"),
+            generate_select_quadrilateral_instructions(
+                "right fencer score display",
+                additional_instruction="Remember to include the 2-digit region and a small margin around it.",
+            ),
             lambda pts2: self._on_right_score_positions(frame, pts2),
         )
 
@@ -347,22 +353,28 @@ class OcrController(QObject):
         if not os.path.exists(cropped_path):
             raise IOError(f"Cropped video not found at {cropped_path}")
 
-        cap = cv2.VideoCapture(cropped_path)
-        if not cap.isOpened():
-            raise IOError(f"Cannot open cropped video {cropped_path}")
-        cropped_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        cap.release()
-
-        cap = cv2.VideoCapture(original_path)
-        if not cap.isOpened():
-            raise IOError(f"Cannot open original video {original_path}")
-        original_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        cap.release()
+        original_frames = self._count_decodable_frames(original_path)
+        cropped_frames = self._count_decodable_frames(cropped_path)
 
         if cropped_frames != original_frames:
             raise ValueError(
-                f"Cropped video frame count ({cropped_frames}) does not match original video frame count ({original_frames})."
+                f"Cropped video frame count ({cropped_frames}) does not match "
+                f"original video frame count ({original_frames})."
             )
+
+    @staticmethod
+    def _count_decodable_frames(path: str) -> int:
+        cap = cv2.VideoCapture(path)
+        if not cap.isOpened():
+            raise IOError(f"Cannot open video {path}")
+
+        reported = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, reported - 10))
+        count = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+        while cap.read()[0]:
+            count += 1
+        cap.release()
+        return count
 
 
 if __name__ == "__main__":

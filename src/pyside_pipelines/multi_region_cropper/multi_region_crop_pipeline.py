@@ -1,4 +1,10 @@
 import glob
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 import multiprocessing as mp
 import os
 import shutil
@@ -21,6 +27,8 @@ from src.pyside_pipelines.multi_region_cropper._worker import (
 )
 from src.pyside_pipelines.multi_region_cropper.label_config import LabelConfig
 from src.pyside_pipelines.multi_region_cropper.region_state import RegionState
+
+log = logging.getLogger(__name__)
 
 
 class MultiRegionProcessingPipeline:
@@ -54,7 +62,8 @@ class MultiRegionProcessingPipeline:
         if not ret or self._first_frame is None:
             raise ValueError("Failed to read first frame from video.")
 
-        # Merge region geometry + tracking params into serialisable dicts
+        self._verify_frame_count(video_path)
+
         self._region_configs: list[dict] = [
             {
                 **r.to_dict(),
@@ -63,7 +72,6 @@ class MultiRegionProcessingPipeline:
             for r in defined_regions
         ]
 
-        # Flatten all output configs across all labels with label attached
         self._output_configs: list[dict] = [
             cfg.to_dict()
             for r in defined_regions
@@ -78,8 +86,32 @@ class MultiRegionProcessingPipeline:
         self._test_tracker = tracker
         self._run_sequentially = sequential
 
+    def _verify_frame_count(self, video_path: str) -> None:
+        cap = cv2.VideoCapture(video_path)
+
+        # seek to near the end and read forward to find true EOF
+        reported = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.set(
+            cv2.CAP_PROP_POS_FRAMES,
+            reported
+            - 10,  # 10 is arbitrary buffer to ensure we can read the last few frames
+        )
+
+        real_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+        while cap.read()[0]:
+            real_count += 1
+        cap.release()
+
+        if real_count != reported:
+            log.warning(
+                "FRAME COUNT MISMATCH: reported=%d actual=%d", reported, real_count
+            )
+
+        self.total_frames = real_count  # always use seek-verified count
+
     def start(self):
         self.ui.show_loading("Starting processing...")
+
         if self._test_tracker or self._run_sequentially:
             self.tracker = self._test_tracker or build_tracker_from_configs(
                 self._region_configs, self.video_path
@@ -87,9 +119,10 @@ class MultiRegionProcessingPipeline:
             self._run_sequential()
             return
 
-        for i, (start, end) in enumerate(
-            get_frame_ranges(self.total_frames, self.n_workers)
-        ):
+        ranges = list(get_frame_ranges(self.total_frames, self.n_workers))
+        self._log_ranges(ranges)
+
+        for i, (start, end) in enumerate(ranges):
             p = mp.Process(
                 target=run_worker,
                 args=(
@@ -113,6 +146,30 @@ class MultiRegionProcessingPipeline:
 
         self._poll_progress()
 
+    @staticmethod
+    def _log_ranges(ranges: list[tuple[int, int]]) -> None:
+        total = 0
+        log.debug("Worker ranges:")
+        for i, (s, e) in enumerate(ranges):
+            n = e - s
+            log.debug("  worker %d: frames [%d, %d)  count=%d", i, s, e, n)
+            total += n
+        # This tells you immediately if ranges are disjoint and exhaustive
+        log.debug("  Total frames across all ranges: %d", total)
+        # Check for gaps/overlaps
+        for i in range(1, len(ranges)):
+            prev_end = ranges[i - 1][1]
+            cur_start = ranges[i][0]
+            if cur_start != prev_end:
+                log.warning(
+                    "GAP/OVERLAP between worker %d (end=%d) and worker %d (start=%d): delta=%d",
+                    i - 1,
+                    prev_end,
+                    i,
+                    cur_start,
+                    cur_start - prev_end,
+                )
+
     def _poll_progress(self):
         if self.cancelled:
             return
@@ -135,13 +192,20 @@ class MultiRegionProcessingPipeline:
                 f"Processing... ({self._frames_completed}/{self.total_frames} frames)",
             )
 
-        if all(not p.is_alive() for p in self._processes):
+        all_dead = all(not p.is_alive() for p in self._processes)
+
+        if all_dead:
+            # ── DIAGNOSTIC: log exit codes before touching output files ───────
+            for i, p in enumerate(self._processes):
+                log.debug("Worker %d exitcode=%s", i, p.exitcode)
+                if p.exitcode not in (0, None):
+                    log.warning("Worker %d exited with non-zero code %s", i, p.exitcode)
             self._concatenate_and_finish()
         else:
             QTimer.singleShot(100, self._poll_progress)
 
     def _validate_chunks(self):
-        ranges = get_frame_ranges(self.total_frames, self.n_workers)
+        ranges = list(get_frame_ranges(self.total_frames, self.n_workers))
 
         for r in self.defined_regions:
             for cfg in self.label_configs[r.label].output_configs:
@@ -156,7 +220,7 @@ class MultiRegionProcessingPipeline:
                 for i, (start, end) in enumerate(ranges):
                     chunk_path = cfg.chunk_path(self.chunk_dir, i)
                     if chunk_path is None or not chunk_path.exists():
-                        print(f"  MISSING chunk {i} for {cfg.label}")
+                        log.warning("MISSING chunk %d for %s", i, cfg.label)
                         continue
 
                     cap = cv2.VideoCapture(str(chunk_path))
@@ -167,13 +231,24 @@ class MultiRegionProcessingPipeline:
                     status = (
                         "OK"
                         if n_frames == expected
-                        else f"MISMATCH expected {expected}"
+                        else f"MISMATCH — expected {expected}, got {n_frames} (delta {n_frames - expected})"
                     )
-                    print(f"  chunk {i} [{start}-{end}]: {n_frames} frames — {status}")
+                    log.debug(
+                        "chunk %d [%d-%d]: %d frames — %s",
+                        i,
+                        start,
+                        end,
+                        n_frames,
+                        status,
+                    )
                     total_written += n_frames
 
-                print(
-                    f"  {cfg.label}: {total_written}/{self.total_frames} frames total"
+                log.debug(
+                    "%s: %d/%d frames total (%s)",
+                    cfg.label,
+                    total_written,
+                    self.total_frames,
+                    "OK" if total_written == self.total_frames else "MISMATCH",
                 )
 
     def _concatenate_and_finish(self):
@@ -181,15 +256,19 @@ class MultiRegionProcessingPipeline:
             self._cleanup()
             return
 
-        # Join all workers cleanly before touching their output files
         for p in self._processes:
             p.join()
+
+        import glob
+
+        for diag_file in glob.glob(os.path.join(self.chunk_dir, "worker_*_diag.txt")):
+            with open(diag_file) as f:
+                print(f.read())
 
         self._validate_chunks()
 
         for r in self.defined_regions:
             for cfg in self.label_configs[r.label].output_configs:
-                # Use chunk_path(worker_idx=0) to get the correct extension for this output type
                 sample_chunk = cfg.chunk_path(self.chunk_dir, 0)
                 if sample_chunk is None:
                     continue
@@ -281,4 +360,5 @@ class MultiRegionProcessingPipeline:
         self._cleanup()
         self.ui.hide_loading()
         if self.on_finished:
+            self.on_finished()
             self.on_finished()

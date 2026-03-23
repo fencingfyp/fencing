@@ -14,14 +14,17 @@ def generate_select_line_instructions(target_name: str, confirm_key="w") -> list
 
 
 def generate_select_quadrilateral_instructions(
-    target_name: str, confirm_key="w"
+    target_name: str, confirm_key="w", additional_instruction=None
 ) -> list[str]:
-    return [
+    lst = [
         f"Select {target_name} top left corner, press '{confirm_key}' to confirm",
         f"Select {target_name} top right corner, press '{confirm_key}' to confirm",
         f"Select {target_name} bottom right corner, press '{confirm_key}' to confirm",
         f"Select {target_name} bottom left corner, press '{confirm_key}' to confirm",
     ]
+    if additional_instruction:
+        lst = [instruction + f" {additional_instruction}" for instruction in lst]
+    return lst
 
 
 PISTE_INSTRUCTIONS = generate_select_quadrilateral_instructions("piste")

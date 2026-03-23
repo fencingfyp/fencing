@@ -44,6 +44,8 @@ class TrackFencersWidget(BaseTaskWidget):
         )
 
         # Create controller
+        if self.controller:
+            self.controller.cancel()
         self.controller = FencerAssignmentController(
             video_path=input_video_path,
             input_csv_path=input_csv_path,
