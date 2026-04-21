@@ -6,6 +6,7 @@ from typing import override
 
 import cv2
 import numpy as np
+import torch
 from PySide6.QtCore import QThread, Signal
 from ultralytics import YOLO
 from ultralytics.trackers.bot_sort import BOTSORT
@@ -75,7 +76,7 @@ class TrackPosesWidget(BaseTaskWidget):
             self.controller.cancel()
 
 
-BATCH_SIZE = 8
+BATCH_SIZE = 4
 
 BOTSORT_ARGS = SimpleNamespace(
     tracker_type="botsort",
@@ -163,10 +164,12 @@ class _RollerWorker(QThread):
 
         frame_idx = 0
         try:
+            yolo_time = 0
+            botsort_time = 0
             while not self._cancelled:
-                # Read a batch of frames
                 frames = []
                 frame_indices = []
+                t0 = time.perf_counter()
                 for _ in range(BATCH_SIZE):
                     ret, frame = cap.read()
                     if not ret:
@@ -178,7 +181,6 @@ class _RollerWorker(QThread):
                 if not frames:
                     break
 
-                # Batch inference
                 batch_results = model.predict(
                     frames,
                     verbose=False,
@@ -187,14 +189,18 @@ class _RollerWorker(QThread):
                     batch=BATCH_SIZE,
                 )
 
-                # Feed each frame into BOTSORT sequentially
-                for result, frame, fidx in zip(batch_results, frames, frame_indices):
+                for result in batch_results:
                     result.boxes = (
                         result.boxes.cpu() if result.boxes is not None else None
                     )
                     result.keypoints = (
                         result.keypoints.cpu() if result.keypoints is not None else None
                     )
+                torch.mps.synchronize()
+                yolo_time += time.perf_counter() - t0
+
+                t1 = time.perf_counter()
+                for result, frame, fidx in zip(batch_results, frames, frame_indices):
                     tracks = tracker.update(result.boxes, frame)
 
                     track_ids = {}
@@ -209,6 +215,9 @@ class _RollerWorker(QThread):
 
                 pct = frame_idx / total_frames if total_frames > 0 else 0.0
                 self.progress.emit(pct)
+                botsort_time += time.perf_counter() - t1
+            print(f"YOLO total: {yolo_time:.2f}s")
+            print(f"BOTSORT total: {botsort_time:.2f}s")
 
         finally:
             cap.release()
@@ -304,7 +313,7 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
         match_context = MatchContext()
         widget = TrackPosesWidget(match_context)
-        match_context.set_file("matches_data/sabre_7.mp4")
+        match_context.set_file("matches_data/sabre_6.mp4")
         widget.show()
         sys.exit(app.exec())
 

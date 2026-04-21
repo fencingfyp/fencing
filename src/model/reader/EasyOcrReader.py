@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import cv2
 import easyocr
+import matplotlib.pyplot as plt
 import numpy as np
 
 TARGET_HEIGHT = 64  # Canonical height all crops are scaled to
@@ -66,6 +67,40 @@ class EasyOcrScorePreprocessor:
         new_w = max(int(w * TARGET_HEIGHT / h), 1)
         return cv2.resize(gray, (new_w, TARGET_HEIGHT), interpolation=cv2.INTER_CUBIC)
 
+    def visualize_threshold(
+        hist: np.ndarray, otsu_thresh: int, bright_peak: int, final_thresh: int
+    ):
+        """
+        Visualize the histogram with Otsu's threshold, bright peak, and final threshold.
+        """
+        plt.figure(figsize=(10, 4))
+        plt.plot(hist, label="Histogram")
+        plt.axvline(
+            otsu_thresh,
+            color="green",
+            linestyle="--",
+            label=f"Otsu Threshold: {otsu_thresh}",
+        )
+        plt.axvline(
+            bright_peak,
+            color="orange",
+            linestyle="--",
+            label=f"Bright Peak: {bright_peak}",
+        )
+        plt.axvline(
+            final_thresh,
+            color="red",
+            linestyle="--",
+            label=f"Final Threshold: {final_thresh}",
+        )
+        plt.title("Pixel Intensity Histogram with Thresholds")
+        plt.xlabel("Pixel Intensity")
+        plt.ylabel("Frequency")
+        plt.xlim(0, 255)
+        plt.grid(True)
+        plt.legend()
+        plt.show()
+
     def _threshold(self, gray: np.ndarray) -> np.ndarray:
         """
         Threshold using the bright peak of the histogram.
@@ -78,17 +113,6 @@ class EasyOcrScorePreprocessor:
         """
         inner = gray[EDGE_MARGIN:-EDGE_MARGIN, EDGE_MARGIN:-EDGE_MARGIN]
         hist = cv2.calcHist([inner], [0], None, [256], [0, 256]).flatten()
-        # display the histogram for debugging
-        # import matplotlib.pyplot as plt
-
-        # plt.figure(figsize=(10, 4))
-        # plt.plot(hist)
-        # plt.title("Pixel Intensity Histogram")
-        # plt.xlabel("Pixel Intensity")
-        # plt.ylabel("Frequency")
-        # plt.xlim(0, 255)
-        # plt.grid()
-        # plt.show()
 
         hist_smooth = cv2.GaussianBlur(
             hist[None, :], (1, HIST_SMOOTH_KERNEL), 0
@@ -103,7 +127,11 @@ class EasyOcrScorePreprocessor:
         bright_peak = int(np.argmax(upper)) + otsu_thresh
 
         threshold = int(otsu_thresh + (bright_peak - otsu_thresh) * THRESHOLD_RATIO)
+        # threshold = int(otsu_thresh)
         _, binary = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
+        # EasyOcrScorePreprocessor.visualize_threshold(
+        #     hist_smooth, otsu_thresh, bright_peak, threshold
+        # )
         return binary
 
     def _normalise_polarity(self, binary: np.ndarray) -> np.ndarray:

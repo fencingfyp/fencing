@@ -292,9 +292,6 @@ def main() -> None:
     try:
         while True:
             ret, frame = cap.read()
-            if frame_id < 0:
-                frame_id += 1
-                continue
             if not ret:
                 break
 

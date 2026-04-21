@@ -6,9 +6,7 @@ import numpy as np
 
 from src.util.utils import (
     PISTE_INSTRUCTIONS,
-    PISTE_LENGTH_M,
     generate_select_quadrilateral_instructions,
-    project_point_on_line,
 )
 
 from .Quadrilateral import Quadrilateral

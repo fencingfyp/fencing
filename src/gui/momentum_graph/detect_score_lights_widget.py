@@ -192,7 +192,7 @@ class TimeSelectionStage:
         self._update_actions()
 
 
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 
 
 class ProcessingStage:

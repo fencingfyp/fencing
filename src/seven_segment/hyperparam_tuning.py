@@ -7,7 +7,7 @@ from torch import nn
 from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 
-from scripts.util.build_lmdb import LMDBScoreDataset
+from src.seven_segment.build_lmdb import LMDBScoreDataset
 from src.util.gpu import get_device
 
 from .data_augmentor import AugmentationConfig

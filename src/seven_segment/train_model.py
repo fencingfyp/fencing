@@ -26,11 +26,12 @@ from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from torchvision import models, transforms
 
-from scripts.util.build_lmdb import LMDBScoreDataset
 from src.model.reader.SevenSegmentScorePreprocessor import (
     PreprocessorConfig,
     SevenSegmentScorePreprocessor,
 )
+from src.seven_segment.build_lmdb import LMDBScoreDataset
+from src.util.gpu import get_device
 
 from .data_augmentor import AugmentationConfig, SevenSegmentAugmenter
 
@@ -344,7 +345,7 @@ def train(cfg: TrainingConfig) -> None:
     logger = setup_logging(cfg.output_dir)
     logger.info(f"Config: {cfg}")
 
-    device = torch.device("mps" if torch.mps.is_available() else "cpu")
+    device = get_device()
     logger.info(f"Device: {device}")
 
     # Datasets
