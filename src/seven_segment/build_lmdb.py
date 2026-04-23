@@ -16,11 +16,34 @@ import lmdb
 METADATA_KEY = b"__metadata__"
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
-# Estimate conservatively: max raw image size * number of images * headroom factor.
-# LMDB requires the map size to be declared upfront; it does not auto-grow on most
-# platforms. 50GB is a safe ceiling for this dataset scale — unused space is not
-# actually allocated on disk (sparse file), so this costs nothing on Linux/macOS.
-DEFAULT_MAP_SIZE_GB = 50
+
+# Conservative multiplier for metadata + pickle overhead
+DEFAULT_HEADROOM_FACTOR = 1.3
+
+# Fallback cap (only used if estimation fails)
+DEFAULT_MAX_MAP_SIZE_GB = 50
+
+
+def estimate_map_size_bytes(dataset_dirs: list[str], headroom: float) -> int:
+    """
+    Estimate LMDB map size based on actual file sizes on disk.
+    This is OS-agnostic and avoids relying on sparse file behaviour.
+    """
+    total_bytes = 0
+
+    for img_path, _ in iter_samples(dataset_dirs):
+        try:
+            total_bytes += os.path.getsize(img_path)
+        except OSError:
+            continue
+
+    # Apply headroom for:
+    # - pickle overhead
+    # - LMDB page structure
+    # - any future additions
+    estimated = int(total_bytes * headroom)
+
+    return estimated
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +112,23 @@ def build_lmdb(
     total = count_samples(dataset_dirs)
     print(f"Found {total} images across {len(dataset_dirs)} director(ies).")
 
-    map_size = map_size_gb * (1024**3)
+    if map_size_gb is not None:
+        map_size = map_size_gb * (1024**3)
+        print(f"Using user-specified map size: {map_size_gb} GB")
+    else:
+        print("Estimating map size from dataset...")
+        map_size = estimate_map_size_bytes(dataset_dirs, DEFAULT_HEADROOM_FACTOR)
+
+        # Optional safety cap
+        max_bytes = DEFAULT_MAX_MAP_SIZE_GB * (1024**3)
+        if map_size > max_bytes:
+            print(
+                f"Estimated size exceeds {DEFAULT_MAX_MAP_SIZE_GB} GB cap. "
+                "Clamping to avoid OS-specific allocation issues."
+            )
+            map_size = max_bytes
+
+        print(f"Estimated map size: {map_size / (1024**3):.2f} GB")
     class_counts = defaultdict(int)
 
     env = lmdb.open(output_path, map_size=map_size)
@@ -221,9 +260,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--map-size-gb",
         type=int,
-        default=DEFAULT_MAP_SIZE_GB,
-        help=f"LMDB map size in GB (default: {DEFAULT_MAP_SIZE_GB}). "
-        "Unused space is not allocated on disk on Linux/macOS.",
+        default=None,
+        help=(
+            "LMDB map size in GB. If not provided, it will be estimated from dataset size. "
+            "Explicitly setting this is recommended on systems with strict disk allocation (e.g. Windows)."
+        ),
     )
     return parser.parse_args()
 

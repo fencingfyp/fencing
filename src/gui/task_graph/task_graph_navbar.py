@@ -2,7 +2,40 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QPushButton, QVBoxLayout, QWidget
 
 from .task_graph import TaskState
-from .task_graph_scene import TASK_STATE_CSS
+
+TASK_STATE_CSS = {
+    "DONE": """
+        QPushButton {
+            background-color: #2ecc71;
+            color: black;
+            border: none;
+            text-align: left;
+            padding: 6px;
+        }
+        QPushButton:hover { background-color: #27ae60; }
+        QPushButton:pressed { background-color: #1e8449; }
+    """,
+    "READY": """
+        QPushButton {
+            background-color: #f1c40f;
+            color: black;
+            border: none;
+            text-align: left;
+            padding: 6px;
+        }
+        QPushButton:hover { background-color: #d4ac0d; }
+        QPushButton:pressed { background-color: #b7950b; }
+    """,
+    "LOCKED": """
+        QPushButton {
+            background-color: #7f8c8d;
+            color: black;
+            border: none;
+            text-align: left;
+            padding: 6px;
+        }
+    """,
+}
 
 
 class TaskGraphLocalNav(QWidget):

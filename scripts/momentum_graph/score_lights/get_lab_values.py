@@ -15,7 +15,11 @@ from scripts.momentum_graph.util.file_names import (
 )
 from src.model.PatchLightDetector import PatchLightDetector
 from src.util.file_names import CROPPED_SCORE_LIGHTS_VIDEO_NAME, ORIGINAL_VIDEO_NAME
-from src.util.io import setup_input_video_io, setup_output_file, setup_output_video_io
+from src.util.io import (
+    setup_input_video_io__dep,
+    setup_output_file,
+    setup_output_video_io,
+)
 
 MIN_WINDOW_HEIGHT = 780
 
@@ -59,7 +63,7 @@ def main():
 
     validate_input_video(original_video_path, input_video_path)
 
-    cap, fps, original_width, original_height, total_length = setup_input_video_io(
+    cap, fps, original_width, original_height, total_length = setup_input_video_io__dep(
         input_video_path
     )
     FULL_DELAY = int(1000 / fps)
@@ -163,6 +167,10 @@ def main():
 
         cap.release()
         ui.close_additional_windows()
+
+
+if __name__ == "__main__":
+    main()
 
 
 if __name__ == "__main__":

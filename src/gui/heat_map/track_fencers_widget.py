@@ -14,7 +14,7 @@ from src.gui.MatchContext import MatchContext
 from src.gui.task_graph.task_graph import TasksToIds
 from src.model import FrameInfoManager
 from src.model.FileManager import FileRole
-from src.util.io import setup_input_video_io
+from src.util.io import setup_input_video_io__dep
 from src.util.lru_frame_reader import LruFrameReader
 
 
@@ -75,7 +75,7 @@ class FencerAssignmentController:
         self.input_csv_path = input_csv_path
         self.output_csv_path = output_csv_path
 
-        cap, fps, _, _, _ = setup_input_video_io(video_path)
+        cap, fps, _, _, _ = setup_input_video_io__dep(video_path)
         self.cap = cap
         self.frame_reader = LruFrameReader(
             cap, max_cache_bytes=1 * 1024 * 1024 * 1024

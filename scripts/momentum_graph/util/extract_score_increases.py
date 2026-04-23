@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from scripts.momentum_graph.process_scores import densify_frames, process_scores
-from src.util.io import setup_input_video_io
+from src.util.io import setup_input_video_io__dep
 
 
 def _retroactive_flatten(scores: list[int]) -> list[int]:
@@ -117,7 +117,7 @@ def main():
     # Load both CSVs
     pred = pd.read_csv(f"{folder}/raw_scores.csv")
 
-    cap, fps, _, _, total_length = setup_input_video_io(
+    cap, fps, _, _, total_length = setup_input_video_io__dep(
         f"{folder}/cropped_scoreboard.mp4"
     )
     cap.release()

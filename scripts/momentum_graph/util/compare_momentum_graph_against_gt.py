@@ -29,7 +29,7 @@ from scripts.momentum_graph.util.file_names import (
     PROCESSED_SCORES_CSV as SCORES_CSV_NAME,
 )
 from src.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME
-from src.util.io import setup_input_video_io
+from src.util.io import setup_input_video_io__dep
 
 MOMENTUM_GT_CSV_NAME = "momentum_gt.csv"
 
@@ -66,7 +66,7 @@ def main():
     gt_momentum_path = path.join(folder, MOMENTUM_GT_CSV_NAME)
 
     # load video for fps
-    cap, fps, _, _, n_frames = setup_input_video_io(video_path)
+    cap, fps, _, _, n_frames = setup_input_video_io__dep(video_path)
     cap.release()
 
     # Load processed scores

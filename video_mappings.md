@@ -19,19 +19,3 @@ FE W S Individual Plovdiv U23 ZC 2016 wf t16 08 yellow CRISCIO ITA vs OBVINTSEVA
 | sabre_4 | 2023 1431 T64 10 F S Individual Tunis TUN GP 6 FUSETTI ITA vs CHAMBERLAIN USA | https://www.youtube.com/watch?v=5fVNRwCvoys |
 
 
-## Useful commands
-
-Downloading a video from YouTube
-```
-yt-dlp -f "bv*" "video_url"
-```
-
-Cropping
-```
-ffmpeg -ss 00:12:00 -to 00:18:30 -i input.mp4 -c copy bout.mp4
-```
-
-Converting from H.264 to MPEG-4 codec
-```
-ffmpeg -i input.mp4 -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 128k output.mp4
-```

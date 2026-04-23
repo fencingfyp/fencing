@@ -13,7 +13,11 @@ from src.util.file_names import (
     DETECT_LIGHTS_OUTPUT_CSV_NAME,
     ORIGINAL_VIDEO_NAME,
 )
-from src.util.io import setup_input_video_io, setup_output_file, setup_output_video_io
+from src.util.io import (
+    setup_input_video_io__dep,
+    setup_output_file,
+    setup_output_video_io,
+)
 
 MIN_WINDOW_HEIGHT = 780
 
@@ -57,7 +61,7 @@ def main():
 
     validate_input_video(original_video_path, input_video_path)
 
-    cap, fps, original_width, original_height, _ = setup_input_video_io(
+    cap, fps, original_width, original_height, _ = setup_input_video_io__dep(
         input_video_path
     )
     FULL_DELAY = int(1000 / fps)

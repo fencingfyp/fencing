@@ -10,9 +10,8 @@ import cv2
 import numpy as np
 
 from src.model import OpenCvUi, UiCodes
-from src.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME, ORIGINAL_VIDEO_NAME
-from src.util.gpu import get_device
-from src.util.io import setup_input_video_io, setup_output_file
+from src.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME
+from src.util.io import setup_input_video_io__dep
 from src.util.utils import (
     convert_from_box_to_rect,
     convert_from_rect_to_box,
@@ -143,7 +142,7 @@ def select_roi(ui: OpenCvUi, frame: np.ndarray, label: str) -> list[tuple[int, i
 
 def setup_output_dir(output_dir: str) -> None:
     """
-    Create the ImageFolder-compatible class directories (0–15).
+    Create the ImageFolder-compatible class directories (0-15).
     Raises if a metadata file already exists — re-running would produce
     duplicate images in the class folders and corrupt class balance.
     """
@@ -231,13 +230,46 @@ def validate_videos(original_path: str, cropped_path: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def resolve_video_paths(original_video_path: str) -> tuple[str, str, str]:
+    """
+    Given /path/to/video.mp4, resolve:
+      - original_path
+      - cropped_path: /path/to/video.data/<CROPPED_SCOREBOARD_VIDEO_NAME>
+      - video_name: video (stem)
+    """
+    if not original_video_path.lower().endswith((".mp4", ".avi", ".mov")):
+        print("Warning: input does not look like a video file.")
+    if not os.path.exists(original_video_path):
+        raise IOError(f"Original video not found: {original_video_path}")
+
+    video_dir = os.path.dirname(os.path.abspath(original_video_path))
+    video_stem = os.path.splitext(os.path.basename(original_video_path))[0]
+
+    data_dir = os.path.join(video_dir, f"{video_stem}.data")
+    if not os.path.isdir(data_dir):
+        raise IOError(f"Expected data folder not found: {data_dir}")
+
+    cropped_path = os.path.join(data_dir, CROPPED_SCOREBOARD_VIDEO_NAME)
+    if not os.path.exists(cropped_path):
+        raise IOError(f"Cropped scoreboard video not found: {cropped_path}")
+
+    return original_video_path, cropped_path, video_stem
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Collect labelled score crops for training dataset"
+        description="Collect labelled score crops for training dataset",
+        epilog=(
+            "Example:\n"
+            "  python collect_dataset.py /path/to/video.mp4 output_dir labels.csv\n\n"
+            "Assumes cropped scoreboard video exists at:\n"
+            "  /path/to/video.data/<cropped_scoreboard_video>"
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
-        "input_folder",
-        help="Folder containing the source videos (original + cropped scoreboard)",
+        "original_video",
+        help="Path to the original video file",
     )
     parser.add_argument(
         "output_dir", help="Root output directory for the ImageFolder dataset"
@@ -262,9 +294,13 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    cropped_path = os.path.join(args.input_folder, CROPPED_SCOREBOARD_VIDEO_NAME)
-    original_path = os.path.join(args.input_folder, ORIGINAL_VIDEO_NAME)
+    original_path, cropped_path, inferred_name = resolve_video_paths(
+        args.original_video
+    )
+
     validate_videos(original_path, cropped_path)
+
+    video_name = args.video_name or inferred_name
 
     label_windows = load_label_windows(args.label_csv)
     print(f"Loaded {len(label_windows)} label windows.")
@@ -273,7 +309,7 @@ def main() -> None:
 
     video_name = args.video_name or os.path.basename(os.path.abspath(args.input_folder))
 
-    cap, fps, width, height, frame_count = setup_input_video_io(cropped_path)
+    cap, fps, width, height, frame_count = setup_input_video_io__dep(cropped_path)
 
     ui = OpenCvUi(
         "Collecting Dataset",

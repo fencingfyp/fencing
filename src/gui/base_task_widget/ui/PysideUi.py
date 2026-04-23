@@ -1,5 +1,3 @@
-from abc import ABC
-
 import numpy as np
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QPixmap
@@ -8,7 +6,6 @@ from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 from src.gui.base_task_widget.actions_panel_widget import ActionsPanelWidget
 from src.gui.util.conversion import np_to_pixmap
 from src.model.Quadrilateral import Quadrilateral
-from src.model.Ui import Ui
 
 from .fencer_selection_controller import FencerSelectionController
 from .loading_overlay import LoadingOverlay
@@ -16,13 +13,7 @@ from .n_point_picker import NPointPicker
 from .video_renderer import VideoRenderer
 
 
-class ABCQObjectMeta(type(QObject), type(ABC)):
-    """This allows using PySide6 as the implementation for the UI abstraction defined in Ui.py."""
-
-    pass
-
-
-class PysideUi(QObject, Ui, metaclass=ABCQObjectMeta):
+class PysideUi(QObject):
     task_completed = Signal()
     quit_requested = Signal()
 

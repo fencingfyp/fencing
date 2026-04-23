@@ -22,7 +22,7 @@ from src.util.file_names import (
     DETECT_LIGHTS_OUTPUT_CSV_NAME,
     RAW_MOMENTUM_DATA_CSV_NAME,
 )
-from src.util.io import setup_input_video_io
+from src.util.io import setup_input_video_io__dep
 
 
 def get_momentum_data_points(
@@ -111,7 +111,7 @@ def main():
     lights_path = path.join(folder, DETECT_LIGHTS_OUTPUT_CSV_NAME)
 
     # load video for fps
-    cap, fps, _, _, n_frames = setup_input_video_io(video_path)
+    cap, fps, _, _, n_frames = setup_input_video_io__dep(video_path)
     cap.release()
     # Load processed scores
     scores_df = pd.read_csv(

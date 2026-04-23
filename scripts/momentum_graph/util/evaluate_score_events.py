@@ -8,7 +8,7 @@ from scripts.momentum_graph.util.extract_score_increases import (
     extract_score_increases_np,
 )
 from src.model.OpenCvUi import OpenCvUi, UiCodes
-from src.util.io import setup_input_video_io, setup_output_video_io
+from src.util.io import setup_input_video_io__dep, setup_output_video_io
 
 DEFAULT_FPS = 50
 FULL_DELAY = int(1000 / DEFAULT_FPS)  # milliseconds
@@ -163,7 +163,7 @@ def main():
     scores_csv_path = f"{input_folder}/processed_scores.csv"
 
     writer = None
-    cap, fps, width, height, total_frames = setup_input_video_io(input_video_path)
+    cap, fps, width, height, total_frames = setup_input_video_io__dep(input_video_path)
     FULL_DELAY = int(1000 / fps)
     FAST_FORWARD = FULL_DELAY // 16
     print(f"Video FPS: {fps}, Frame delay: {FULL_DELAY} ms")

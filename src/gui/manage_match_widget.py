@@ -1,13 +1,11 @@
 import sys
 
-from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtCore import Signal, Slot
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
-    QFrame,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -16,10 +14,9 @@ from PySide6.QtWidgets import (
 from src.gui.MatchContext import MatchContext
 from src.gui.navbar.app_navigator import AppNavigator
 from src.gui.navbar.navigation_controller import View
+from src.gui.tagging.tag_manager_widget import TagManagerWidget
+from src.gui.tagging.taggable_video_player_widget import TaggableVideoPlayerWidget
 from src.model.FileManager import FileRole
-
-from .tag_manager_widget import TagManagerWidget
-from .taggable_video_player_widget import TaggableVideoPlayerWidget
 
 
 def navigation(nav: AppNavigator, match_ctx: MatchContext):

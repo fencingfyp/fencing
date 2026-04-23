@@ -10,7 +10,6 @@ from src.util.utils import (
 )
 
 from .Quadrilateral import Quadrilateral
-from .Ui import Ui
 
 
 class UiCodes(enum.Enum):
@@ -58,7 +57,7 @@ def calculate_centrepoint(det):
     return cx, cy
 
 
-class OpenCvUi(Ui):
+class OpenCvUi:
     @staticmethod
     def calculate_display_dimensions(
         width: int, height: int, display_width: int = None, display_height: int = None

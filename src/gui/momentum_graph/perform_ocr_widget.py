@@ -36,7 +36,7 @@ from src.model.FileManager import FileRole
 from src.model.reader.EasyOcrReader import EasyOcrReader
 from src.model.reader.SevenSegmentReader import SevenSegmentReader
 from src.util.gpu import get_device
-from src.util.io import setup_input_video_io
+from src.util.io import setup_input_video_io__dep
 from src.util.utils import generate_select_quadrilateral_instructions
 
 MAX_FRAMES = 200_000
@@ -162,7 +162,7 @@ class OcrController(QObject):
         original_video_path = self.file_paths["video"]
         self._validate_input_video(original_video_path, input_video_path)
 
-        self.cap, self.fps, _, _, self.frame_count = setup_input_video_io(
+        self.cap, self.fps, _, _, self.frame_count = setup_input_video_io__dep(
             input_video_path
         )
 

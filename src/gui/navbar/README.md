@@ -1,0 +1,1 @@
+This folder contains logic for managing the global widget hierarchy. Refer to the current implemented widgets for examples for how to extend the global navbar.

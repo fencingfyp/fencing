@@ -15,7 +15,11 @@ from src.util.file_names import (
     ORIGINAL_VIDEO_NAME,
 )
 from src.util.gpu import get_device
-from src.util.io import setup_input_video_io, setup_output_file, setup_output_video_io
+from src.util.io import (
+    setup_input_video_io__dep,
+    setup_output_file,
+    setup_output_video_io,
+)
 from src.util.utils import (
     convert_from_box_to_rect,
     convert_from_rect_to_box,
@@ -232,7 +236,7 @@ def main() -> None:
     validate_videos(original_path, cropped_path)
 
     output_csv_path = setup_output_file(args.output_folder, OCR_OUTPUT_CSV_NAME)
-    cap, fps, width, height, frame_count = setup_input_video_io(cropped_path)
+    cap, fps, width, height, frame_count = setup_input_video_io__dep(cropped_path)
 
     ui = OpenCvUi(
         "Performing OCR",
@@ -339,6 +343,10 @@ def main() -> None:
                 if w:
                     w.release()
         cv2.destroyAllWindows()
+
+
+if __name__ == "__main__":
+    main()
 
 
 if __name__ == "__main__":

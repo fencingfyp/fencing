@@ -17,7 +17,7 @@ from scripts.momentum_graph.util.file_names import (
     PROCESSED_SCORES_CSV as SCORES_CSV_NAME,
 )
 from src.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME
-from src.util.io import setup_input_video_io
+from src.util.io import setup_input_video_io__dep
 
 
 def parse_arguments():
@@ -67,7 +67,7 @@ def main():
     pred = pd.read_csv(processed_scores_path)[["left_score", "right_score"]].to_numpy()
     gt = pd.read_csv(gt)
 
-    cap, fps, _, _, total_length = setup_input_video_io(scoreboard_video_path)
+    cap, fps, _, _, total_length = setup_input_video_io__dep(scoreboard_video_path)
     cap.release()
 
     # get the left_score and right_score columns as numpy arrays

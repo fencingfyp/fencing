@@ -23,7 +23,7 @@ from src.gui.MatchContext import MatchContext
 from src.gui.task_graph.task_graph import TasksToIds
 from src.gui.util.conversion import pixmap_to_np
 from src.model.FileManager import FileRole
-from src.util.io import setup_input_video_io
+from src.util.io import setup_input_video_io__dep
 
 
 class GenerateMomentumGraphWidget(BaseTaskWidget):
@@ -126,7 +126,9 @@ class MomentumGraphController(QObject):
     def start(self):
         self.ui.write("Generating momentum graph... (this may take a while)")
 
-        cap, fps, _, _, total_length = setup_input_video_io(self.file_paths["video"])
+        cap, fps, _, _, total_length = setup_input_video_io__dep(
+            self.file_paths["video"]
+        )
         cap.release()
 
         score_increases = self._obtain_score_increases(

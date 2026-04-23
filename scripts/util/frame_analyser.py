@@ -3,7 +3,7 @@ import argparse
 import cv2
 
 from src.model import OpenCvUi, UiCodes
-from src.util.io import setup_input_video_io
+from src.util.io import setup_input_video_io__dep
 
 
 def get_arguments():
@@ -16,7 +16,7 @@ def get_arguments():
 def main():
     input_video = get_arguments()
 
-    cap, fps, width, height, _ = setup_input_video_io(input_video)
+    cap, fps, width, height, _ = setup_input_video_io__dep(input_video)
 
     full_delay = int(1000 / fps)
     fast_forward = min(full_delay // 8, 1)

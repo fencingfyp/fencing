@@ -1,26 +1,14 @@
-from PySide6.QtCore import Signal, Slot
-from PySide6.QtWidgets import QVBoxLayout, QWidget
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QWidget
 
-from src.gui.task_graph.task_graph import TaskGraph, TaskState
-from src.gui.task_graph.task_graph_widget import TaskGraphWidget
+from src.gui.task_graph.task_graph import TaskGraph
 
 
+# This file is for the "overview" page of the heat map section. It currently doesn't do much.
 class HeatMapOverviewWidget(QWidget):
     task_selected = Signal(str)
 
     def __init__(self, task_graph: TaskGraph, parent=None):
         super().__init__(parent)
         self.task_graph = task_graph
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        self.graph_widget = TaskGraphWidget(task_graph)
-        layout.addWidget(self.graph_widget)
-
-        self.graph_widget.node_clicked.connect(self.on_task_button_clicked)
-        self.task_graph.graph_changed.connect(self.graph_widget.update_states)
-
-    @Slot(str)
-    def on_task_button_clicked(self, task_id: str):
-        self.task_selected.emit(task_id)
+        self.task_graph = task_graph

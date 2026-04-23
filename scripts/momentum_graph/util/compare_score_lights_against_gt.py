@@ -14,7 +14,7 @@ from scripts.momentum_graph.plot_momentum import densify_lights_data
 from scripts.momentum_graph.process_scores import densify_frames
 from scripts.momentum_graph.util.file_names import LIGHTS_GT_CSV, PROCESSED_LIGHTS_CSV
 from src.util.file_names import CROPPED_SCORE_LIGHTS_VIDEO_NAME
-from src.util.io import setup_input_video_io
+from src.util.io import setup_input_video_io__dep
 
 
 def parse_arguments():
@@ -55,7 +55,7 @@ def main():
     gt_df = pd.read_csv(path.join(folder, LIGHTS_GT_CSV))[["frame_id", "left", "right"]]
     gt_df.rename(columns={"left": "left_light", "right": "right_light"}, inplace=True)
 
-    cap, fps, _, _, total_length = setup_input_video_io(video_path)
+    cap, fps, _, _, total_length = setup_input_video_io__dep(video_path)
     cap.release()
 
     pred = densify_lights_data(pred_df, total_length)

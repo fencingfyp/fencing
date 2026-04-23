@@ -8,7 +8,7 @@ import pandas as pd
 
 from scripts.momentum_graph.util.file_names import PROCESSED_SCORES_CSV
 from src.util.file_names import CROPPED_SCOREBOARD_VIDEO_NAME, OCR_OUTPUT_CSV_NAME
-from src.util.io import setup_input_video_io
+from src.util.io import setup_input_video_io__dep
 
 
 def densify_frames_np(
@@ -190,7 +190,7 @@ def main():
     demo_mode = args.demo
     # Load both CSVs
     df = pd.read_csv(path.join(folder, OCR_OUTPUT_CSV_NAME))
-    cap, fps, _, _, total_length = setup_input_video_io(
+    cap, fps, _, _, total_length = setup_input_video_io__dep(
         path.join(folder, CROPPED_SCOREBOARD_VIDEO_NAME)
     )
     cap.release()

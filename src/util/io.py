@@ -4,7 +4,10 @@ import os
 import cv2
 
 
-def setup_input_video_io(video_path) -> tuple[cv2.VideoCapture, float, int, int, int]:
+def setup_input_video_io__dep(
+    video_path,
+) -> tuple[cv2.VideoCapture, float, int, int, int]:
+    # deprecating because we dont need all info other than the cap. we can get everything else from the cap itself.
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print(f"Error: Could not open video {video_path}")
@@ -17,6 +20,13 @@ def setup_input_video_io(video_path) -> tuple[cv2.VideoCapture, float, int, int,
         int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
         int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
     )
+
+
+def setup_input_video_io(video_path) -> cv2.VideoCapture:
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise ValueError(f"Error: Could not open video {video_path}")
+    return cap
 
 
 def setup_output_video_io(output_path, fps, frame_size) -> cv2.VideoWriter | None:

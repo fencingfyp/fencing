@@ -8,7 +8,7 @@ from scripts.momentum_graph.process_score_lights import (
 )
 from scripts.momentum_graph.process_scores import densify_frames
 from src.util.file_names import ORIGINAL_VIDEO_NAME
-from src.util.io import setup_input_video_io
+from src.util.io import setup_input_video_io__dep
 
 
 def parse_arguments():
@@ -23,7 +23,9 @@ def parse_arguments():
 def main():
     args = parse_arguments()
     folder = args.folder
-    cap, _, _, _, total_length = setup_input_video_io(f"{folder}/{ORIGINAL_VIDEO_NAME}")
+    cap, _, _, _, total_length = setup_input_video_io__dep(
+        f"{folder}/{ORIGINAL_VIDEO_NAME}"
+    )
     cap.release()
     # --- 1. Load and smooth ---
     df = pd.read_csv(f"{folder}/{PROCESSED_SCORE_LIGHTS_CSV_NAME}")

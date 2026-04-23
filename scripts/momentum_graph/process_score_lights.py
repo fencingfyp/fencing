@@ -8,7 +8,7 @@ import pandas as pd
 
 from scripts.momentum_graph.util.file_names import PROCESSED_LIGHTS_CSV
 from src.util.file_names import DETECT_LIGHTS_OUTPUT_CSV_NAME, ORIGINAL_VIDEO_NAME
-from src.util.io import setup_input_video_io
+from src.util.io import setup_input_video_io__dep
 
 
 def parse_arguments():
@@ -111,7 +111,7 @@ def main():
     args = parse_arguments()
     folder = args.folder
     video_path = path.join(folder, ORIGINAL_VIDEO_NAME)
-    cap, fps, _, _, _ = setup_input_video_io(video_path)
+    cap, fps, _, _, _ = setup_input_video_io__dep(video_path)
     cap.release()
     demo_mode = args.demo
     # --- 1. Load and smooth ---

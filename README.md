@@ -4,7 +4,7 @@
 
 ---
 
-## 1. Install Conda (Mamba Recommended)
+### 1. Install Conda (Mamba Recommended)
 
 Install **Miniforge** (recommended, includes conda and supports mamba):
 
@@ -18,7 +18,7 @@ After installation, open a new terminal.
 
 ---
 
-## 2. Create Environment
+### 2. Create Environment
 
 Using mamba (recommended):
 
@@ -35,31 +35,7 @@ conda activate fvat
 ```
 
 ---
-## 3. Install Graphviz (System Dependency)
-
-Graphviz must be installed on your system.
-
-### macOS
-```bash
-brew install graphviz
-```
-
-### Ubuntu / Debian
-```bash
-sudo apt install graphviz
-```
-
-### Windows
-Download and install from:
-https://graphviz.org/download/
-
-After installation, verify it is available:
-```bash
-dot -V
-```
-
----
-## 4. Install Python Dependencies
+### 3. Install Python Dependencies
 Inside the activated environment:
 ```bash
 pip install \
@@ -69,11 +45,10 @@ numpy \
 pandas \
 ultralytics \
 easyocr \
-graphviz
 ```
 
 ---
-## 5. Run the Application
+### 4. Run the Application
 Navigate to the project root directory:
 ```bash
 cd path/to/FVAT
@@ -84,18 +59,33 @@ python -m scripts.app
 ```
 
 ---
-## Dependencies Summary
-### Conda
+### Dependencies Summary
+#### Conda
 python 3.13
 
-### Pip
+#### Pip
 pyside6
 opencv-python
 numpy
 pandas
 ultralytics
 easyocr
-graphviz
 
-### System
-Graphviz 
+---
+
+## Useful commands
+
+Downloading a video from YouTube
+```
+yt-dlp -f "bv*" "video_url"
+```
+
+Cropping
+```
+ffmpeg -ss 00:12:00 -to 00:18:30 -i input.mp4 -c copy bout.mp4
+```
+
+Converting from H.264 to MPEG-4 codec (check the codec first)
+```
+ffmpeg -i input.mp4 -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 128k output.mp4
+```
